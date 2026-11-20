@@ -5,8 +5,8 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = "postgresql://postgres.ggfqjeqtibaczrwfzxez:Tickora%40123@aws-0-ap-south-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
-  directUrl = "postgresql://postgres.ggfqjeqtibaczrwfzxez:Tickora%40123@aws-0-ap-south-1.pooler.supabase.com:5432/postgres"
+  url       = "postgresql://postgres.eojasudtbpgwwtivcvbs:Tickora%401234@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+  directUrl = "postgresql://postgres.eojasudtbpgwwtivcvbs:Tickora%401234@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres"
 }
 
 model User {
