@@ -199,7 +199,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               const SizedBox(height: 20),
 
               // Sun & Fasting Card
-              _buildSunAndFastingCard(),
+              _buildSunAndFastingCard(times),
               const SizedBox(height: 20),
 
               // Announcements Card
@@ -387,9 +387,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: const [
+          children: [
             Row(
-              children: [
+              children: const [
                 Icon(Icons.mosque, size: 14, color: Color(0xFF1E824C)),
                 SizedBox(width: 5),
                 Text(
@@ -403,16 +403,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ],
             ),
-            Row(
-              children: [
-                Icon(Icons.near_me_outlined, size: 12, color: Colors.grey),
-                SizedBox(width: 3),
-                Text(
-                  '0.8 km away',
-                  style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500),
-                ),
-              ],
-            ),
+            if (activeMasjid != null && activeMasjid['city'] != null)
+              Row(
+                children: [
+                  const Icon(Icons.location_city, size: 12, color: Colors.grey),
+                  const SizedBox(width: 3),
+                  Text(
+                    activeMasjid['city'] ?? '',
+                    style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
           ],
         ),
         const SizedBox(height: 6),
@@ -454,18 +455,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE6F7EC),
-                              borderRadius: BorderRadius.circular(4),
+                          if (activeMasjid != null) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: activeMasjid['approvalStatus'] == 'APPROVED'
+                                    ? const Color(0xFFE6F7EC)
+                                    : const Color(0xFFFFF3CD),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                activeMasjid['approvalStatus'] == 'APPROVED' ? 'VERIFIED' : 'PENDING',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: activeMasjid['approvalStatus'] == 'APPROVED'
+                                      ? const Color(0xFF167C43)
+                                      : const Color(0xFF856404),
+                                ),
+                              ),
                             ),
-                            child: const Text(
-                              'VERIFIED',
-                              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFF167C43)),
-                            ),
-                          ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 2),
@@ -957,7 +968,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   // 5. Sun & Fasting Card
-  Widget _buildSunAndFastingCard() {
+  Widget _buildSunAndFastingCard(Map<String, dynamic>? times) {
+    final sunrise = times?['sunrise'] ?? times?['fajrJamaah'] ?? '--:--';
+    final ishraq = times?['ishraq'] ?? '--:--';
+    final sunset = times?['sunset'] ?? times?['maghribAdhan'] ?? '--:--';
+    final sehri = times?['sehri'] ?? times?['fajrAdhan'] ?? '--:--';
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -1010,14 +1026,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      const Text(
-                        '6:10 AM',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      Text(
+                        sunrise,
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 2),
-                      const Text(
-                        'Ishraq 6:25 AM',
-                        style: TextStyle(fontSize: 10, color: Colors.grey),
+                      Text(
+                        'Ishraq $ishraq',
+                        style: const TextStyle(fontSize: 10, color: Colors.grey),
                       ),
                     ],
                   ),
@@ -1043,14 +1059,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      const Text(
-                        '5:50 PM',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      Text(
+                        sunset,
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 2),
-                      const Text(
-                        'Fast 5:00 AM',
-                        style: TextStyle(fontSize: 10, color: Color(0xFF1E824C), fontWeight: FontWeight.w600),
+                      Text(
+                        'Fast $sehri',
+                        style: const TextStyle(fontSize: 10, color: Color(0xFF1E824C), fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
@@ -1065,10 +1081,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   // 6. Announcements Card
   Widget _buildAnnouncementsCard() {
-    final latestNotice = _announcements.isNotEmpty ? _announcements.first : null;
-    final noticeTitle = latestNotice?['title'] ?? 'Friday Jumu\'ah Prayer Schedule';
-    final noticeBody = latestNotice?['body'] ??
-        'First Khutbah begins promptly at 12:45 PM. Brothers and sisters are requested to arrive early for smooth basement parking and row alignment.';
+    final hasNotices = _announcements.isNotEmpty;
+    final latestNotice = hasNotices ? _announcements.first : null;
+    final noticeTitle = hasNotices
+        ? (latestNotice?['title'] ?? 'Notice')
+        : 'No Announcements';
+    final noticeBody = hasNotices
+        ? (latestNotice?['body'] ?? '')
+        : 'Your masjid has not published any announcements at this time.';
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -1093,18 +1113,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       color: Colors.black,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEAF7EE),
-                      borderRadius: BorderRadius.circular(10),
+                  if (hasNotices) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEAF7EE),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${_announcements.length} New',
+                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF1E824C)),
+                      ),
                     ),
-                    child: const Text(
-                      '1 New',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF1E824C)),
-                    ),
-                  ),
+                  ],
                 ],
               ),
               InkWell(
@@ -1200,7 +1222,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildProfileTab() {
     final user = ApiService.instance.currentUser;
     final userName = user?['name'] ?? 'User';
-    final userPhone = user?['phone'] ?? '+91 9876543210';
+    final userPhone = user?['phone'] ?? '';
     final isMasjidAdmin = ApiService.instance.isMasjidAdmin;
     final isSuperAdmin = ApiService.instance.isSuperAdmin;
 
@@ -1294,9 +1316,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
               title: const Text('Sign Out / Switch Account', style: TextStyle(color: Colors.red)),
-              onTap: () {
-                ApiService.instance.authToken = null;
-                ApiService.instance.currentUser = null;
+              onTap: () async {
+                await ApiService.instance.clearSession();
+                if (!mounted) return;
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(builder: (_) => const OtpLoginScreen()),

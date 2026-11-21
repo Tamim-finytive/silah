@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateMasjidDto, AssignRoleDto } from './dto/masjid.dto';
-import { RoleType, MasjidApprovalStatus } from '@prisma/client';
+import { RoleType, MasjidApprovalStatus, Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
 
 @Injectable()
@@ -110,14 +110,16 @@ export class MasjidsService {
     const approvalStatus = isSuperAdmin ? MasjidApprovalStatus.APPROVED : MasjidApprovalStatus.PENDING;
     const isActive = isSuperAdmin;
 
+    const masjidData: Prisma.MasjidUncheckedCreateInput = {
+      ...dto,
+      qrToken,
+      approvalStatus,
+      isActive,
+      createdBy: userId,
+    };
+
     const masjid = await this.prisma.masjid.create({
-      data: {
-        ...dto,
-        qrToken,
-        approvalStatus,
-        isActive,
-        createdBy: userId,
-      },
+      data: masjidData,
     });
 
     if (isSuperAdmin) {
@@ -292,6 +294,89 @@ export class MasjidsService {
       },
       include: {
         masjid: true,
+      },
+    });
+  }
+
+  async update(id: string, dto: any) {
+    const masjid = await this.prisma.masjid.findUnique({ where: { id } });
+    if (!masjid) {
+      throw new NotFoundException('Masjid not found');
+    }
+    return this.prisma.masjid.update({
+      where: { id },
+      data: dto,
+    });
+  }
+
+  async getMembers(masjidId: string) {
+    const [memberships, admins] = await Promise.all([
+      this.prisma.membership.findMany({
+        where: { masjidId },
+        include: {
+          user: {
+            select: { id: true, name: true, phone: true, age: true, address: true, createdAt: true },
+          },
+        },
+        orderBy: { joinedAt: 'desc' },
+      }),
+      this.prisma.masjidAdmin.findMany({
+        where: { masjidId },
+        include: {
+          user: { select: { id: true, name: true, phone: true } },
+          role: true,
+        },
+      }),
+    ]);
+
+    return {
+      memberships: memberships.map((m) => ({
+        id: m.id,
+        userId: m.userId,
+        name: m.user.name,
+        phone: m.user.phone,
+        age: m.user.age,
+        address: m.user.address,
+        isPrimary: m.isPrimary,
+        joinedAt: m.joinedAt,
+      })),
+      admins: admins.map((a) => ({
+        id: a.id,
+        userId: a.userId,
+        name: a.user.name,
+        phone: a.user.phone,
+        role: a.role.name,
+      })),
+    };
+  }
+
+  async addMember(masjidId: string, phone: string, name?: string) {
+    let user = await this.prisma.user.findUnique({ where: { phone } });
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          phone,
+          name: name || 'Member',
+          isActive: true,
+        },
+      });
+    }
+
+    return this.prisma.membership.upsert({
+      where: {
+        idx_memberships_unique: {
+          userId: user.id,
+          masjidId,
+        },
+      },
+      update: { isPrimary: true },
+      create: {
+        userId: user.id,
+        masjidId,
+        isPrimary: true,
+      },
+      include: {
+        user: { select: { id: true, name: true, phone: true } },
       },
     });
   }

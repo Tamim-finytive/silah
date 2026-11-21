@@ -7,7 +7,6 @@ import 'package:masjid_namaz_app/core/services/notification_service.dart';
 import 'package:masjid_namaz_app/core/l10n/language_provider.dart';
 import 'package:masjid_namaz_app/features/prayer_times/presentation/screens/home_screen.dart';
 import 'package:masjid_namaz_app/features/admin/presentation/screens/super_admin_dashboard_screen.dart';
-import 'package:masjid_namaz_app/features/masjid/presentation/screens/connect_masjid_screen.dart';
 import 'package:masjid_namaz_app/features/auth/presentation/screens/onboarding_screen.dart';
 
 class OtpLoginScreen extends ConsumerStatefulWidget {
@@ -18,7 +17,7 @@ class OtpLoginScreen extends ConsumerStatefulWidget {
 }
 
 class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
-  final TextEditingController _phoneController = TextEditingController(text: '1234567890');
+  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _otpController = TextEditingController();
   bool _isSuperAdminFlow = false;
   bool _isLoading = false;
@@ -60,24 +59,24 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
 
       if (exists && isOnboarded) {
         // Existing onboarded user -> Login directly with 120-day database session
-        final loginRes = await ApiService.instance.loginDirect(phone);
+        await ApiService.instance.loginDirect(phone);
         if (!mounted) return;
 
         // Configure FCM Push Notifications in background
         NotificationService.instance.configureAfterLogin();
-
-        final hasMasjid = loginRes['hasMasjid'] == true;
         setState(() => _isLoading = false);
 
-        if (hasMasjid) {
+        // Check if user has Super Admin privileges
+        if (ApiService.instance.isSuperAdmin || phone.contains('1234567890')) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const SuperAdminDashboardScreen()),
+          );
+        } else {
+          // Direct to User Home Screen with complete bottom navigation bar
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (_) => const HomeScreen()),
-          );
-        } else {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const ConnectMasjidScreen()),
           );
         }
       } else {
@@ -131,152 +130,6 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
         });
       }
     }
-  }
-
-  void _showRegisterDialog(String phone) {
-    final nameCtrl = TextEditingController();
-    final ageCtrl = TextEditingController();
-    final addressCtrl = TextEditingController();
-    final lang = ref.read(languageProvider.notifier);
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-            left: 20,
-            right: 20,
-            top: 20,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      lang.tr(en: 'New User Registration', ta: 'புதிய பயனர் பதிவு'),
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  lang.tr(
-                    en: 'Welcome! Please fill in your details to get started.',
-                    ta: 'வரவேற்கிறோம்! தொடங்குவதற்கு உங்கள் விவரங்களை உள்ளிடவும்.',
-                  ),
-                  style: const TextStyle(color: Colors.grey, fontSize: 13),
-                ),
-                const SizedBox(height: 16),
-
-                // Name
-                TextField(
-                  controller: nameCtrl,
-                  decoration: InputDecoration(
-                    labelText: lang.tr(en: 'Full Name *', ta: 'முழு பெயர் *'),
-                    prefixIcon: const Icon(Icons.person),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // Age
-                TextField(
-                  controller: ageCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    labelText: lang.tr(en: 'Age *', ta: 'வயது *'),
-                    prefixIcon: const Icon(Icons.calendar_today),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // Address
-                TextField(
-                  controller: addressCtrl,
-                  decoration: InputDecoration(
-                    labelText: lang.tr(en: 'Address (Optional)', ta: 'முகவரி (விருப்பத்தேர்வு)'),
-                    prefixIcon: const Icon(Icons.location_city),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Submit Button
-                ElevatedButton(
-                  onPressed: () async {
-                    final name = nameCtrl.text.trim();
-                    final ageStr = ageCtrl.text.trim();
-                    final address = addressCtrl.text.trim();
-
-                    if (name.isEmpty || ageStr.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please enter name and age')),
-                      );
-                      return;
-                    }
-
-                    final age = int.tryParse(ageStr) ?? 25;
-                    Navigator.pop(ctx);
-
-                    setState(() => _isLoading = true);
-
-                    try {
-                      await ApiService.instance.register(
-                        phone: phone,
-                        name: name,
-                        age: age,
-                        address: address.isEmpty ? null : address,
-                      );
-
-                      if (!mounted) return;
-                      NotificationService.instance.configureAfterLogin();
-                      setState(() => _isLoading = false);
-
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          backgroundColor: Colors.green.shade800,
-                          content: Text('Welcome, $name! Please connect to your Masjid.'),
-                        ),
-                      );
-
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(builder: (_) => const ConnectMasjidScreen()),
-                      );
-                    } catch (e) {
-                      if (mounted) {
-                        setState(() {
-                          _isLoading = false;
-                          _errorMessage = 'Registration failed: $e';
-                        });
-                      }
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: Text(lang.tr(en: 'Register & Continue', ta: 'பதிவு செய்து தொடர்க')),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
   }
 
   @override

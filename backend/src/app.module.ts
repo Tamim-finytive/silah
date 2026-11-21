@@ -8,6 +8,7 @@ import { PrayerTimesModule } from './modules/prayer-times/prayer-times.module';
 import { AnnouncementsModule } from './modules/announcements/announcements.module';
 import { SandhaModule } from './modules/sandha/sandha.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { SpecialSchedulesModule } from './modules/special-schedules/special-schedules.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     AnnouncementsModule,
     SandhaModule,
     DashboardModule,
+    SpecialSchedulesModule,
   ],
 })
 export class AppModule {}

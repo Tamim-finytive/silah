@@ -1,7 +1,7 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { MasjidsService } from './masjids.service';
-import { CreateMasjidDto, AssignRoleDto } from './dto/masjid.dto';
+import { CreateMasjidDto, UpdateMasjidDto, AssignRoleDto, AddMemberDto } from './dto/masjid.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { MasjidRoleGuard } from '../../common/guards/masjid-role.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -75,6 +75,33 @@ export class MasjidsController {
     @Body('isPrimary') isPrimary?: boolean,
   ) {
     return this.masjidsService.joinMasjid(userId, masjidId, isPrimary);
+  }
+
+  @Put(':id')
+  @UseGuards(JwtAuthGuard, MasjidRoleGuard)
+  @MasjidRoles(RoleType.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update masjid details (Admin only)' })
+  async updateMasjid(@Param('id') id: string, @Body() dto: UpdateMasjidDto) {
+    return this.masjidsService.update(id, dto);
+  }
+
+  @Get(':masjidId/members')
+  @UseGuards(JwtAuthGuard, MasjidRoleGuard)
+  @MasjidRoles(RoleType.ADMIN, RoleType.FINANCE)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List all members and admins of a masjid' })
+  async getMembers(@Param('masjidId') masjidId: string) {
+    return this.masjidsService.getMembers(masjidId);
+  }
+
+  @Post(':masjidId/members')
+  @UseGuards(JwtAuthGuard, MasjidRoleGuard)
+  @MasjidRoles(RoleType.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Add a member directly to this masjid' })
+  async addMember(@Param('masjidId') masjidId: string, @Body() dto: AddMemberDto) {
+    return this.masjidsService.addMember(masjidId, dto.phone, dto.name);
   }
 
   @Post(':masjidId/roles')

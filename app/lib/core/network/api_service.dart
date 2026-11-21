@@ -1,10 +1,17 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiService {
   static final ApiService instance = ApiService._internal();
   factory ApiService() => instance;
 
   late final Dio _dio;
+  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  static const _tokenKey = 'silah_auth_token';
+  static const _refreshTokenKey = 'silah_refresh_token';
+  static const _userKey = 'silah_current_user';
+
   String? authToken;
   Map<String, dynamic>? currentUser;
 
@@ -41,24 +48,7 @@ class ApiService {
           }
           return handler.next(options);
         },
-        onError: (DioException error, handler) async {
-          // If 127.0.0.1 fails on Android, fallback to LAN IP 192.168.1.50
-          if (error.type == DioExceptionType.connectionError &&
-              _dio.options.baseUrl.contains('127.0.0.1')) {
-            _dio.options.baseUrl = 'http://192.168.1.50:3000/v1';
-            try {
-              final response = await _dio.request(
-                error.requestOptions.path,
-                data: error.requestOptions.data,
-                queryParameters: error.requestOptions.queryParameters,
-                options: Options(
-                  method: error.requestOptions.method,
-                  headers: error.requestOptions.headers,
-                ),
-              );
-              return handler.resolve(response);
-            } catch (_) {}
-          }
+        onError: (DioException error, handler) {
           return handler.next(error);
         },
       ),
@@ -70,11 +60,58 @@ class ApiService {
     return res.data;
   }
 
+  Future<void> _saveSession(Map<String, dynamic> data) async {
+    authToken = data['tokens']?['accessToken'];
+    final refreshToken = data['tokens']?['refreshToken'];
+    currentUser = data['user'];
+
+    if (authToken != null) {
+      await _storage.write(key: _tokenKey, value: authToken);
+    }
+    if (refreshToken != null) {
+      await _storage.write(key: _refreshTokenKey, value: refreshToken);
+    }
+    if (currentUser != null) {
+      await _storage.write(key: _userKey, value: jsonEncode(currentUser));
+    }
+  }
+
+  Future<bool> initSession() async {
+    try {
+      final savedToken = await _storage.read(key: _tokenKey);
+      final savedUserJson = await _storage.read(key: _userKey);
+
+      if (savedToken != null && savedToken.isNotEmpty) {
+        authToken = savedToken;
+        if (savedUserJson != null && savedUserJson.isNotEmpty) {
+          currentUser = jsonDecode(savedUserJson) as Map<String, dynamic>;
+        }
+        // Try refreshing profile in background
+        try {
+          final profile = await getProfile();
+          if (profile != null) {
+            currentUser = profile;
+            await _storage.write(key: _userKey, value: jsonEncode(currentUser));
+          }
+        } catch (_) {}
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  Future<void> clearSession() async {
+    authToken = null;
+    currentUser = null;
+    await _storage.delete(key: _tokenKey);
+    await _storage.delete(key: _refreshTokenKey);
+    await _storage.delete(key: _userKey);
+  }
+
   Future<Map<String, dynamic>> loginDirect(String phone) async {
     final res = await _dio.post('/auth/login-direct', data: {'phone': phone});
     if (res.data['success'] == true && res.data['data'] != null) {
-      authToken = res.data['data']['tokens']?['accessToken'];
-      currentUser = res.data['data']['user'];
+      await _saveSession(res.data['data']);
     }
     return res.data;
   }
@@ -92,8 +129,7 @@ class ApiService {
       if (address != null && address.isNotEmpty) 'address': address,
     });
     if (res.data['success'] == true && res.data['data'] != null) {
-      authToken = res.data['data']['tokens']?['accessToken'];
-      currentUser = res.data['data']['user'];
+      await _saveSession(res.data['data']);
     }
     return res.data;
   }
@@ -135,8 +171,7 @@ class ApiService {
   Future<Map<String, dynamic>> verifyOtp(String phone, String otp) async {
     final res = await _dio.post('/auth/otp/verify', data: {'phone': phone, 'otp': otp});
     if (res.data['success'] == true && res.data['data'] != null) {
-      authToken = res.data['data']['tokens']?['accessToken'];
-      currentUser = res.data['data']['user'];
+      await _saveSession(res.data['data']);
     }
     return res.data;
   }
@@ -243,6 +278,129 @@ class ApiService {
       await ensureSuperAdminAuth();
       final res = await _dio.get('/dashboard/super-admin');
       if (res.data['success'] == true) {
+        return res.data['data'] as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> getMasjidAdminOverview(String masjidId) async {
+    try {
+      final res = await _dio.get('/dashboard/masjid/$masjidId');
+      if (res.data['success'] == true && res.data['data'] != null) {
+        return res.data['data'] as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<Map<String, dynamic>> updatePrayerTimes(String masjidId, Map<String, dynamic> dto) async {
+    final res = await _dio.put('/masjids/$masjidId/prayer-times', data: dto);
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>> createAnnouncement(String masjidId, Map<String, dynamic> dto) async {
+    final res = await _dio.post('/masjids/$masjidId/announcements', data: dto);
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>> assignRole(String masjidId, {required String phone, required String name, required String role}) async {
+    final res = await _dio.post('/masjids/$masjidId/roles', data: {
+      'phone': phone,
+      'name': name,
+      'role': role,
+    });
+    return res.data;
+  }
+
+  Future<List<dynamic>> getUserSandhaStatus(String masjidId) async {
+    try {
+      final res = await _dio.get('/masjids/$masjidId/sandha/my-status');
+      if (res.data['success'] == true && res.data['data'] != null) {
+        return res.data['data'] as List<dynamic>;
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<List<dynamic>> getMasjidSandhaPlans(String masjidId) async {
+    try {
+      final res = await _dio.get('/masjids/$masjidId/sandha/plans');
+      if (res.data['success'] == true && res.data['data'] != null) {
+        return res.data['data'] as List<dynamic>;
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<Map<String, dynamic>> updateMasjid(String masjidId, Map<String, dynamic> dto) async {
+    final res = await _dio.put('/masjids/$masjidId', data: dto);
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>?> getMasjidMembers(String masjidId) async {
+    try {
+      final res = await _dio.get('/masjids/$masjidId/members');
+      if (res.data['success'] == true && res.data['data'] != null) {
+        return res.data['data'] as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<Map<String, dynamic>> addMasjidMember(String masjidId, {required String phone, String? name}) async {
+    final res = await _dio.post('/masjids/$masjidId/members', data: {
+      'phone': phone,
+      if (name != null && name.isNotEmpty) 'name': name,
+    });
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>> updatePrayerTimeRange(String masjidId, Map<String, dynamic> dto) async {
+    final res = await _dio.post('/masjids/$masjidId/prayer-times/range', data: dto);
+    return res.data;
+  }
+
+  Future<List<dynamic>> getSpecialSchedules(String masjidId) async {
+    try {
+      final res = await _dio.get('/masjids/$masjidId/special-schedules');
+      if (res.data['success'] == true && res.data['data'] != null) {
+        return res.data['data'] as List<dynamic>;
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<Map<String, dynamic>> createSpecialSchedule(String masjidId, Map<String, dynamic> dto) async {
+    final res = await _dio.post('/masjids/$masjidId/special-schedules', data: dto);
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>> deleteSpecialSchedule(String masjidId, String scheduleId) async {
+    final res = await _dio.delete('/masjids/$masjidId/special-schedules/$scheduleId');
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>> deleteAnnouncement(String masjidId, String announcementId) async {
+    final res = await _dio.delete('/masjids/$masjidId/announcements/$announcementId');
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>> createUser(Map<String, dynamic> dto) async {
+    await ensureSuperAdminAuth();
+    final res = await _dio.post('/users', data: dto);
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>?> getUsers({String? search, int page = 1, int limit = 20}) async {
+    try {
+      await ensureSuperAdminAuth();
+      final res = await _dio.get('/users', queryParameters: {
+        if (search != null && search.isNotEmpty) 'search': search,
+        'page': page,
+        'limit': limit,
+      });
+      if (res.data['success'] == true && res.data['data'] != null) {
         return res.data['data'] as Map<String, dynamic>;
       }
     } catch (_) {}

@@ -1,7 +1,7 @@
-import { Controller, Get, Put, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Put, Post, Body, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { UpdateProfileDto } from './dto/users.dto';
+import { UpdateProfileDto, CreateUserDto } from './dto/users.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -24,6 +24,14 @@ export class UsersController {
   @ApiOperation({ summary: 'Update user profile (Name, Language preference, Avatar)' })
   async updateProfile(@CurrentUser('id') userId: string, @Body() dto: UpdateProfileDto) {
     return this.usersService.updateProfile(userId, dto);
+  }
+
+  @Post()
+  @UseGuards(RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Add a new user (Super Admin only)' })
+  async createUser(@Body() dto: CreateUserDto) {
+    return this.usersService.createUser(dto);
   }
 
   @Get()

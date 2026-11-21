@@ -1,46 +1,63 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
+import '../../../../core/network/api_service.dart';
+import '../../../prayer_times/data/prayer_times_provider.dart';
 
-class AnnouncementsScreen extends StatelessWidget {
+class AnnouncementsScreen extends ConsumerStatefulWidget {
   final VoidCallback? onBack;
-  const AnnouncementsScreen({super.key, this.onBack});
+  final String? masjidId;
+
+  const AnnouncementsScreen({super.key, this.onBack, this.masjidId});
+
+  @override
+  ConsumerState<AnnouncementsScreen> createState() => _AnnouncementsScreenState();
+}
+
+class _AnnouncementsScreenState extends ConsumerState<AnnouncementsScreen> {
+  List<dynamic> _notices = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchAnnouncements();
+  }
+
+  Future<void> _fetchAnnouncements() async {
+    setState(() => _isLoading = true);
+    final targetId = widget.masjidId ?? ref.read(prayerTimesProvider).activeMasjid?['id'];
+
+    if (targetId != null) {
+      final list = await ApiService.instance.getAnnouncements(targetId);
+      if (mounted) {
+        setState(() {
+          _notices = list;
+          _isLoading = false;
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _notices = [];
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final notices = [
-      {
-        'title': 'ஜனாஸா அறிவிப்பு (Janazah Announcement)',
-        'time': 'இன்று மாலை 4:30 மணி (Today 4:30 PM)',
-        'body': 'ஹாஜி முஹம்மது யூசுப் (வயது 78) அவர்கள் காலமானார்கள். ஜனாஸா தொழுகை இன்று அஸர் தொழுகைக்குப் பின் ஜாமியா பள்ளிவாசலில் நடைபெறும்.',
-        'isEmergency': true,
-        'category': 'EMERGENCY',
-      },
-      {
-        'title': 'ஜும்ஆ தொழுகை நேரம் மாற்றம் (Jummah Timing)',
-        'time': '22 நவம்பர் 2026',
-        'body': 'இந்த வாரம் முதல் ஜும்ஆ முதல் பாங்கு 12:45 மணிக்கும், குத்பா 1:00 மணிக்கும் தொடங்கும்.',
-        'isEmergency': false,
-        'category': 'PRAYER_CHANGE',
-      },
-      {
-        'title': 'மாதாந்திர சமுதாய கல்வி வகுப்பு (Islamic Study Circle)',
-        'time': 'ஞாயிறு காலை 10:00 மணி',
-        'body': 'அனைத்து சகோதரர்களும் தவறாமல் கலந்துகொள்ளுமாறு கேட்டுக்கொள்ளப்படுகிறார்கள்.',
-        'isEmergency': false,
-        'category': 'EVENT',
-      },
-    ];
-
     return Scaffold(
       appBar: AppBar(
-        leading: (onBack != null || Navigator.canPop(context))
+        leading: (widget.onBack != null || Navigator.canPop(context))
             ? IconButton(
                 icon: const Icon(Icons.arrow_back),
                 tooltip: 'Back',
                 onPressed: () {
-                  if (onBack != null) {
-                    onBack!();
+                  if (widget.onBack != null) {
+                    widget.onBack!();
                   } else if (Navigator.canPop(context)) {
                     Navigator.pop(context);
                   }
@@ -48,74 +65,119 @@ class AnnouncementsScreen extends StatelessWidget {
               )
             : null,
         title: const Text('அறிவிப்புகள் / Notices'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _fetchAnnouncements,
+            tooltip: 'Refresh',
+          ),
+        ],
       ),
-      body: ListView.builder(
-        padding: AppSpacing.screenPadding,
-        itemCount: notices.length,
-        itemBuilder: (context, index) {
-          final item = notices[index];
-          final isEmergency = item['isEmergency'] as bool;
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _notices.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.campaign_outlined, size: 64, color: Colors.grey.shade400),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'அறிவிப்புகள் எதுவும் இல்லை',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No announcements posted by this masjid yet.',
+                          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _fetchAnnouncements,
+                  child: ListView.builder(
+                    padding: AppSpacing.screenPadding,
+                    itemCount: _notices.length,
+                    itemBuilder: (context, index) {
+                      final item = _notices[index] as Map<String, dynamic>;
+                      final isEmergency = item['isEmergency'] == true || item['type'] == 'EMERGENCY';
+                      final title = (item['title'] ?? '').toString();
+                      final body = (item['body'] ?? '').toString();
+                      final createdAt = item['createdAt']?.toString() ?? '';
+                      String displayTime = '';
+                      if (createdAt.isNotEmpty) {
+                        try {
+                          final dt = DateTime.parse(createdAt).toLocal();
+                          displayTime = '${dt.day}/${dt.month}/${dt.year} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+                        } catch (_) {
+                          displayTime = createdAt;
+                        }
+                      }
 
-          return Card(
-            margin: const EdgeInsets.only(bottom: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-              side: BorderSide(
-                color: isEmergency ? AppColors.emergency : AppColors.outline,
-                width: isEmergency ? 1.5 : 0.8,
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        isEmergency ? Icons.warning_amber_rounded : Icons.campaign_outlined,
-                        color: isEmergency ? AppColors.emergency : AppColors.primary,
-                        size: 22,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          item['title'] as String,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: isEmergency ? AppColors.emergency : AppColors.textPrimary,
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          side: BorderSide(
+                            color: isEmergency ? AppColors.emergency : AppColors.outline,
+                            width: isEmergency ? 1.5 : 0.8,
                           ),
                         ),
-                      ),
-                    ],
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    isEmergency ? Icons.warning_amber_rounded : Icons.campaign_outlined,
+                                    color: isEmergency ? AppColors.emergency : AppColors.primary,
+                                    size: 22,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      title,
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: isEmergency ? AppColors.emergency : AppColors.textPrimary,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                body,
+                                style: const TextStyle(fontSize: 15, height: 1.4, color: AppColors.textPrimary),
+                              ),
+                              if (displayTime.isNotEmpty) ...[
+                                const SizedBox(height: 12),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      displayTime,
+                                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                    ),
+                                    const Icon(Icons.check_circle_outline, size: 16, color: Colors.grey),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    item['body'] as String,
-                    style: const TextStyle(fontSize: 15, height: 1.4, color: AppColors.textPrimary),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        item['time'] as String,
-                        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.share, size: 20, color: AppColors.primary),
-                        tooltip: 'பகிர் / Share',
-                        onPressed: () {},
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
+                ),
     );
   }
 }

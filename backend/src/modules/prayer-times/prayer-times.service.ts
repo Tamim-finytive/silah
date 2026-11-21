@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { UpdatePrayerTimeDto } from './dto/prayer-time.dto';
+import { UpdatePrayerTimeDto, UpdatePrayerTimeRangeDto } from './dto/prayer-time.dto';
 
 @Injectable()
 export class PrayerTimesService {
@@ -63,6 +63,69 @@ export class PrayerTimesService {
       },
       orderBy: { date: 'asc' },
     });
+  }
+
+  async upsertPrayerTimeRange(masjidId: string, userId: string, dto: UpdatePrayerTimeRangeDto) {
+    const start = new Date(dto.startDate);
+    const end = new Date(dto.endDate);
+    const results: any[] = [];
+
+    const cur = new Date(start);
+    while (cur <= end) {
+      const targetDate = new Date(cur);
+      targetDate.setHours(0, 0, 0, 0);
+
+      const record = await this.prisma.prayerTime.upsert({
+        where: {
+          idx_prayer_times_unique: {
+            masjidId,
+            date: targetDate,
+          },
+        },
+        update: {
+          fajrAdhan: dto.fajrAdhan,
+          fajrJamaah: dto.fajrJamaah,
+          dhuhrAdhan: dto.dhuhrAdhan,
+          dhuhrJamaah: dto.dhuhrJamaah,
+          asrAdhan: dto.asrAdhan,
+          asrJamaah: dto.asrJamaah,
+          maghribAdhan: dto.maghribAdhan,
+          maghribJamaah: dto.maghribJamaah,
+          ishaAdhan: dto.ishaAdhan,
+          ishaJamaah: dto.ishaJamaah,
+          jummahKhutbah: dto.jummahKhutbah,
+          jummahJamaah: dto.jummahJamaah,
+          date: targetDate,
+          updatedBy: userId,
+        },
+        create: {
+          masjidId,
+          date: targetDate,
+          fajrAdhan: dto.fajrAdhan,
+          fajrJamaah: dto.fajrJamaah,
+          dhuhrAdhan: dto.dhuhrAdhan,
+          dhuhrJamaah: dto.dhuhrJamaah,
+          asrAdhan: dto.asrAdhan,
+          asrJamaah: dto.asrJamaah,
+          maghribAdhan: dto.maghribAdhan,
+          maghribJamaah: dto.maghribJamaah,
+          ishaAdhan: dto.ishaAdhan,
+          ishaJamaah: dto.ishaJamaah,
+          jummahKhutbah: dto.jummahKhutbah,
+          jummahJamaah: dto.jummahJamaah,
+          updatedBy: userId,
+        },
+      });
+      results.push(record);
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    return {
+      success: true,
+      count: results.length,
+      startDate: dto.startDate,
+      endDate: dto.endDate,
+    };
   }
 
   async upsertPrayerTime(masjidId: string, userId: string, dto: UpdatePrayerTimeDto) {

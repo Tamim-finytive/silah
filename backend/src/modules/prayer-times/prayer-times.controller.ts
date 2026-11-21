@@ -1,7 +1,7 @@
-import { Controller, Get, Put, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Put, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { PrayerTimesService } from './prayer-times.service';
-import { UpdatePrayerTimeDto } from './dto/prayer-time.dto';
+import { UpdatePrayerTimeDto, UpdatePrayerTimeRangeDto } from './dto/prayer-time.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { MasjidRoleGuard } from '../../common/guards/masjid-role.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -43,5 +43,18 @@ export class PrayerTimesController {
     @Body() dto: UpdatePrayerTimeDto,
   ) {
     return this.prayerTimesService.upsertPrayerTime(masjidId, userId, dto);
+  }
+
+  @Post('range')
+  @UseGuards(JwtAuthGuard, MasjidRoleGuard)
+  @MasjidRoles(RoleType.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Set prayer times across a date range (startDate to endDate) (Admin only)' })
+  async updatePrayerTimeRange(
+    @Param('masjidId') masjidId: string,
+    @CurrentUser('id') userId: string,
+    @Body() dto: UpdatePrayerTimeRangeDto,
+  ) {
+    return this.prayerTimesService.upsertPrayerTimeRange(masjidId, userId, dto);
   }
 }

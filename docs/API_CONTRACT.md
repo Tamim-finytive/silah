@@ -1,1871 +1,1139 @@
-# API Contract — Masjid Management & Namaz Time
+# API Contract — Silah (Masjid Management & Namaz Time)
 
-## Base URL
+> **Source of Truth**: Generated directly from NestJS backend controllers & DTOs (`backend/src/modules/`).
+> All endpoints are verified against the live backend production server.
 
-```
-https://api.masjidapp.com/api/v1
-```
+---
 
-## Standard Response Envelope
+## 1. Environment & Base URLs
 
-### Success Response
+| Environment | Base URL |
+|---|---|
+| **Production (Vercel Live)** | `https://backend-finytive.vercel.app/v1` |
+| **Local Development** | `http://localhost:3000/v1` |
+| **Swagger Interactive Docs** | `https://backend-finytive.vercel.app/v1/docs` or `http://localhost:3000/v1/docs` |
 
+---
+
+## 2. Standard Response Envelope
+
+All API endpoints pass through `TransformInterceptor` and `HttpExceptionFilter`.
+
+### Success Response Envelope (HTTP 200 / 201)
 ```json
 {
   "success": true,
   "data": { ... },
-  "meta": {                    // present only on paginated endpoints
-    "page": 1,
-    "limit": 20,
-    "total": 150,
-    "totalPages": 8
-  }
+  "timestamp": "2026-11-21T06:55:00.000Z"
 }
 ```
 
-### Error Response
-
+### Error Response Envelope (HTTP 4xx / 5xx)
 ```json
 {
   "success": false,
   "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Human-readable message",
-    "details": [ ... ],        // optional: field-level errors
-    "timestamp": "ISO-8601",
-    "path": "/api/v1/...",
-    "requestId": "req_xxx"
-  }
+    "code": "BAD_REQUEST",
+    "message": "Human-readable error description",
+    "details": ["Specific field validation errors if any"]
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
 }
 ```
 
-## Pagination Strategy
+---
 
-- Query params: `?page=1&limit=20`
-- Default: `page=1`, `limit=20`
-- Max limit: `100`
-- Response includes `meta` object with `page`, `limit`, `total`, `totalPages`
-- Cursor-based pagination available for high-volume endpoints (future, documented per endpoint)
+## 3. Authentication & Authorization
 
-## Authentication
-
-- All protected endpoints require `Authorization: Bearer <access_token>` header.
-- Endpoints marked 🔓 are public (no auth required).
-- Role requirements are listed per endpoint.
+- **Protected Endpoints**: Require `Authorization: Bearer <accessToken>` header.
+- **Tokens**: Access tokens have 120-day validity for frictionless user mobile experience.
+- **Roles**:
+  - `SUPER_ADMIN`: System-wide administrator.
+  - `ADMIN`: Masjid Mutawalli / Chief Administrator.
+  - `FINANCE`: Masjid Treasurer (manages Sandha and collections).
+  - `ANNOUNCEMENT`: Masjid Communication volunteer.
+  - `PUBLIC` / `MUSALLI`: Regular registered worshipper.
 
 ---
 
-## 1. Auth Module
+## 4. Auth Module (`/v1/auth`)
 
-### POST /auth/request-otp 🔓
+### 4.1 POST `/auth/check-user` 🔓
+Check whether a mobile number is already registered and onboarded before prompting or sending OTP.
 
-Request OTP for login/registration.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | None |
-| **Roles** | Any |
-
-**Request Body**:
+- **Auth**: None (Public)
+- **Request Body**:
 ```json
 {
   "phone": "+919876543210"
 }
 ```
+- **Response** (HTTP 200):
+```json
+{
+  "success": true,
+  "data": {
+    "exists": true,
+    "isOnboarded": true,
+    "isSuperAdmin": false,
+    "name": "Ahmed",
+    "hasMasjid": true
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+*(If user does not exist, `exists: false, isOnboarded: false`)*.
 
-**Response** (200):
+---
+
+### 4.2 POST `/auth/login-direct` 🔓
+Direct mobile number login (bypasses OTP for seamless 120-day persistent mobile login).
+
+- **Auth**: None (Public)
+- **Request Body**:
+```json
+{
+  "phone": "+919876543210"
+}
+```
+- **Response** (HTTP 200 - User Exists):
+```json
+{
+  "success": true,
+  "data": {
+    "exists": true,
+    "user": {
+      "id": "c1f7a0b3-...",
+      "phone": "+919876543210",
+      "name": "Ahmed",
+      "age": 32,
+      "address": "No 12, Main Road, Chennai",
+      "isOnboarded": true,
+      "isSuperAdmin": false,
+      "hasMasjid": true,
+      "primaryMasjidId": "m-8f7a...",
+      "adminRoles": [
+        {
+          "masjidId": "m-8f7a...",
+          "role": "ADMIN"
+        }
+      ]
+    },
+    "tokens": {
+      "accessToken": "eyJhbGciOi...",
+      "refreshToken": "eyJhbGciOi...",
+      "expiresIn": 10368000
+    },
+    "hasMasjid": true
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+*(If user does not exist: `{ "exists": false, "message": "User does not exist. Please register." }`)*.
+
+---
+
+### 4.3 POST `/auth/register` 🔓
+Registers or updates a user profile and marks `isOnboarded: true`. Auto-links any existing Sandha records matching this mobile number.
+
+- **Auth**: None (Public)
+- **Request Body**:
+```json
+{
+  "phone": "+919876543210",
+  "name": "Ahmed",
+  "age": 32,
+  "address": "No 12, Main Road, Chennai"
+}
+```
+*(Fields: `phone` [required], `name` [required], `age` [optional, 5-120], `address` [optional])*.
+
+- **Response** (HTTP 201):
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": "c1f7a0b3-...",
+      "phone": "+919876543210",
+      "name": "Ahmed",
+      "age": 32,
+      "address": "No 12, Main Road, Chennai",
+      "isOnboarded": true,
+      "isSuperAdmin": false,
+      "hasMasjid": false,
+      "adminRoles": []
+    },
+    "tokens": {
+      "accessToken": "eyJhbGciOi...",
+      "refreshToken": "eyJhbGciOi...",
+      "expiresIn": 10368000
+    }
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+### 4.4 POST `/auth/device-token` 🔒
+Registers or updates the user's FCM device token for targeted push notifications.
+
+- **Auth**: Bearer Token required
+- **Request Body**:
+```json
+{
+  "fcmToken": "fcm_token_sample_string_12345",
+  "platform": "ANDROID"
+}
+```
+- **Response** (HTTP 200):
+```json
+{
+  "success": true,
+  "data": {
+    "success": true,
+    "message": "FCM device token registered"
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+### 4.5 POST `/auth/otp/send` 🔓
+Generates and sends an OTP to the specified mobile number.
+
+- **Auth**: None (Public)
+- **Request Body**:
+```json
+{
+  "phone": "+919876543210"
+}
+```
+- **Response** (HTTP 200):
 ```json
 {
   "success": true,
   "data": {
     "message": "OTP sent successfully",
-    "expiresInSeconds": 300,
-    "retryAfterSeconds": 60
-  }
+    "expiresInSeconds": 300
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
 }
 ```
 
-**Errors**: `400 VALIDATION_ERROR` (invalid phone), `429 RATE_LIMITED` (too many OTP requests)
-
 ---
 
-### POST /auth/verify-otp 🔓
+### 4.6 POST `/auth/otp/verify` 🔓
+Verifies the 6-digit OTP and authenticates the user.
 
-Verify OTP and get tokens. Creates user if first login.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | None |
-| **Roles** | Any |
-
-**Request Body**:
+- **Auth**: None (Public)
+- **Request Body**:
 ```json
 {
   "phone": "+919876543210",
-  "otp": "123456",
-  "deviceToken": "fcm_token_xxx",
-  "platform": "ANDROID",
-  "name": "Mohammed Ali"
+  "otp": "123456"
 }
 ```
-
-> `name` is required only for first-time registration (new phone number). `deviceToken` and `platform` are optional but recommended for push notifications.
-
-**Response** (200):
+- **Response** (HTTP 200):
 ```json
 {
   "success": true,
   "data": {
-    "accessToken": "eyJ...",
-    "refreshToken": "rt_xxx",
-    "expiresIn": 900,
     "user": {
-      "id": "uuid",
+      "id": "c1f7a0b3-...",
       "phone": "+919876543210",
-      "name": "Mohammed Ali",
+      "name": "Ahmed",
       "language": "en",
+      "isOnboarded": true,
       "isSuperAdmin": false,
-      "isNewUser": true
-    }
-  }
-}
-```
-
-**Errors**: `400 VALIDATION_ERROR`, `401 OTP_INVALID`, `401 OTP_EXPIRED`
-
----
-
-### POST /auth/refresh-token
-
-Refresh access token.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | None (refresh token in body) |
-| **Roles** | Any authenticated |
-
-**Request Body**:
-```json
-{
-  "refreshToken": "rt_xxx"
-}
-```
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": {
-    "accessToken": "eyJ...",
-    "refreshToken": "rt_new_xxx",
-    "expiresIn": 900
-  }
-}
-```
-
-**Errors**: `401 UNAUTHORIZED` (invalid/expired refresh token)
-
----
-
-### POST /auth/logout
-
-Invalidate refresh token and unregister device.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Any authenticated |
-
-**Request Body**:
-```json
-{
-  "refreshToken": "rt_xxx",
-  "deviceToken": "fcm_token_xxx"
-}
-```
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": {
-    "message": "Logged out successfully"
-  }
+      "hasMasjid": true,
+      "adminRoles": []
+    },
+    "tokens": {
+      "accessToken": "eyJhbGciOi...",
+      "refreshToken": "eyJhbGciOi...",
+      "expiresIn": 10368000
+    },
+    "isNewUser": false
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
 }
 ```
 
 ---
 
-## 2. Users Module
+### 4.7 POST `/auth/refresh` 🔓
+Refreshes an expired access token using a valid refresh token.
 
-### GET /users/me
-
-Get current user's profile.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Any authenticated |
-
-**Response** (200):
+- **Auth**: None (Public)
+- **Request Body**:
+```json
+{
+  "refreshToken": "eyJhbGciOi..."
+}
+```
+- **Response** (HTTP 200):
 ```json
 {
   "success": true,
   "data": {
-    "id": "uuid",
+    "accessToken": "eyJhbGciOi...",
+    "refreshToken": "eyJhbGciOi...",
+    "expiresIn": 10368000
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+### 4.8 GET `/auth/me` 🔒
+Retrieves current authenticated profile, admin roles, and masjid memberships.
+
+- **Auth**: Bearer Token required
+- **Response** (HTTP 200):
+```json
+{
+  "success": true,
+  "data": {
+    "id": "c1f7a0b3-...",
     "phone": "+919876543210",
-    "name": "Mohammed Ali",
-    "avatarUrl": null,
+    "name": "Ahmed",
     "language": "en",
+    "avatarUrl": null,
     "isSuperAdmin": false,
-    "createdAt": "2024-01-15T10:30:00Z",
-    "memberships": [
+    "adminRoles": [
       {
-        "id": "uuid",
-        "masjidId": "uuid",
-        "masjidName": "Masjid Al-Huda",
-        "isPrimary": true,
-        "joinedAt": "2024-01-15T10:35:00Z"
-      }
-    ],
-    "roles": [
-      {
-        "masjidId": "uuid",
-        "masjidName": "Masjid Al-Huda",
+        "masjidId": "m-8f7a...",
+        "masjidName": "Jamia Masjid",
+        "masjidNameTa": "ஜாமியா பள்ளிவாசல்",
         "role": "ADMIN"
       }
-    ]
-  }
-}
-```
-
----
-
-### PATCH /users/me
-
-Update current user's profile.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Any authenticated |
-
-**Request Body** (all fields optional):
-```json
-{
-  "name": "Mohammed Ali Khan",
-  "language": "ta",
-  "avatarUrl": "https://storage.../avatar.jpg"
-}
-```
-
-**Response** (200): Updated user object (same shape as GET /users/me).
-
-**Errors**: `400 VALIDATION_ERROR`
-
----
-
-### DELETE /users/me
-
-Deactivate (soft-delete) own account.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Any authenticated |
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": { "message": "Account deactivated" }
-}
-```
-
----
-
-### GET /users (Super Admin)
-
-List all users with pagination.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin |
-
-**Query Params**: `?page=1&limit=20&search=ali&isActive=true`
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "uuid",
-      "phone": "+919876543210",
-      "name": "Mohammed Ali",
-      "language": "en",
-      "isActive": true,
-      "createdAt": "2024-01-15T10:30:00Z",
-      "membershipCount": 2
-    }
-  ],
-  "meta": { "page": 1, "limit": 20, "total": 500, "totalPages": 25 }
-}
-```
-
----
-
-### GET /users/:id (Super Admin)
-
-Get any user's profile.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin |
-
-**Response** (200): Same shape as GET /users/me.
-
-**Errors**: `404 NOT_FOUND`
-
----
-
-### POST /users (Super Admin)
-
-Create a user.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin |
-
-**Request Body**:
-```json
-{
-  "phone": "+919876543210",
-  "name": "New User",
-  "language": "ta"
-}
-```
-
-**Response** (201): Created user object.
-
-**Errors**: `400 VALIDATION_ERROR`, `409 CONFLICT` (phone already registered)
-
----
-
-### PATCH /users/:id/deactivate (Super Admin)
-
-Deactivate any user.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin |
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": { "message": "User deactivated" }
-}
-```
-
----
-
-## 3. Masjids Module
-
-### GET /masjids 🔓
-
-List/search masjids.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Optional |
-| **Roles** | Any (including guest) |
-
-**Query Params**: `?page=1&limit=20&search=huda&city=Tirunelveli&lat=8.71&lng=77.68&radius=10`
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "uuid",
-      "name": "Masjid Al-Huda",
-      "nameTa": "மஸ்ஜிதுல் ஹுதா",
-      "address": "123 Main Street, Melapalayam",
-      "city": "Tirunelveli",
-      "latitude": 8.7139,
-      "longitude": 77.6872,
-      "photoUrl": null,
-      "memberCount": 150,
-      "distanceKm": 2.5
-    }
-  ],
-  "meta": { "page": 1, "limit": 20, "total": 45, "totalPages": 3 }
-}
-```
-
-> `distanceKm` is included only when `lat` and `lng` are provided. Results sorted by distance in that case.
-
----
-
-### GET /masjids/:id 🔓
-
-Get masjid details.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Optional |
-| **Roles** | Any (including guest) |
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": {
-    "id": "uuid",
-    "name": "Masjid Al-Huda",
-    "nameTa": "மஸ்ஜிதுல் ஹுதா",
-    "address": "123 Main Street, Melapalayam",
-    "latitude": 8.7139,
-    "longitude": 77.6872,
-    "city": "Tirunelveli",
-    "state": "Tamil Nadu",
-    "country": "India",
-    "phone": "+914622345678",
-    "photoUrl": null,
-    "memberCount": 150,
-    "isActive": true,
-    "createdAt": "2024-01-10T08:00:00Z",
-    "todayPrayerTimes": {
-      "fajrJamaah": "05:30",
-      "dhuhrJamaah": "12:45",
-      "asrJamaah": "16:00",
-      "maghribJamaah": "18:15",
-      "ishaJamaah": "19:45"
-    }
-  }
-}
-```
-
----
-
-### POST /masjids
-
-Create a new masjid. Creator automatically becomes Admin.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (self-registers) |
-
-**Request Body**:
-```json
-{
-  "name": "Masjid Al-Falah",
-  "nameTa": "மஸ்ஜிதுல் ஃபலாஹ்",
-  "address": "789 New Road, Palayamkottai",
-  "latitude": 8.7225,
-  "longitude": 77.7284,
-  "city": "Tirunelveli",
-  "state": "Tamil Nadu",
-  "country": "India",
-  "phone": "+914622345679"
-}
-```
-
-**Response** (201): Created masjid object with `qrToken` generated.
-
-**Errors**: `400 VALIDATION_ERROR`
-
----
-
-### PATCH /masjids/:id
-
-Update masjid details.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid only) |
-
-**Request Body** (all fields optional):
-```json
-{
-  "name": "Masjid Al-Huda Updated",
-  "address": "New address",
-  "phone": "+914622345680"
-}
-```
-
-**Response** (200): Updated masjid object.
-
-**Errors**: `403 FORBIDDEN` (not admin of this masjid), `404 NOT_FOUND`
-
----
-
-### DELETE /masjids/:id (Super Admin)
-
-Delete (soft-deactivate) a masjid.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin |
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": { "message": "Masjid deactivated" }
-}
-```
-
----
-
-### POST /masjids/:id/regenerate-qr
-
-Regenerate QR token.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid only) |
-
-**Request Body** (optional):
-```json
-{
-  "expiresInDays": 30
-}
-```
-
-> Omit `expiresInDays` for permanent token.
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": {
-    "qrToken": "new_random_token_xxx",
-    "qrUrl": "https://masjidapp.com/join/new_random_token_xxx",
-    "expiresAt": null
-  }
-}
-```
-
----
-
-### POST /masjids/:id/upload-photo
-
-Get pre-signed upload URL for masjid photo.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid only) |
-
-**Request Body**:
-```json
-{
-  "contentType": "image/jpeg",
-  "fileName": "masjid-front.jpg"
-}
-```
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": {
-    "uploadUrl": "https://storage.../presigned-url",
-    "publicUrl": "https://storage.../masjids/uuid/masjid-front.jpg",
-    "expiresInSeconds": 300
-  }
-}
-```
-
----
-
-## 4. Memberships Module
-
-### POST /memberships/join-by-qr
-
-Join a masjid by QR token.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Any authenticated |
-
-**Request Body**:
-```json
-{
-  "qrToken": "join_alhuda_2024_permanent"
-}
-```
-
-**Response** (201):
-```json
-{
-  "success": true,
-  "data": {
-    "id": "uuid",
-    "masjidId": "uuid",
-    "masjidName": "Masjid Al-Huda",
-    "isPrimary": false,
-    "joinedAt": "2024-01-15T10:35:00Z"
-  }
-}
-```
-
-**Errors**: `404 NOT_FOUND` (invalid token), `401 OTP_EXPIRED` (token expired), `409 CONFLICT` (already a member)
-
----
-
-### POST /memberships/join
-
-Join a masjid by masjid ID (search-based join).
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Any authenticated |
-
-**Request Body**:
-```json
-{
-  "masjidId": "uuid"
-}
-```
-
-**Response** (201): Same as join-by-qr.
-
-**Errors**: `404 NOT_FOUND`, `409 CONFLICT`
-
----
-
-### DELETE /memberships/:id
-
-Leave a masjid.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Any authenticated (own membership) |
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": { "message": "Left masjid successfully" }
-}
-```
-
----
-
-### GET /memberships/me
-
-List current user's memberships.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Any authenticated |
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "uuid",
-      "masjidId": "uuid",
-      "masjidName": "Masjid Al-Huda",
-      "masjidNameTa": "மஸ்ஜிதுல் ஹுதா",
-      "isPrimary": true,
-      "joinedAt": "2024-01-15T10:35:00Z"
-    }
-  ]
-}
-```
-
----
-
-### PATCH /memberships/:id/set-primary
-
-Set a membership as primary.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Any authenticated (own membership) |
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": { "message": "Primary masjid updated" }
-}
-```
-
----
-
-### GET /masjids/:id/members
-
-List masjid members.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid), Finance (own masjid) |
-
-**Query Params**: `?page=1&limit=20&search=ali`
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "membershipId": "uuid",
-      "userId": "uuid",
-      "name": "Mohammed Ali",
-      "phone": "+919876543210",
-      "joinedAt": "2024-01-15T10:35:00Z"
-    }
-  ],
-  "meta": { "page": 1, "limit": 20, "total": 150, "totalPages": 8 }
-}
-```
-
----
-
-### DELETE /masjids/:id/members/:membershipId
-
-Remove a member from masjid.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid) |
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": { "message": "Member removed" }
-}
-```
-
----
-
-## 5. Prayer Times Module
-
-### GET /masjids/:id/prayer-times 🔓
-
-Get prayer times for a masjid.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Optional |
-| **Roles** | Any (including guest) |
-
-**Query Params**: `?date=2024-01-15` or `?startDate=2024-01-15&endDate=2024-01-21` (week view)
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "uuid",
-      "date": "2024-01-15",
-      "fajrAdhan": "05:15",
-      "fajrJamaah": "05:30",
-      "dhuhrAdhan": "12:30",
-      "dhuhrJamaah": "12:45",
-      "asrAdhan": "15:45",
-      "asrJamaah": "16:00",
-      "maghribAdhan": "18:00",
-      "maghribJamaah": "18:15",
-      "ishaAdhan": "19:30",
-      "ishaJamaah": "19:45",
-      "jummahKhutbah": "12:30",
-      "jummahJamaah": "12:50",
-      "updatedAt": "2024-01-14T18:00:00Z"
-    }
-  ]
-}
-```
-
-> If no times set for the requested date, returns empty array. Client should show "Times not yet announced."
-
----
-
-### PUT /masjids/:id/prayer-times
-
-Set prayer times for a specific date.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid) |
-
-**Request Body**:
-```json
-{
-  "date": "2024-01-15",
-  "fajrAdhan": "05:15",
-  "fajrJamaah": "05:30",
-  "dhuhrAdhan": "12:30",
-  "dhuhrJamaah": "12:45",
-  "asrAdhan": "15:45",
-  "asrJamaah": "16:00",
-  "maghribAdhan": "18:00",
-  "maghribJamaah": "18:15",
-  "ishaAdhan": "19:30",
-  "ishaJamaah": "19:45",
-  "jummahKhutbah": "12:30",
-  "jummahJamaah": "12:50"
-}
-```
-
-> Adhan times and Jummah times are optional. Jamaah times for the 5 prayers are required.
-
-**Response** (200): Created/updated prayer time object.
-
-**Errors**: `400 VALIDATION_ERROR`, `403 FORBIDDEN`
-
----
-
-### PUT /masjids/:id/prayer-times/bulk
-
-Set prayer times for a date range (copy same times across multiple days).
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid) |
-
-**Request Body**:
-```json
-{
-  "startDate": "2024-01-15",
-  "endDate": "2024-01-21",
-  "times": {
-    "fajrJamaah": "05:30",
-    "dhuhrJamaah": "12:45",
-    "asrJamaah": "16:00",
-    "maghribJamaah": "18:15",
-    "ishaJamaah": "19:45"
-  }
-}
-```
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": { "message": "Prayer times set for 7 days", "count": 7 }
-}
-```
-
----
-
-### PUT /prayer-times/region-defaults (Super Admin)
-
-Set region-wide default prayer times.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin |
-
-**Request Body**:
-```json
-{
-  "city": "Tirunelveli",
-  "date": "2024-01-15",
-  "times": {
-    "fajrJamaah": "05:30",
-    "dhuhrJamaah": "12:45",
-    "asrJamaah": "16:00",
-    "maghribJamaah": "18:15",
-    "ishaJamaah": "19:45"
-  },
-  "applyToMasjids": true
-}
-```
-
-> If `applyToMasjids` is true, sets these times for all masjids in the city that haven't set their own times for this date.
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": { "message": "Default times set", "masjidsUpdated": 12 }
-}
-```
-
----
-
-## 6. Special Schedules Module
-
-### GET /masjids/:id/special-schedules 🔓
-
-List special schedules for a masjid.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Optional |
-| **Roles** | Any (including guest) |
-
-**Query Params**: `?type=RAMZAN_TIMETABLE&startDate=2024-03-11&endDate=2024-04-09`
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "uuid",
-      "type": "TARAWEEH",
-      "title": "Taraweeh Prayers",
-      "titleTa": "தராவீஹ் தொழுகை",
-      "startDate": "2024-03-11",
-      "endDate": "2024-04-09",
-      "startTime": "20:30",
-      "endTime": "22:00",
-      "notes": "20 rakaat with Quran khatm",
-      "notesTa": "குர்ஆன் கத்மடன் 20 ரக்அத்",
-      "createdAt": "2024-03-01T10:00:00Z"
-    }
-  ]
-}
-```
-
----
-
-### POST /masjids/:id/special-schedules
-
-Create a special schedule.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid) |
-
-**Request Body**:
-```json
-{
-  "type": "TARAWEEH",
-  "title": "Taraweeh Prayers",
-  "titleTa": "தராவீஹ் தொழுகை",
-  "startDate": "2024-03-11",
-  "endDate": "2024-04-09",
-  "startTime": "20:30",
-  "endTime": "22:00",
-  "notes": "20 rakaat with Quran khatm",
-  "notesTa": "குர்ஆன் கத்மடன் 20 ரக்அத்"
-}
-```
-
-**Response** (201): Created schedule object.
-
-**Errors**: `400 VALIDATION_ERROR`, `403 FORBIDDEN`, `422 UNPROCESSABLE` (endDate before startDate)
-
----
-
-### PATCH /masjids/:id/special-schedules/:scheduleId
-
-Update a special schedule.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid) |
-
-**Request Body**: Partial fields to update.
-
-**Response** (200): Updated schedule object.
-
----
-
-### DELETE /masjids/:id/special-schedules/:scheduleId
-
-Delete a special schedule.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid) |
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": { "message": "Schedule deleted" }
-}
-```
-
----
-
-## 7. Announcements Module
-
-### GET /masjids/:id/announcements 🔓
-
-List announcements for a masjid.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Optional |
-| **Roles** | Any (including guest) |
-
-**Query Params**: `?page=1&limit=20&category=GENERAL`
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "uuid",
-      "category": "GENERAL",
-      "title": "Friday Lecture Topic",
-      "titleTa": "வெள்ளி சொற்பொழிவு தலைப்பு",
-      "body": "This week's lecture: Importance of Salah",
-      "bodyTa": "இந்த வார சொற்பொழிவு: தொழுகையின் முக்கியத்துவம்",
-      "isPinned": false,
-      "publishedAt": "2024-01-15T08:00:00Z",
-      "expiresAt": null,
-      "createdBy": {
-        "id": "uuid",
-        "name": "Imam Ibrahim"
-      }
-    }
-  ],
-  "meta": { "page": 1, "limit": 20, "total": 35, "totalPages": 2 }
-}
-```
-
-> Pinned announcements are always returned first, regardless of sort order.
-
----
-
-### GET /masjids/:id/announcements/:announcementId 🔓
-
-Get single announcement.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Optional |
-| **Roles** | Any (including guest) |
-
-**Response** (200): Full announcement object.
-
----
-
-### POST /masjids/:id/announcements
-
-Create an announcement.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid), Announcement (own masjid) |
-
-**Request Body**:
-```json
-{
-  "category": "EVENT",
-  "title": "Annual Quran Competition",
-  "titleTa": "ஆண்டு குர்ஆன் போட்டி",
-  "body": "Register before January 20th for the annual Quran recitation competition.",
-  "bodyTa": "ஆண்டு குர்ஆன் ஓதல் போட்டிக்கு ஜனவரி 20ம் தேதிக்கு முன் பதிவு செய்யவும்.",
-  "isPinned": false,
-  "notifyPush": true,
-  "expiresAt": "2024-01-25T23:59:59Z"
-}
-```
-
-**Response** (201): Created announcement object.
-
-**Errors**: `400 VALIDATION_ERROR`, `403 FORBIDDEN`
-
----
-
-### PATCH /masjids/:id/announcements/:announcementId
-
-Update an announcement.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid), Announcement (own masjid) |
-
-**Request Body**: Partial fields to update.
-
-**Response** (200): Updated announcement object.
-
----
-
-### DELETE /masjids/:id/announcements/:announcementId
-
-Delete an announcement.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid) |
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": { "message": "Announcement deleted" }
-}
-```
-
----
-
-### PATCH /masjids/:id/announcements/:announcementId/pin
-
-Pin or unpin an announcement.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid) |
-
-**Request Body**:
-```json
-{
-  "isPinned": true
-}
-```
-
-**Response** (200): Updated announcement object.
-
----
-
-## 8. Sandha (Dues) Module
-
-### GET /masjids/:id/sandha-plans
-
-List sandha plans for a masjid.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid), Finance (own masjid) |
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "uuid",
-      "name": "Monthly Maintenance",
-      "amount": 100.00,
-      "frequency": "MONTHLY",
-      "description": "Monthly masjid maintenance contribution",
-      "isActive": true,
-      "memberCount": 85,
-      "collectedThisMonth": 6500.00,
-      "pendingThisMonth": 2000.00
-    }
-  ]
-}
-```
-
----
-
-### POST /masjids/:id/sandha-plans
-
-Create a sandha plan.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid), Finance (own masjid) |
-
-**Request Body**:
-```json
-{
-  "name": "Monthly Maintenance",
-  "amount": 100.00,
-  "frequency": "MONTHLY",
-  "description": "Monthly masjid maintenance contribution"
-}
-```
-
-**Response** (201): Created plan object.
-
----
-
-### PATCH /masjids/:id/sandha-plans/:planId
-
-Update a sandha plan.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid), Finance (own masjid) |
-
-**Request Body**: Partial fields.
-
-**Response** (200): Updated plan object.
-
----
-
-### DELETE /masjids/:id/sandha-plans/:planId
-
-Delete a sandha plan.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid) |
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": { "message": "Plan deleted" }
-}
-```
-
----
-
-### GET /masjids/:id/sandha-plans/:planId/members
-
-List members enrolled in a plan.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid), Finance (own masjid) |
-
-**Query Params**: `?page=1&limit=20&search=ali&linked=true`
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "uuid",
-      "phone": "+919876543210",
-      "name": "Mohammed Ali",
-      "userId": "uuid",
-      "autoLinked": true,
-      "linkedAt": "2024-01-15T10:30:00Z",
-      "lastPayment": {
-        "amount": 100.00,
-        "paidAt": "2024-01-05T14:00:00Z",
-        "periodEnd": "2024-01-31"
-      },
-      "isPaidCurrentPeriod": true
-    }
-  ],
-  "meta": { "page": 1, "limit": 20, "total": 85, "totalPages": 5 }
-}
-```
-
----
-
-### POST /masjids/:id/sandha-plans/:planId/members
-
-Add a member to a sandha plan. Triggers auto-link check.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid), Finance (own masjid) |
-
-**Request Body**:
-```json
-{
-  "phone": "+919876543210",
-  "name": "Mohammed Ali"
-}
-```
-
-**Response** (201):
-```json
-{
-  "success": true,
-  "data": {
-    "id": "uuid",
-    "phone": "+919876543210",
-    "name": "Mohammed Ali",
-    "userId": "uuid",
-    "autoLinked": true,
-    "linkedAt": "2024-01-15T10:30:00Z"
-  }
-}
-```
-
-> `userId` and `autoLinked` populated if phone matches a registered user.
-
-**Errors**: `409 CONFLICT` (phone already in this plan)
-
----
-
-### DELETE /masjids/:id/sandha-plans/:planId/members/:memberId
-
-Remove a member from a plan.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid), Finance (own masjid) |
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": { "message": "Member removed from plan" }
-}
-```
-
----
-
-### POST /masjids/:id/sandha-plans/:planId/payments
-
-Record a payment.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid), Finance (own masjid) |
-
-**Request Body**:
-```json
-{
-  "planMemberId": "uuid",
-  "amount": 100.00,
-  "status": "PAID",
-  "method": "CASH",
-  "receiptNumber": "REC-2024-001",
-  "periodStart": "2024-01-01",
-  "periodEnd": "2024-01-31",
-  "paidAt": "2024-01-05T14:00:00Z",
-  "notes": "Paid in full"
-}
-```
-
-**Response** (201): Created payment object.
-
-**Errors**: `400 VALIDATION_ERROR`, `422 UNPROCESSABLE` (periodEnd before periodStart)
-
----
-
-### GET /masjids/:id/sandha-plans/:planId/payments
-
-List payments for a plan.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid), Finance (own masjid) |
-
-**Query Params**: `?page=1&limit=20&status=PAID&startDate=2024-01-01&endDate=2024-01-31&memberId=uuid`
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "uuid",
-      "planMember": {
-        "id": "uuid",
-        "name": "Mohammed Ali",
-        "phone": "+919876543210"
-      },
-      "amount": 100.00,
-      "status": "PAID",
-      "method": "CASH",
-      "receiptNumber": "REC-2024-001",
-      "periodStart": "2024-01-01",
-      "periodEnd": "2024-01-31",
-      "paidAt": "2024-01-05T14:00:00Z",
-      "recordedBy": {
-        "id": "uuid",
-        "name": "Imam Ibrahim"
-      }
-    }
-  ],
-  "meta": { "page": 1, "limit": 20, "total": 85, "totalPages": 5 }
-}
-```
-
----
-
-### GET /sandha/my-dues
-
-Get current user's sandha status across all masjids.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Any authenticated |
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "masjidId": "uuid",
-      "masjidName": "Masjid Al-Huda",
-      "plans": [
-        {
-          "planId": "uuid",
-          "planName": "Monthly Maintenance",
-          "amount": 100.00,
-          "frequency": "MONTHLY",
-          "isPaidCurrentPeriod": true,
-          "lastPayment": {
-            "amount": 100.00,
-            "paidAt": "2024-01-05T14:00:00Z",
-            "periodEnd": "2024-01-31"
-          }
-        }
-      ]
-    }
-  ]
-}
-```
-
----
-
-### GET /masjids/:id/sandha-reports
-
-Get sandha collection reports.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid), Finance (own masjid) |
-
-**Query Params**: `?startDate=2024-01-01&endDate=2024-12-31&groupBy=month`
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": {
-    "summary": {
-      "totalCollected": 78000.00,
-      "totalPending": 12000.00,
-      "totalMembers": 85,
-      "paidMembers": 65,
-      "collectionRate": 76.5
-    },
-    "breakdown": [
+    ],
+    "memberships": [
       {
-        "period": "2024-01",
-        "collected": 6500.00,
-        "pending": 2000.00,
-        "paidCount": 65,
-        "totalCount": 85
+        "masjidId": "m-8f7a...",
+        "masjidName": "Jamia Masjid",
+        "masjidNameTa": "ஜாமியா பள்ளிவாசல்",
+        "isPrimary": true
       }
     ]
-  }
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
 }
 ```
 
 ---
 
-## 9. Devices & Notifications Module
+## 5. Masjids Module (`/v1/masjids`)
 
-### POST /devices
+### 5.1 GET `/masjids` 🔓
+Search and list all active and approved masjids.
 
-Register a device for push notifications.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Any authenticated |
-
-**Request Body**:
-```json
-{
-  "fcmToken": "fcm_token_xxx",
-  "platform": "ANDROID"
-}
-```
-
-**Response** (201):
-```json
-{
-  "success": true,
-  "data": {
-    "id": "uuid",
-    "fcmToken": "fcm_token_xxx",
-    "platform": "ANDROID"
-  }
-}
-```
-
-> Upserts: if token already exists for this user, updates it.
-
----
-
-### PUT /devices/:deviceId
-
-Update device token (on FCM token refresh).
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Any authenticated (own device) |
-
-**Request Body**:
-```json
-{
-  "fcmToken": "new_fcm_token_xxx"
-}
-```
-
-**Response** (200): Updated device object.
-
----
-
-### GET /notifications/prefs
-
-Get notification preferences for all joined masjids.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Any authenticated |
-
-**Response** (200):
+- **Auth**: None (Public)
+- **Query Parameters**:
+  - `search` (optional): Filter by name or Tamil name.
+  - `city` (optional): Filter by city.
+- **Response** (HTTP 200):
 ```json
 {
   "success": true,
   "data": [
     {
-      "masjidId": "uuid",
-      "masjidName": "Masjid Al-Huda",
-      "allAnnouncements": true,
-      "prayerChanges": true,
-      "emergencyAlerts": true,
-      "sandhaReminders": true
+      "id": "a933fef7-47b7-4c40-9da2-04e38605eb82",
+      "name": "Tiruvarur Big Masjid",
+      "nameTa": "திருவாரூர் பெரிய பள்ளிவாசல்",
+      "address": "Main Road",
+      "city": "Tiruvarur",
+      "state": "Tamil Nadu",
+      "latitude": 10.7712,
+      "longitude": 79.6366,
+      "qrToken": "7b06886e06f97ef7ffad1921356bebe3",
+      "approvalStatus": "APPROVED",
+      "isActive": true
     }
-  ]
+  ],
+  "timestamp": "2026-11-21T06:55:00.000Z"
 }
 ```
 
 ---
 
-### PATCH /notifications/prefs/:masjidId
+### 5.2 GET `/masjids/:id` 🔓
+Get complete details of a specific masjid by its ID, including admin contacts.
 
-Update notification preferences for a masjid.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Any authenticated |
-
-**Request Body**:
-```json
-{
-  "allAnnouncements": false,
-  "prayerChanges": true,
-  "sandhaReminders": false
-}
-```
-
-> `emergencyAlerts` cannot be set to false (always true, enforced server-side).
-
-**Response** (200): Updated preferences object.
-
----
-
-## 10. Qibla Module
-
-> Qibla direction is calculated **entirely on the client** using the device's GPS coordinates and compass sensor. No backend API is needed.
->
-> **Formula**: The bearing from the user's location to the Kaaba (21.4225°N, 39.8262°E) is computed using the great-circle bearing formula. The Flutter app uses the `flutter_compass` and `geolocator` packages.
-
----
-
-## 11. Admin Dashboard Module
-
-### GET /admin/masjids/:id/dashboard
-
-Get dashboard stats for a masjid.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid) |
-
-**Response** (200):
+- **Auth**: None (Public)
+- **Response** (HTTP 200):
 ```json
 {
   "success": true,
   "data": {
-    "memberCount": 150,
-    "newMembersThisMonth": 12,
-    "announcementCount": 35,
-    "activeSandhaPlans": 2,
-    "sandhaCollectionThisMonth": 6500.00,
-    "sandhaPendingThisMonth": 2000.00,
-    "prayerTimesSetUntil": "2024-01-21"
-  }
+    "id": "a933fef7-...",
+    "name": "Tiruvarur Big Masjid",
+    "nameTa": "திருவாரூர் பெரிய பள்ளிவாசல்",
+    "address": "Main Road",
+    "city": "Tiruvarur",
+    "qrToken": "7b06886e...",
+    "admins": [
+      {
+        "id": "ma-123",
+        "role": { "name": "ADMIN" },
+        "user": {
+          "id": "u-456",
+          "name": "Mutawalli Sahib",
+          "phone": "+919876543210"
+        }
+      }
+    ]
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
 }
 ```
 
 ---
 
-### GET /admin/masjids/:id/roles
+### 5.3 GET `/masjids/qr/:qrToken` 🔓
+Scan & lookup masjid details via permanent QR token string.
 
-List users with custom roles for a masjid.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid) |
-
-**Response** (200):
+- **Auth**: None (Public)
+- **Response** (HTTP 200):
 ```json
 {
   "success": true,
-  "data": [
-    {
-      "id": "uuid",
-      "userId": "uuid",
-      "userName": "Ahmed Finance",
-      "userPhone": "+919876543211",
-      "role": "FINANCE",
-      "createdAt": "2024-01-10T10:00:00Z"
-    }
-  ]
+  "data": {
+    "id": "a933fef7-...",
+    "name": "Tiruvarur Big Masjid",
+    "city": "Tiruvarur"
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
 }
 ```
 
 ---
 
-### POST /admin/masjids/:id/roles
+### 5.4 POST `/masjids` 🔒
+Submit a registration for a new masjid.
+- Regular user submissions enter `PENDING` approval.
+- Super Admin submissions are automatically `APPROVED` and `isActive: true`.
+- Automatically enforces duplicate prevention (~100m proximity check and exact name in city check).
 
-Assign a custom role to a user.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid) |
-
-**Request Body**:
+- **Auth**: Bearer Token required
+- **Request Body**:
 ```json
 {
-  "userId": "uuid",
+  "name": "Masjid An-Noor",
+  "nameTa": "மஸ்ஜித் அந்-நூர்",
+  "address": "45 Anna Salai",
+  "city": "Chennai",
+  "state": "Tamil Nadu",
+  "latitude": 13.0604,
+  "longitude": 80.2496,
+  "phone": "+914428291234"
+}
+```
+- **Response** (HTTP 201):
+```json
+{
+  "success": true,
+  "data": {
+    "id": "new-uuid",
+    "name": "Masjid An-Noor",
+    "approvalStatus": "PENDING",
+    "isActive": false,
+    "isPendingApproval": true,
+    "message": "Masjid registration request submitted! It will be reviewed and approved by the Super Admin."
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+### 5.5 POST `/masjids/:id/join` 🔒
+Join or follow a masjid as a member / favorite.
+
+- **Auth**: Bearer Token required
+- **Request Body**:
+```json
+{
+  "isPrimary": true
+}
+```
+- **Response** (HTTP 200):
+```json
+{
+  "success": true,
+  "data": {
+    "id": "membership-uuid",
+    "userId": "u-123",
+    "masjidId": "m-456",
+    "isPrimary": true
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+### 5.6 POST `/masjids/:masjidId/roles` 🔒
+Assign a role (`ADMIN`, `FINANCE`, `ANNOUNCEMENT`) to a member by phone number.
+
+- **Auth**: Bearer Token (Masjid `ADMIN` only)
+- **Request Body**:
+```json
+{
+  "phone": "+919876543215",
+  "name": "Janab Farooq",
   "role": "FINANCE"
 }
 ```
-
-> `role` must be one of: `FINANCE`, `ANNOUNCEMENT`. Admin role can only be assigned by Super Admin.
-
-**Response** (201): Created role assignment object.
-
-**Errors**: `400 VALIDATION_ERROR`, `409 CONFLICT` (user already has this role for this masjid)
-
----
-
-### DELETE /admin/masjids/:id/roles/:roleAssignmentId
-
-Revoke a custom role.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin, Admin (own masjid) |
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": { "message": "Role revoked" }
-}
-```
-
----
-
-## 12. Super Admin Dashboard Module
-
-### GET /super-admin/dashboard
-
-Get platform-wide statistics.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin |
-
-**Response** (200):
+- **Response** (HTTP 200):
 ```json
 {
   "success": true,
   "data": {
-    "totalMasjids": 45,
-    "totalUsers": 2500,
-    "totalMemberships": 3200,
-    "activeMasjids": 42,
-    "newUsersThisMonth": 120,
-    "newMasjidsThisMonth": 3,
-    "totalSandhaCollectedThisMonth": 125000.00,
-    "topMasjidsByMembers": [
-      { "id": "uuid", "name": "Masjid Al-Huda", "memberCount": 150 }
-    ]
-  }
+    "success": true,
+    "message": "Assigned FINANCE role to Janab Farooq"
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
 }
 ```
 
 ---
 
-### GET /super-admin/masjids
+### 5.7 GET `/masjids/requests/pending` 🔒
+List all pending masjid registration requests awaiting Super Admin review.
 
-List all masjids with admin info.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin |
-
-**Query Params**: `?page=1&limit=20&search=huda&city=Tirunelveli&isActive=true`
-
-**Response** (200):
+- **Auth**: Bearer Token (Super Admin only)
+- **Response** (HTTP 200):
 ```json
 {
   "success": true,
   "data": [
     {
-      "id": "uuid",
+      "id": "req-uuid",
       "name": "Masjid Al-Huda",
-      "city": "Tirunelveli",
-      "memberCount": 150,
-      "adminCount": 1,
+      "city": "Madurai",
+      "address": "West Street",
+      "approvalStatus": "PENDING",
+      "createdAt": "2026-11-21T06:00:00.000Z",
+      "creator": {
+        "id": "u-creator",
+        "name": "Brother Bilal",
+        "phone": "+919876543299",
+        "age": 40,
+        "address": "Madurai"
+      }
+    }
+  ],
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+### 5.8 POST `/masjids/requests/:id/approve` 🔒
+Super Admin approves a pending masjid registration request. Activates the masjid and grants the creator the `ADMIN` role.
+
+- **Auth**: Bearer Token (Super Admin only)
+- **Response** (HTTP 200):
+```json
+{
+  "success": true,
+  "data": {
+    "success": true,
+    "message": "Masjid \"Masjid Al-Huda\" approved successfully. Creator has been granted Masjid Admin role.",
+    "masjid": {
+      "id": "req-uuid",
+      "name": "Masjid Al-Huda",
+      "approvalStatus": "APPROVED",
+      "isActive": true
+    }
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+### 5.9 POST `/masjids/requests/:id/reject` 🔒
+Super Admin rejects a pending masjid request with an optional reason.
+
+- **Auth**: Bearer Token (Super Admin only)
+- **Request Body**:
+```json
+{
+  "reason": "Duplicate registration of existing masjid"
+}
+```
+- **Response** (HTTP 200):
+```json
+{
+  "success": true,
+  "data": {
+    "success": true,
+    "message": "Masjid request rejected."
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+## 6. Prayer Times Module (`/v1/masjids/:masjidId/prayer-times`)
+
+### 6.1 GET `/masjids/:masjidId/prayer-times/today` 🔓
+Get prayer times for today or a specific date. Falls back gracefully to the latest configured date if the target day is not configured.
+
+- **Auth**: None (Public)
+- **Query Parameters**:
+  - `date` (optional, `YYYY-MM-DD`): Target date. Defaults to current date.
+- **Response** (HTTP 200):
+```json
+{
+  "success": true,
+  "data": {
+    "id": "pt-uuid",
+    "masjidId": "m-uuid",
+    "date": "2026-11-21T00:00:00.000Z",
+    "fajrAdhan": "05:00",
+    "fajrJamaah": "05:30",
+    "dhuhrAdhan": "12:30",
+    "dhuhrJamaah": "13:15",
+    "asrAdhan": "16:15",
+    "asrJamaah": "16:45",
+    "maghribAdhan": "18:15",
+    "maghribJamaah": "18:20",
+    "ishaAdhan": "19:45",
+    "ishaJamaah": "20:15",
+    "jummahKhutbah": "12:45",
+    "jummahJamaah": "13:30"
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+### 6.2 GET `/masjids/:masjidId/prayer-times/schedule` 🔓
+Get full monthly prayer schedule for a given year and month.
+
+- **Auth**: None (Public)
+- **Query Parameters**:
+  - `year` (required, number, e.g. `2026`)
+  - `month` (required, number, 1-12, e.g. `11`)
+- **Response** (HTTP 200):
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "date": "2026-11-01T00:00:00.000Z",
+      "fajrJamaah": "05:30",
+      "dhuhrJamaah": "13:15",
+      "asrJamaah": "16:45",
+      "maghribJamaah": "18:20",
+      "ishaJamaah": "20:15"
+    }
+  ],
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+### 6.3 PUT `/masjids/:masjidId/prayer-times` 🔒
+Update or create prayer timings for a specific date (Masjid Admin only).
+
+- **Auth**: Bearer Token (Masjid `ADMIN` only)
+- **Request Body**:
+```json
+{
+  "date": "2026-11-21",
+  "fajrAdhan": "05:00",
+  "fajrJamaah": "05:30",
+  "dhuhrAdhan": "12:30",
+  "dhuhrJamaah": "13:15",
+  "asrAdhan": "16:15",
+  "asrJamaah": "16:45",
+  "maghribAdhan": "18:15",
+  "maghribJamaah": "18:20",
+  "ishaAdhan": "19:45",
+  "ishaJamaah": "20:15",
+  "jummahKhutbah": "12:45",
+  "jummahJamaah": "13:30"
+}
+```
+- **Response** (HTTP 200):
+```json
+{
+  "success": true,
+  "data": {
+    "id": "pt-uuid",
+    "masjidId": "m-uuid",
+    "date": "2026-11-21T00:00:00.000Z",
+    "fajrJamaah": "05:30",
+    "dhuhrJamaah": "13:15"
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+## 7. Announcements Module (`/v1/masjids/:masjidId/announcements`)
+
+### 7.1 GET `/masjids/:masjidId/announcements` 🔓
+List all active published announcements for a masjid (pinned items first, then descending by date).
+
+- **Auth**: None (Public)
+- **Response** (HTTP 200):
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "ann-uuid-1",
+      "masjidId": "m-uuid",
+      "category": "GENERAL",
+      "title": "ஜும்ஆ தொழுகை நேரம் மாற்றம் / Jummah Time Update",
+      "titleTa": "ஜும்ஆ தொழுகை நேரம் மாற்றம்",
+      "body": "Jummah khutbah will start at 12:45 PM starting this Friday.",
+      "bodyTa": "இந்த வாரம் முதல் ஜும்ஆ குத்பா மதியம் 12:45 மணிக்கு தொடங்கும்.",
+      "isPinned": true,
+      "publishedAt": "2026-11-20T10:00:00.000Z",
+      "creator": {
+        "id": "u-admin",
+        "name": "Mutawalli Sahib"
+      }
+    }
+  ],
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+### 7.2 POST `/masjids/:masjidId/announcements` 🔒
+Create and broadcast a new announcement. Automatically triggers FCM push notification to all followers if `notifyPush: true`.
+
+- **Auth**: Bearer Token (Masjid `ADMIN` or `ANNOUNCEMENT` volunteer)
+- **Request Body**:
+```json
+{
+  "category": "GENERAL",
+  "title": "ஜும்ஆ தொழுகை நேரம் மாற்றம் / Jummah Time Update",
+  "titleTa": "ஜும்ஆ தொழுகை நேரம் மாற்றம்",
+  "body": "Jummah khutbah will start at 12:45 PM starting this Friday.",
+  "bodyTa": "இந்த வாரம் முதல் ஜும்ஆ குத்பா மதியம் 12:45 மணிக்கு தொடங்கும்.",
+  "isPinned": true,
+  "notifyPush": true
+}
+```
+*(Categories: `GENERAL`, `EVENT`, `JANAZAH`, `RAMADAN`, `EMERGENCY`)*.
+
+- **Response** (HTTP 201):
+```json
+{
+  "success": true,
+  "data": {
+    "id": "ann-new-uuid",
+    "title": "ஜும்ஆ தொழுகை நேரம் மாற்றம் / Jummah Time Update",
+    "publishedAt": "2026-11-21T06:55:00.000Z"
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+### 7.3 DELETE `/masjids/:masjidId/announcements/:id` 🔒
+Delete an announcement.
+
+- **Auth**: Bearer Token (Masjid `ADMIN` or `ANNOUNCEMENT` volunteer)
+- **Response** (HTTP 200):
+```json
+{
+  "success": true,
+  "data": {
+    "count": 1
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+## 8. Sandha Module (`/v1/masjids/:masjidId/sandha`)
+
+### 8.1 GET `/masjids/:masjidId/sandha/plans` 🔓
+List all active sandha (subscription / maintenance) plans for a masjid.
+
+- **Auth**: None (Public)
+- **Response** (HTTP 200):
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "plan-uuid-1",
+      "masjidId": "m-uuid",
+      "name": "மாதாந்திர சந்தா / Monthly Maintenance",
+      "amount": 200.00,
+      "frequency": "MONTHLY",
+      "description": "General maintenance fund",
       "isActive": true,
-      "createdAt": "2024-01-10T08:00:00Z",
-      "admins": [
-        { "id": "uuid", "name": "Imam Ibrahim", "phone": "+919999900002" }
+      "_count": {
+        "members": 45,
+        "payments": 128
+      }
+    }
+  ],
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+### 8.2 POST `/masjids/:masjidId/sandha/plans` 🔒
+Create a new Sandha plan for a masjid.
+
+- **Auth**: Bearer Token (Masjid `ADMIN` or `FINANCE` volunteer)
+- **Request Body**:
+```json
+{
+  "name": "மாதாந்திர சந்தா / Monthly Maintenance",
+  "amount": 200.00,
+  "frequency": "MONTHLY",
+  "description": "General maintenance fund"
+}
+```
+*(Frequencies: `MONTHLY`, `QUARTERLY`, `YEARLY`, `ONE_TIME`)*.
+
+- **Response** (HTTP 201):
+```json
+{
+  "success": true,
+  "data": {
+    "id": "plan-new-uuid",
+    "name": "மாதாந்திர சந்தா / Monthly Maintenance",
+    "amount": 200.00,
+    "frequency": "MONTHLY"
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+### 8.3 POST `/masjids/:masjidId/sandha/plans/:planId/members` 🔒
+Enroll a member into a sandha plan. Automatically links to a registered user if their phone number matches.
+
+- **Auth**: Bearer Token (Masjid `ADMIN` or `FINANCE` volunteer)
+- **Request Body**:
+```json
+{
+  "phone": "+919876543213",
+  "name": "Abdul Rahman"
+}
+```
+- **Response** (HTTP 201):
+```json
+{
+  "success": true,
+  "data": {
+    "id": "member-uuid",
+    "planId": "plan-uuid-1",
+    "phone": "+919876543213",
+    "name": "Abdul Rahman",
+    "autoLinked": true,
+    "linkedAt": "2026-11-21T06:55:00.000Z"
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+### 8.4 POST `/masjids/:masjidId/sandha/payments` 🔒
+Record a cash or UPI payment for an enrolled member.
+
+- **Auth**: Bearer Token (Masjid `ADMIN` or `FINANCE` volunteer)
+- **Request Body**:
+```json
+{
+  "planMemberId": "member-uuid",
+  "amount": 200.00,
+  "method": "CASH",
+  "receiptNumber": "REC-2026-001",
+  "periodStart": "2026-11-01",
+  "periodEnd": "2026-11-30",
+  "notes": "Paid in cash after Friday prayer"
+}
+```
+*(Methods: `CASH`, `UPI`, `BANK_TRANSFER`, `CHEQUE`)*.
+
+- **Response** (HTTP 201):
+```json
+{
+  "success": true,
+  "data": {
+    "id": "pay-uuid",
+    "amount": 200.00,
+    "paidAt": "2026-11-21T06:55:00.000Z",
+    "receiptNumber": "REC-2026-001"
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+### 8.5 GET `/masjids/:masjidId/sandha/my-status` 🔒
+Get current logged-in user's Sandha enrollment details and full payment history for this masjid.
+
+- **Auth**: Bearer Token required
+- **Response** (HTTP 200):
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "member-uuid",
+      "name": "Ahmed",
+      "phone": "+919876543210",
+      "plan": {
+        "id": "plan-uuid-1",
+        "name": "மாதாந்திர சந்தா / Monthly Maintenance",
+        "amount": 200.00,
+        "frequency": "MONTHLY",
+        "masjid": {
+          "id": "m-uuid",
+          "name": "Jamia Masjid",
+          "nameTa": "ஜாமியா பள்ளிவாசல்"
+        }
+      },
+      "payments": [
+        {
+          "id": "pay-uuid-1",
+          "amount": 200.00,
+          "paidAt": "2026-11-05T12:00:00.000Z",
+          "method": "CASH",
+          "periodStart": "2026-11-01T00:00:00.000Z",
+          "periodEnd": "2026-11-30T00:00:00.000Z",
+          "receiptNumber": "REC-2026-001"
+        }
       ]
     }
   ],
-  "meta": { "page": 1, "limit": 20, "total": 45, "totalPages": 3 }
+  "timestamp": "2026-11-21T06:55:00.000Z"
 }
 ```
 
 ---
 
-### POST /super-admin/masjids/:id/admins
+## 9. Dashboard Module (`/v1/dashboard`)
 
-Assign an admin to a masjid (Super Admin invite).
+### 9.1 GET `/dashboard/super-admin` 🔒
+Super Admin system-wide overview: total masjids, registered users, total followers, sandha collections, recent masjids, and pending approval requests.
 
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin |
-
-**Request Body**:
-```json
-{
-  "userId": "uuid"
-}
-```
-
-**Response** (201): Created admin assignment.
-
-**Errors**: `404 NOT_FOUND` (user or masjid), `409 CONFLICT` (already admin)
-
----
-
-### GET /super-admin/sandha-payers
-
-List all sandha payers across all masjids.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin |
-
-**Query Params**: `?page=1&limit=20&masjidId=uuid&status=PENDING`
-
-**Response** (200):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "userId": "uuid",
-      "userName": "Mohammed Ali",
-      "phone": "+919876543210",
-      "masjidName": "Masjid Al-Huda",
-      "planName": "Monthly Maintenance",
-      "lastPaymentDate": "2024-01-05",
-      "isPaidCurrentPeriod": true
-    }
-  ],
-  "meta": { "page": 1, "limit": 20, "total": 500, "totalPages": 25 }
-}
-```
-
----
-
-### GET /super-admin/analytics
-
-Get platform analytics.
-
-| Field | Detail |
-|-------|--------|
-| **Auth** | Bearer token |
-| **Roles** | Super Admin |
-
-**Query Params**: `?period=monthly&startDate=2024-01-01&endDate=2024-12-31`
-
-**Response** (200):
+- **Auth**: Bearer Token (Super Admin only)
+- **Response** (HTTP 200):
 ```json
 {
   "success": true,
   "data": {
-    "userGrowth": [
-      { "period": "2024-01", "newUsers": 120, "totalUsers": 2500 }
+    "metrics": {
+      "totalMasjids": 1,
+      "totalUsers": 2,
+      "totalFollowers": 2,
+      "totalSandhaPlans": 1,
+      "totalSandhaCollected": 200.00,
+      "totalTransactions": 1,
+      "pendingRequestsCount": 1
+    },
+    "recentMasjids": [
+      {
+        "id": "m-uuid",
+        "name": "Tiruvarur Big Masjid",
+        "_count": { "memberships": 2, "admins": 1 }
+      }
     ],
-    "masjidGrowth": [
-      { "period": "2024-01", "newMasjids": 3, "totalMasjids": 45 }
-    ],
-    "membershipGrowth": [
-      { "period": "2024-01", "newMemberships": 180, "totalMemberships": 3200 }
-    ],
-    "sandhaCollection": [
-      { "period": "2024-01", "totalCollected": 125000.00, "totalPending": 35000.00 }
+    "pendingRequests": [
+      {
+        "id": "req-uuid",
+        "name": "Masjid Al-Huda",
+        "creator": {
+          "id": "u-creator",
+          "name": "Brother Bilal",
+          "phone": "+919876543299"
+        }
+      }
     ]
-  }
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
 }
 ```
 
 ---
 
-## Error Code Reference
+### 9.2 GET `/dashboard/masjid/:masjidId` 🔒
+Masjid Admin and volunteers operational dashboard: member count, today's prayer timing status, active notices, sandha plans, and recent collections.
 
-| HTTP Status | Error Code | Description |
-|-------------|-----------|-------------|
-| 400 | `VALIDATION_ERROR` | Request body / query param validation fails |
-| 401 | `UNAUTHORIZED` | Missing or invalid JWT |
-| 401 | `OTP_EXPIRED` | OTP TTL exceeded (5 min) |
-| 401 | `OTP_INVALID` | Wrong OTP code |
-| 403 | `FORBIDDEN` | Valid JWT but insufficient role/permission |
-| 404 | `NOT_FOUND` | Resource does not exist |
-| 409 | `CONFLICT` | Duplicate resource (already a member, phone registered, etc.) |
-| 422 | `UNPROCESSABLE` | Semantically invalid (endDate < startDate, etc.) |
-| 429 | `RATE_LIMITED` | Too many requests |
-| 500 | `INTERNAL_ERROR` | Unhandled server error |
+- **Auth**: Bearer Token (Masjid `ADMIN`, `FINANCE`, or `ANNOUNCEMENT`)
+- **Response** (HTTP 200):
+```json
+{
+  "success": true,
+  "data": {
+    "masjid": {
+      "id": "m-uuid",
+      "name": "Jamia Masjid"
+    },
+    "metrics": {
+      "memberCount": 42,
+      "hasConfiguredTodayTimes": true,
+      "activeAnnouncementsCount": 2,
+      "activePlansCount": 1
+    },
+    "todayPrayerTimes": {
+      "fajrJamaah": "05:30",
+      "dhuhrJamaah": "13:15"
+    },
+    "sandhaPlans": [ ... ],
+    "recentPayments": [ ... ]
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+## 10. Users Module (`/v1/users`)
+
+### 10.1 GET `/users/profile` 🔒
+Get complete profile of logged-in user including memberships and masjid administration roles.
+
+- **Auth**: Bearer Token required
+- **Response** (HTTP 200):
+```json
+{
+  "success": true,
+  "data": {
+    "id": "u-uuid",
+    "phone": "+919876543210",
+    "name": "Ahmed",
+    "age": 32,
+    "address": "No 12, Main Road, Chennai",
+    "language": "ta",
+    "avatarUrl": null,
+    "isOnboarded": true,
+    "isSuperAdmin": false,
+    "memberships": [ ... ],
+    "masjidAdmins": [ ... ]
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+### 10.2 PUT `/users/profile` 🔒
+Update user profile details (Name, Language preference, Avatar URL).
+
+- **Auth**: Bearer Token required
+- **Request Body**:
+```json
+{
+  "name": "Janab Abdul Rahman",
+  "language": "ta",
+  "avatarUrl": "https://example.com/avatar.jpg"
+}
+```
+- **Response** (HTTP 200):
+```json
+{
+  "success": true,
+  "data": {
+    "id": "u-uuid",
+    "name": "Janab Abdul Rahman",
+    "language": "ta"
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+### 10.3 GET `/users` 🔒
+List all registered users in the system (Super Admin only) with pagination.
+
+- **Auth**: Bearer Token (Super Admin only)
+- **Query Parameters**:
+  - `search` (optional): Filter by name or mobile number.
+  - `page` (optional, default: 1)
+  - `limit` (optional, default: 20)
+- **Response** (HTTP 200):
+```json
+{
+  "success": true,
+  "data": {
+    "total": 42,
+    "page": 1,
+    "limit": 20,
+    "items": [
+      {
+        "id": "u-uuid",
+        "phone": "+919876543210",
+        "name": "Ahmed",
+        "isSuperAdmin": false,
+        "isOnboarded": true,
+        "createdAt": "2026-11-20T10:00:00.000Z"
+      }
+    ]
+  },
+  "timestamp": "2026-11-21T06:55:00.000Z"
+}
+```
+
+---
+
+## 11. Complete Endpoint Summary Matrix (26 Endpoints)
+
+| # | HTTP Method | Endpoint Path | Module | Access / Role | Summary |
+|---|---|---|---|---|---|
+| 1 | `POST` | `/v1/auth/check-user` | Auth | 🔓 Public | Check if phone exists and onboarding status |
+| 2 | `POST` | `/v1/auth/login-direct` | Auth | 🔓 Public | Direct phone login (120-day persistent session) |
+| 3 | `POST` | `/v1/auth/register` | Auth | 🔓 Public | Register profile (Name, Age, Address) |
+| 4 | `POST` | `/v1/auth/device-token` | Auth | 🔒 Authenticated | Register/update FCM device token |
+| 5 | `POST` | `/v1/auth/otp/send` | Auth | 🔓 Public | Request OTP |
+| 6 | `POST` | `/v1/auth/otp/verify` | Auth | 🔓 Public | Verify OTP and authenticate |
+| 7 | `POST` | `/v1/auth/refresh` | Auth | 🔓 Public | Refresh expired JWT token |
+| 8 | `GET` | `/v1/auth/me` | Auth | 🔒 Authenticated | Current user profile, roles & masjids |
+| 9 | `GET` | `/v1/masjids` | Masjids | 🔓 Public | Search & list active approved masjids |
+| 10 | `GET` | `/v1/masjids/requests/pending` | Masjids | 🔒 Super Admin | List pending masjid creation requests |
+| 11 | `POST` | `/v1/masjids/requests/:id/approve` | Masjids | 🔒 Super Admin | Approve pending masjid request |
+| 12 | `POST` | `/v1/masjids/requests/:id/reject` | Masjids | 🔒 Super Admin | Reject pending masjid request |
+| 13 | `GET` | `/v1/masjids/:id` | Masjids | 🔓 Public | Get masjid details by ID |
+| 14 | `GET` | `/v1/masjids/qr/:qrToken` | Masjids | 🔓 Public | Lookup masjid by permanent QR token |
+| 15 | `POST` | `/v1/masjids` | Masjids | 🔒 Authenticated | Register masjid (User: Pending / Admin: Direct) |
+| 16 | `POST` | `/v1/masjids/:id/join` | Masjids | 🔒 Authenticated | Join / favorite masjid |
+| 17 | `POST` | `/v1/masjids/:masjidId/roles` | Masjids | 🔒 Masjid Admin | Assign Finance/Announcement/Admin role |
+| 18 | `GET` | `/v1/masjids/:masjidId/prayer-times/today` | Prayer Times | 🔓 Public | Today's or specific date prayer times |
+| 19 | `GET` | `/v1/masjids/:masjidId/prayer-times/schedule` | Prayer Times | 🔓 Public | Monthly prayer schedule |
+| 20 | `PUT` | `/v1/masjids/:masjidId/prayer-times` | Prayer Times | 🔒 Masjid Admin | Update/set prayer times for date |
+| 21 | `GET` | `/v1/masjids/:masjidId/announcements` | Announcements | 🔓 Public | List active notices |
+| 22 | `POST` | `/v1/masjids/:masjidId/announcements` | Announcements | 🔒 Admin / Announcement | Create notice + FCM push notification |
+| 23 | `DELETE` | `/v1/masjids/:masjidId/announcements/:id` | Announcements | 🔒 Admin / Announcement | Delete notice |
+| 24 | `GET` | `/v1/masjids/:masjidId/sandha/plans` | Sandha | 🔓 Public | List active sandha plans |
+| 25 | `POST` | `/v1/masjids/:masjidId/sandha/plans` | Sandha | 🔒 Admin / Finance | Create sandha plan |
+| 26 | `POST` | `/v1/masjids/:masjidId/sandha/plans/:planId/members` | Sandha | 🔒 Admin / Finance | Enroll member into sandha plan |
+| 27 | `POST` | `/v1/masjids/:masjidId/sandha/payments` | Sandha | 🔒 Admin / Finance | Record payment (Cash/UPI/etc.) |
+| 28 | `GET` | `/v1/masjids/:masjidId/sandha/my-status` | Sandha | 🔒 Authenticated | User's sandha status and payments |
+| 29 | `GET` | `/v1/dashboard/super-admin` | Dashboard | 🔒 Super Admin | System-wide metrics & pending approvals |
+| 30 | `GET` | `/v1/dashboard/masjid/:masjidId` | Dashboard | 🔒 Masjid Admin / Volunteer | Masjid operational dashboard |
+| 31 | `GET` | `/v1/users/profile` | Users | 🔒 Authenticated | Current user profile |
+| 32 | `PUT` | `/v1/users/profile` | Users | 🔒 Authenticated | Update user profile |
+| 33 | `GET` | `/v1/users` | Users | 🔒 Super Admin | List all registered users (paginated) |

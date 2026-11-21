@@ -7,7 +7,6 @@ import 'package:masjid_namaz_app/core/network/api_service.dart';
 import 'package:masjid_namaz_app/core/services/notification_service.dart';
 import 'package:masjid_namaz_app/core/l10n/language_provider.dart';
 import 'package:masjid_namaz_app/features/prayer_times/presentation/screens/home_screen.dart';
-import 'package:masjid_namaz_app/features/masjid/presentation/screens/connect_masjid_screen.dart';
 
 enum UserRoleChoice {
   regularUser,
@@ -47,6 +46,25 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final _latController = TextEditingController();
   final _lngController = TextEditingController();
   bool _isFetchingLocation = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchExistingUser();
+  }
+
+  Future<void> _fetchExistingUser() async {
+    try {
+      final res = await ApiService.instance.checkUser(widget.phone);
+      if (res['exists'] == true && res['name'] != null && (res['name'] as String).isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _nameController.text = res['name'] ?? '';
+          });
+        }
+      }
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -130,6 +148,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Future<void> _handleStep1Next() async {
     final name = _nameController.text.trim();
     final ageStr = _ageController.text.trim();
+    final address = _addressController.text.trim();
 
     if (name.isEmpty) {
       setState(() => _errorMessage = 'Please enter your full name');
@@ -141,9 +160,33 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     }
 
     setState(() {
+      _isLoading = true;
       _errorMessage = null;
-      _currentStep = 1;
     });
+
+    try {
+      final age = int.tryParse(ageStr) ?? 25;
+      // Persist to backend database directly on Step 1
+      await ApiService.instance.register(
+        phone: widget.phone,
+        name: name,
+        age: age,
+        address: address.isEmpty ? null : address,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _currentStep = 1;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Failed to save profile: $e';
+        });
+      }
+    }
   }
 
   Future<void> _handleRoleSelectionSubmit() async {
@@ -154,44 +197,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         _currentStep = 2;
       });
     } else {
-      // Register as regular user immediately
-      await _submitRegularUserRegistration();
-    }
-  }
-
-  Future<void> _submitRegularUserRegistration() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final name = _nameController.text.trim();
-      final age = int.tryParse(_ageController.text.trim()) ?? 25;
-      final address = _addressController.text.trim();
-
-      await ApiService.instance.register(
-        phone: widget.phone,
-        name: name,
-        age: age,
-        address: address.isEmpty ? null : address,
-      );
-
-      if (!mounted) return;
+      // User profile already stored in backend -> Route directly to HomeScreen with all nav bars!
       NotificationService.instance.configureAfterLogin();
-      setState(() => _isLoading = false);
-
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const ConnectMasjidScreen()),
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
       );
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = 'Registration failed: $e';
-        });
-      }
     }
   }
 
@@ -233,7 +244,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       );
 
       // 2. Submit Masjid creation request
-      final res = await ApiService.instance.createMasjid(
+      await ApiService.instance.createMasjid(
         name: masjidName,
         city: city,
         address: masjidAddress,
@@ -388,13 +399,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   Widget _buildProgressIndicator() {
+    final showMasjidStep = _selectedRole == UserRoleChoice.masjidAdmin;
     return Row(
       children: [
         _buildStepBadge(1, 'Profile', _currentStep >= 0),
         Expanded(child: Container(height: 2, color: _currentStep >= 1 ? AppColors.primary : Colors.grey.shade300)),
         _buildStepBadge(2, 'Role', _currentStep >= 1),
-        Expanded(child: Container(height: 2, color: _currentStep >= 2 ? AppColors.primary : Colors.grey.shade300)),
-        _buildStepBadge(3, 'Masjid', _currentStep >= 2),
+        if (showMasjidStep) ...[
+          Expanded(child: Container(height: 2, color: _currentStep >= 2 ? AppColors.primary : Colors.grey.shade300)),
+          _buildStepBadge(3, 'Masjid', _currentStep >= 2),
+        ],
       ],
     );
   }
@@ -497,21 +511,23 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           const SizedBox(height: 24),
 
           ElevatedButton(
-            onPressed: _handleStep1Next,
+            onPressed: _isLoading ? null : _handleStep1Next,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(lang.tr(en: 'Continue', ta: 'தொடர்க'), style: const TextStyle(fontSize: 16)),
-                const SizedBox(width: 8),
-                const Icon(Icons.arrow_forward, size: 20),
-              ],
-            ),
+            child: _isLoading
+                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(lang.tr(en: 'Save & Continue', ta: 'சேமித்து தொடர்க'), style: const TextStyle(fontSize: 16)),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.arrow_forward, size: 20),
+                    ],
+                  ),
           ),
         ],
       ),
@@ -692,7 +708,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             controller: _masjidNameController,
             decoration: InputDecoration(
               labelText: lang.tr(en: 'Masjid Name (English) *', ta: 'பள்ளிவாசல் பெயர் (English) *'),
-              hintText: 'e.g. Jamia Masjid Thousand Lights',
+              hintText: 'e.g. City Central Masjid',
               prefixIcon: const Icon(Icons.mosque),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
