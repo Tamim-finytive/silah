@@ -29,14 +29,18 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
 
   double? _heading = 0.0;
   bool _hasCompassSensor = true;
-  bool _isAutoLocked = false; // When true, arrow automatically points directly to Qibla
+  bool _isDetecting = false;
   StreamSubscription? _compassSub;
   bool _hasHapticFired = false;
 
   @override
   void initState() {
     super.initState();
-    _initLocationAndQibla();
+    _initLocationAndCompass();
+  }
+
+  Future<void> _initLocationAndCompass() async {
+    await _initLocationAndQibla();
     _startCompassListener();
   }
 
@@ -120,19 +124,29 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
 
   void _startCompassListener() {
     try {
+      _compassSub?.cancel();
       _compassSub = FlutterCompass.events?.listen(
         (CompassEvent event) {
           if (!mounted) return;
           final heading = event.heading;
           if (heading != null) {
+            // Normalize heading between 0 and 360
+            final normalized = (heading % 360.0 + 360.0) % 360.0;
             setState(() {
-              _heading = heading;
+              _heading = normalized;
               _hasCompassSensor = true;
             });
 
-            // Check if facing Qibla within ±4 degrees
-            final diff = (heading - _qiblaBearing).abs();
-            if (diff <= 4.0 || diff >= 356.0) {
+            // Check if facing Qibla within ±5 degrees
+            double diff = (_qiblaBearing - normalized);
+            while (diff > 180) {
+              diff -= 360;
+            }
+            while (diff < -180) {
+              diff += 360;
+            }
+
+            if (diff.abs() <= 5.0) {
               if (!_hasHapticFired) {
                 HapticFeedback.mediumImpact();
                 _hasHapticFired = true;
@@ -148,6 +162,61 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
       );
     } catch (_) {
       if (mounted) setState(() => _hasCompassSensor = false);
+    }
+  }
+
+  Future<void> _detectAndPointToQibla() async {
+    setState(() => _isDetecting = true);
+    HapticFeedback.mediumImpact();
+
+    try {
+      // 1. Recalibrate GPS coordinates
+      await _initLocationAndQibla();
+
+      // 2. Fetch fresh sensor reading
+      final event = await FlutterCompass.events?.first.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => CompassEvent.fromList([_heading ?? 0.0, 0.0, 0.0]),
+      );
+
+      if (event != null && event.heading != null) {
+        final normalized = (event.heading! % 360.0 + 360.0) % 360.0;
+        setState(() {
+          _heading = normalized;
+          _hasCompassSensor = true;
+        });
+      }
+    } catch (_) {}
+
+    if (mounted) {
+      setState(() => _isDetecting = false);
+      HapticFeedback.heavyImpact();
+
+      final currentH = _heading ?? 0.0;
+      double diff = (_qiblaBearing - currentH);
+      while (diff > 180) {
+        diff -= 360;
+      }
+      while (diff < -180) {
+        diff += 360;
+      }
+
+      final turnStr = diff.abs() <= 5.0
+          ? 'Facing Qibla!'
+          : diff > 0
+              ? 'Turn Right ➔ ${diff.toStringAsFixed(0)}°'
+              : 'Turn Left ⬅ ${(-diff).toStringAsFixed(0)}°';
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Phone facing ${currentH.toStringAsFixed(0)}° • Qibla is at ${_qiblaBearing.toStringAsFixed(0)}° ($turnStr)',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          backgroundColor: const Color(0xFF0F432B),
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 
@@ -172,11 +241,21 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
   Widget build(BuildContext context) {
     final lang = ref.read(languageProvider.notifier);
 
-    // If auto-locked via button, orient directly to Qibla
-    final double targetHeading = _isAutoLocked ? _qiblaBearing : (_heading ?? 0.0);
-    final double diff = (targetHeading - _qiblaBearing).abs();
-    final bool isFacingQibla = _isAutoLocked || diff <= 4.0 || diff >= 356.0;
-    final cardinal = _getCardinalDirection(_qiblaBearing);
+    // Live phone heading from true North (0 = N, 90 = E, 180 = S, 270 = W)
+    final double phoneHeading = _heading ?? 0.0;
+
+    // Difference between Qibla bearing and phone heading (-180 to +180)
+    double diff = (_qiblaBearing - phoneHeading);
+    while (diff > 180) {
+      diff -= 360;
+    }
+    while (diff < -180) {
+      diff += 360;
+    }
+
+    final bool isFacingQibla = diff.abs() <= 5.0;
+    final qiblaCardinal = _getCardinalDirection(_qiblaBearing);
+    final phoneCardinal = _getCardinalDirection(phoneHeading);
 
     return Scaffold(
       appBar: AppBar(
@@ -253,7 +332,7 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                           Text(
                             isFacingQibla
                                 ? lang.tr(en: 'Facing Qibla! (Makkah)', ta: 'கிப்லாவை நோக்கி உள்ளீர்கள்!')
-                                : '${_qiblaBearing.toStringAsFixed(1)}° $cardinal • ${lang.tr(en: 'Kaaba Direction', ta: 'கஅபா திசை')}',
+                                : 'Qibla: ${_qiblaBearing.toStringAsFixed(0)}° $qiblaCardinal • ${lang.tr(en: 'Kaaba Direction', ta: 'கஅபா திசை')}',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -262,9 +341,7 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            _isAutoLocked
-                                ? 'Auto-Aligned: ${_qiblaBearing.toStringAsFixed(1)}° $cardinal • Makkah: ~${_distanceKm.toStringAsFixed(0)} km'
-                                : 'Current Heading: ${targetHeading.toStringAsFixed(0)}° • Makkah: ~${_distanceKm.toStringAsFixed(0)} km',
+                            'Phone Facing: ${phoneHeading.toStringAsFixed(0)}° ($phoneCardinal) • Makkah: ~${_distanceKm.toStringAsFixed(0)} km',
                             style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                           ),
                         ],
@@ -274,17 +351,64 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                 ),
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 14),
 
-              // Smooth Rotating Analog Compass with Locked Kaaba Arrow
+              // Turn Instruction Badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isFacingQibla
+                      ? AppColors.success.withValues(alpha: 0.15)
+                      : (diff > 0 ? Colors.blue.shade50 : Colors.indigo.shade50),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isFacingQibla ? AppColors.success : Colors.blue.shade300,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isFacingQibla
+                          ? Icons.done_all
+                          : (diff > 0 ? Icons.turn_right : Icons.turn_left),
+                      size: 18,
+                      color: isFacingQibla ? AppColors.success : Colors.indigo,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      isFacingQibla
+                          ? lang.tr(en: 'Directly Facing Makkah', ta: 'நேரடியாக மக்காவை நோக்கி நிற்கிறது')
+                          : diff > 0
+                              ? lang.tr(
+                                  en: 'Turn Right by ${diff.toStringAsFixed(0)}° to face Qibla',
+                                  ta: 'வலதுபுறம் ${diff.toStringAsFixed(0)}° திரும்பவும்',
+                                )
+                              : lang.tr(
+                                  en: 'Turn Left by ${(-diff).toStringAsFixed(0)}° to face Qibla',
+                                  ta: 'இடதுபுறம் ${(-diff).toStringAsFixed(0)}° திரும்பவும்',
+                                ),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: isFacingQibla ? AppColors.success : Colors.indigo.shade900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Live Rotating Analog Compass with Arrow Pointing to Kaaba in Space
               Center(
                 child: TweenAnimationBuilder<double>(
-                  tween: Tween<double>(begin: 0.0, end: targetHeading),
-                  duration: const Duration(milliseconds: 400),
+                  tween: Tween<double>(begin: 0.0, end: phoneHeading),
+                  duration: const Duration(milliseconds: 300),
                   curve: Curves.easeOutCubic,
                   builder: (ctx, animHeading, _) {
-                    final needleAngleRad = (_qiblaBearing - animHeading) * (math.pi / 180.0);
-                    final dialAngleRad = -animHeading * (math.pi / 180.0);
+                    final animatedNeedleRad = (_qiblaBearing - animHeading) * (math.pi / 180.0);
+                    final animatedDialRad = -animHeading * (math.pi / 180.0);
 
                     return SizedBox(
                       width: 290,
@@ -294,7 +418,7 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                         children: [
                           // Compass Dial (Rotates in reverse of device heading)
                           Transform.rotate(
-                            angle: dialAngleRad,
+                            angle: animatedDialRad,
                             child: Container(
                               width: 280,
                               height: 280,
@@ -368,9 +492,9 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                             ),
                           ),
 
-                          // Locked Kaaba Needle (Always stays pointing at Qibla in space)
+                          // Kaaba Needle: Points towards physical Kaaba location relative to where phone is currently pointing
                           Transform.rotate(
-                            angle: needleAngleRad,
+                            angle: animatedNeedleRad,
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -418,56 +542,40 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                 ),
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 18),
 
-              // USER REQUESTED BUTTON: Auto-Align / Point Arrow to Qibla
+              // USER REQUESTED BUTTON: Detect & Point Arrow to Qibla
               SizedBox(
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _isAutoLocked ? AppColors.success : const Color(0xFF0F432B),
+                    backgroundColor: isFacingQibla ? AppColors.success : const Color(0xFF0F432B),
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     elevation: 3,
                   ),
-                  icon: Icon(_isAutoLocked ? Icons.check_circle : Icons.navigation, size: 22),
+                  icon: _isDetecting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Icon(Icons.navigation, size: 22),
                   label: Text(
-                    _isAutoLocked
-                        ? lang.tr(
-                            en: 'Arrow Aligned to Qibla ✓ (Tap to Unlock Live Sensor)',
-                            ta: 'கிப்லா திசைக்கு சரியாக திரும்பியது ✓ (சென்சாருக்கு மாற தட்டவும்)',
-                          )
+                    _isDetecting
+                        ? lang.tr(en: 'Detecting Phone Orientation...', ta: 'திசையைக் கண்டுபிடிக்கிறது...')
                         : lang.tr(
-                            en: 'Click to Point Arrow to Qibla Direction',
-                            ta: 'கிப்லா திசையை சரியாக காட்ட கிளிக் செய்யவும்',
+                            en: 'Point Arrow to Qibla (Detect Now)',
+                            ta: 'கிப்லா திசையை சரியாக காட்டு (Detect Now)',
                           ),
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                   ),
-                  onPressed: () {
-                    HapticFeedback.heavyImpact();
-                    setState(() {
-                      _isAutoLocked = !_isAutoLocked;
-                    });
-                    if (_isAutoLocked && mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            lang.tr(
-                              en: 'Arrow locked to Makkah (${_qiblaBearing.toStringAsFixed(1)}° $cardinal)!',
-                              ta: 'அம்புகுறி மக்கா திசைக்கு (${_qiblaBearing.toStringAsFixed(1)}° $cardinal) நேராக வைக்கப்பட்டது!',
-                            ),
-                          ),
-                          backgroundColor: AppColors.success,
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    }
-                  },
+                  onPressed: _isDetecting ? null : _detectAndPointToQibla,
                 ),
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
 
               // Direction guidance card
               Container(
@@ -488,7 +596,7 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                         color: const Color(0xFF0F432B).withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.screen_rotation, color: Color(0xFF0F432B), size: 24),
+                      child: const Icon(Icons.explore, color: Color(0xFF0F432B), size: 24),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -497,16 +605,16 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                         children: [
                           Text(
                             lang.tr(
-                              en: 'Arrow always points directly to Kaaba (Makkah).',
-                              ta: 'அம்புகுறி எப்போதும் கஅபாவை (மக்கா) நோக்கியே நிற்கும்.',
+                              en: 'Arrow always points towards Makkah (Kaaba).',
+                              ta: 'அம்புகுறி எப்போதும் மக்கா (கஅபா) திசையையே காட்டும்.',
                             ),
                             style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             lang.tr(
-                              en: 'Tap the green button above to snap arrow directly to Qibla, or rotate phone to match.',
-                              ta: 'மேலே உள்ள பட்டனை கிளிக் செய்தால் அம்புகுறி உடனே கிப்லா திசைக்கு திரும்பி நிற்கும்.',
+                              en: 'Even if your phone faces elsewhere, the arrow points towards Kaaba. Turn until arrow points straight UP.',
+                              ta: 'போன் எந்தப் பக்கம் திரும்பியிருந்தாலும் அம்பு கஅபாவை மட்டுமே காட்டும். அம்பு நேராகும் வரை திரும்பவும்.',
                             ),
                             style: TextStyle(fontSize: 12, color: Colors.grey.shade600, height: 1.3),
                           ),
@@ -521,26 +629,18 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
-                    _isAutoLocked
-                        ? Icons.lock
-                        : (_hasCompassSensor ? Icons.sensors : Icons.sensors_off),
+                    _hasCompassSensor ? Icons.sensors : Icons.sensors_off,
                     size: 14,
-                    color: _isAutoLocked
-                        ? AppColors.success
-                        : (_hasCompassSensor ? Colors.green : Colors.orange),
+                    color: _hasCompassSensor ? Colors.green : Colors.orange,
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    _isAutoLocked
-                        ? 'Arrow Locked to Qibla Bearing'
-                        : (_hasCompassSensor
-                            ? 'Live Compass Sensor Active'
-                            : 'Static Direction Mode (Compass sensor not detected)'),
+                    _hasCompassSensor
+                        ? 'Live Compass Sensor Active'
+                        : 'Static Direction Mode (Compass sensor not detected)',
                     style: TextStyle(
                       fontSize: 11,
-                      color: _isAutoLocked
-                          ? AppColors.success
-                          : (_hasCompassSensor ? Colors.green.shade700 : Colors.orange.shade700),
+                      color: _hasCompassSensor ? Colors.green.shade700 : Colors.orange.shade700,
                     ),
                   ),
                 ],

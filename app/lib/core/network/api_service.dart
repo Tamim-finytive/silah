@@ -154,6 +154,35 @@ class ApiService {
     } catch (_) {}
   }
 
+  Future<Map<String, dynamic>?> getMasjidById(String masjidId) async {
+    try {
+      final res = await _dio.get('/masjids/$masjidId');
+      if (res.data['success'] == true && res.data['data'] != null) {
+        return res.data['data'] as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<List<dynamic>> getMyMasjids() async {
+    try {
+      final res = await _dio.get('/masjids/my/list');
+      if (res.data['success'] == true && res.data['data'] != null) {
+        return res.data['data'] as List<dynamic>;
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<bool> leaveMasjid(String masjidId) async {
+    try {
+      final res = await _dio.post('/masjids/$masjidId/leave');
+      return res.data['success'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<Map<String, dynamic>?> joinMasjid(String masjidId, {bool isPrimary = true}) async {
     try {
       final res = await _dio.post('/masjids/$masjidId/join', data: {'isPrimary': isPrimary});

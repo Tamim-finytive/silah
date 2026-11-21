@@ -21,7 +21,6 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _selectedTabIndex = 0;
-  List<dynamic> _masjids = [];
   List<dynamic> _announcements = [];
   String _calcMethod = 'Hanafi';
 
@@ -33,9 +32,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<void> _loadInitialData() async {
     final profile = await ApiService.instance.getProfile();
-    final masjids = await ApiService.instance.getMasjids();
     if (mounted) {
-      setState(() => _masjids = masjids);
       final memberships = profile?['memberships'] as List<dynamic>?;
       final primary = memberships?.firstWhere(
         (m) => m['isPrimary'] == true,
@@ -503,6 +500,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ],
                   ),
                 ),
+                if (activeMasjid != null)
+                  IconButton(
+                    icon: const Icon(Icons.directions, color: Color(0xFF0F432B), size: 22),
+                    tooltip: 'Open in Google Maps',
+                    onPressed: () => _openMasjidLocation(activeMasjid),
+                  ),
                 const Icon(Icons.unfold_more, color: Colors.grey, size: 20),
               ],
             ),
@@ -1700,49 +1703,289 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  Future<void> _openMasjidLocation(Map<String, dynamic> masjid) async {
+    final mapUrl = masjid['mapUrl']?.toString();
+    if (mapUrl != null && mapUrl.trim().isNotEmpty && mapUrl.startsWith('http')) {
+      final uri = Uri.parse(mapUrl.trim());
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return;
+      }
+    }
+
+    final lat = masjid['latitude'];
+    final lng = masjid['longitude'];
+    String query;
+    if (lat != null && lng != null) {
+      query = '$lat,$lng';
+    } else {
+      query = Uri.encodeComponent('${masjid['name'] ?? ''}, ${masjid['city'] ?? ''}');
+    }
+    final mapsUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$query');
+    if (await canLaunchUrl(mapsUri)) {
+      await launchUrl(mapsUri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   void _showMasjidSelector() {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        final activeMasjid = ref.read(prayerTimesProvider).activeMasjid;
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final activeMasjid = ref.read(prayerTimesProvider).activeMasjid;
 
-        return Container(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Select Masjid / பள்ளிவாசல்', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 14),
-              if (_masjids.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Center(child: Text('Loading active masjids from database...')),
+          return Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.75,
+            ),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Top handle
+                const SizedBox(height: 12),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
-              ..._masjids.map((m) {
-                final isSelected = m['id'] == activeMasjid?['id'];
-                return ListTile(
-                  leading: const Icon(Icons.mosque, color: Color(0xFF0F432B)),
-                  title: Text('${m['name']} (${m['city'] ?? ''})'),
-                  subtitle: Text(m['address'] ?? ''),
-                  trailing: isSelected ? const Icon(Icons.check, color: Color(0xFF0F432B)) : null,
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    await ref.read(prayerTimesProvider.notifier).switchMasjid(m as Map<String, dynamic>);
-                    final notices = await ApiService.instance.getAnnouncements(m['id']);
-                    if (mounted) {
-                      setState(() => _announcements = notices);
-                    }
-                  },
-                );
-              }),
-            ],
-          ),
-        );
-      },
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'My Masjids / என் பள்ளிவாசல்கள்',
+                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 20),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+
+                // Joined Masjids List: Only masjids mapped/joined to this user
+                Expanded(
+                  child: FutureBuilder<List<dynamic>>(
+                    future: ApiService.instance.getMyMasjids(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator(color: Color(0xFF0F432B)));
+                      }
+                      final myMasjids = snapshot.data ?? [];
+
+                      if (myMasjids.isEmpty) {
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.mosque_outlined, size: 48, color: Colors.grey),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  'No Joined Masjids',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                ),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'Search and join your local Masjid to see daily prayer timings & announcements.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                                ),
+                                const SizedBox(height: 18),
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF0F432B),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  icon: const Icon(Icons.search, size: 18),
+                                  label: const Text('Search & Join Masjid'),
+                                  onPressed: () {
+                                    Navigator.pop(ctx);
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (_) => const ConnectMasjidScreen()),
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+
+                      return ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        itemCount: myMasjids.length,
+                        separatorBuilder: (_, __) => const Divider(height: 8),
+                        itemBuilder: (context, i) {
+                          final m = myMasjids[i];
+                          if (m is! Map<String, dynamic>) return const SizedBox.shrink();
+                          final isSelected = m['id'] == activeMasjid?['id'];
+
+                          return ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            leading: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: isSelected ? const Color(0xFF0F432B) : const Color(0xFF0F432B).withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(
+                                Icons.mosque,
+                                color: isSelected ? Colors.white : const Color(0xFF0F432B),
+                                size: 22,
+                              ),
+                            ),
+                            title: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '${m['name']} (${m['city'] ?? ''})',
+                                    style: TextStyle(
+                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                                      fontSize: 14,
+                                      color: isSelected ? const Color(0xFF0F432B) : Colors.black87,
+                                    ),
+                                  ),
+                                ),
+                                if (isSelected)
+                                  Container(
+                                    margin: const EdgeInsets.only(left: 6),
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFEAF7EE),
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(color: const Color(0xFF0F432B), width: 0.8),
+                                    ),
+                                    child: const Text('ACTIVE', style: TextStyle(color: Color(0xFF0F432B), fontSize: 9, fontWeight: FontWeight.bold)),
+                                  ),
+                              ],
+                            ),
+                            subtitle: Text(
+                              m['address'] ?? '',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Location Redirect Button
+                                IconButton(
+                                  icon: const Icon(Icons.directions, size: 20, color: Color(0xFF0F432B)),
+                                  tooltip: 'Open in Google Maps',
+                                  onPressed: () => _openMasjidLocation(m),
+                                ),
+                                // Exit / Leave Masjid Option
+                                IconButton(
+                                  icon: const Icon(Icons.logout, size: 20, color: Colors.redAccent),
+                                  tooltip: 'Exit / Leave Masjid',
+                                  onPressed: () async {
+                                    final confirm = await showDialog<bool>(
+                                      context: context,
+                                      builder: (c) => AlertDialog(
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                        title: const Text('Exit Masjid?'),
+                                        content: Text('Are you sure you want to remove "${m['name']}" from your joined masjids list?'),
+                                        actions: [
+                                          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+                                          ElevatedButton(
+                                            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                                            onPressed: () => Navigator.pop(c, true),
+                                            child: const Text('Exit'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+
+                                    if (confirm == true) {
+                                      await ApiService.instance.leaveMasjid(m['id']);
+                                      setSheetState(() {});
+                                      if (isSelected) {
+                                        // Switch to another joined masjid if available
+                                        final remaining = await ApiService.instance.getMyMasjids();
+                                        if (remaining.isNotEmpty) {
+                                          await ref.read(prayerTimesProvider.notifier).switchMasjid(remaining.first as Map<String, dynamic>);
+                                        }
+                                      }
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Left "${m['name']}"')),
+                                        );
+                                      }
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                            onTap: () async {
+                              Navigator.pop(ctx);
+                              await ref.read(prayerTimesProvider.notifier).switchMasjid(m);
+                              final notices = await ApiService.instance.getAnnouncements(m['id']);
+                              if (mounted) {
+                                setState(() => _announcements = notices);
+                              }
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+
+                // Bottom: Search & Add Another Masjid Button
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, -2)),
+                    ],
+                  ),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F432B),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.add, size: 20),
+                      label: const Text(
+                        '+ Search & Add Another Masjid (தேடி இணைக்கவும்)',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const ConnectMasjidScreen()),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }

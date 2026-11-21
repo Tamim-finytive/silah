@@ -409,6 +409,73 @@ export class MasjidsService {
     });
   }
 
+  async leaveMasjid(userId: string, masjidId: string) {
+    const existing = await this.prisma.membership.findUnique({
+      where: {
+        idx_memberships_unique: {
+          userId,
+          masjidId,
+        },
+      },
+    });
+
+    if (existing) {
+      await this.prisma.membership.delete({
+        where: {
+          idx_memberships_unique: {
+            userId,
+            masjidId,
+          },
+        },
+      });
+    }
+
+    return {
+      success: true,
+      message: 'Successfully left masjid',
+    };
+  }
+
+  async getMyMasjids(userId: string) {
+    const [memberships, adminRoles] = await Promise.all([
+      this.prisma.membership.findMany({
+        where: { userId },
+        include: { masjid: true },
+        orderBy: { joinedAt: 'desc' },
+      }),
+      this.prisma.masjidAdmin.findMany({
+        where: { userId },
+        include: { masjid: true, role: true },
+      }),
+    ]);
+
+    const masjidMap = new Map<string, any>();
+
+    for (const m of memberships) {
+      if (m.masjid && m.masjid.isActive) {
+        masjidMap.set(m.masjid.id, {
+          ...m.masjid,
+          isPrimary: m.isPrimary,
+          joinedAt: m.joinedAt,
+          role: 'MEMBER',
+        });
+      }
+    }
+
+    for (const a of adminRoles) {
+      if (a.masjid && a.masjid.isActive) {
+        const existing = masjidMap.get(a.masjid.id);
+        masjidMap.set(a.masjid.id, {
+          ...a.masjid,
+          isPrimary: existing?.isPrimary ?? false,
+          role: a.role?.name || 'ADMIN',
+        });
+      }
+    }
+
+    return Array.from(masjidMap.values());
+  }
+
   async update(id: string, dto: any) {
     const masjid = await this.prisma.masjid.findUnique({ where: { id } });
     if (!masjid) {

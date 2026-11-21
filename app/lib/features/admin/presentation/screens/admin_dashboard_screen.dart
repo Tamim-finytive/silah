@@ -55,6 +55,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           _masjidName = primary['masjidName'] ?? 'Masjid Admin';
 
           final overview = await ApiService.instance.getMasjidAdminOverview(mId);
+          final masjidInfo = await ApiService.instance.getMasjidById(mId);
           final todayTimes = await ApiService.instance.getTodayPrayerTimes(mId);
           final schedules = await ApiService.instance.getSpecialSchedules(mId);
           final notices = await ApiService.instance.getAnnouncements(mId);
@@ -63,7 +64,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           if (mounted) {
             setState(() {
               _adminOverview = overview;
-              _masjidDetails = overview?['masjid'];
+              _masjidDetails = masjidInfo ?? overview?['masjid'];
               _todayPrayerTimes = todayTimes;
               _specialSchedules = schedules;
               _announcements = notices;
@@ -632,34 +633,50 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
                       // Daily Prayer Times Config Card
                       Card(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        elevation: 1,
                         child: Padding(
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.all(20),
                           child: _todayPrayerTimes == null
                               ? Column(
                                   children: [
-                                    const Icon(Icons.access_time, size: 40, color: Colors.grey),
-                                    const SizedBox(height: 10),
-                                    const Text(
-                                      'No Prayer Timings Configured for Today',
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    const Text(
-                                      'Configure today\'s Adhan & Jamaah times so musallis can see the updated schedule.',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                                    Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF0F432B).withValues(alpha: 0.08),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(Icons.access_time_filled, size: 44, color: Color(0xFF0F432B)),
                                     ),
                                     const SizedBox(height: 14),
-                                    ElevatedButton.icon(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFF0F432B),
-                                        foregroundColor: Colors.white,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    const Text(
+                                      'No Prayer Timings Configured for Today',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    const Text(
+                                      'Set your custom prayer schedule (Sunrise, Sunset, Adhan & Jamaah) for today.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.4),
+                                    ),
+                                    const SizedBox(height: 18),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      height: 48,
+                                      child: ElevatedButton.icon(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: const Color(0xFF0F432B),
+                                          foregroundColor: Colors.white,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                          elevation: 2,
+                                        ),
+                                        icon: const Icon(Icons.add_alarm, size: 20),
+                                        label: const Text(
+                                          'Create Your Own Time (நேரங்களை அமைக்க)',
+                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                        ),
+                                        onPressed: _showFullPrayerTimesDialog,
                                       ),
-                                      icon: const Icon(Icons.add_alarm, size: 18),
-                                      label: const Text('Set Today\'s Timings'),
-                                      onPressed: _showSingleDayPrayerDialog,
                                     ),
                                   ],
                                 )
@@ -1486,34 +1503,141 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   void _showAddMemberDialog() {
     final phoneCtrl = TextEditingController();
     final nameCtrl = TextEditingController();
+    final rawToken = _masjidDetails?['qrToken']?.toString();
+    final qrData = (rawToken != null && rawToken.trim().isNotEmpty)
+        ? rawToken.trim()
+        : (_masjidId ?? 'silah-masjid');
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Add Member to Masjid'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Mobile Number (+91...) *')),
-            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Member Name')),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: const [
+            Icon(Icons.person_add, color: Color(0xFF0F432B)),
+            SizedBox(width: 8),
+            Text('Add Member to Masjid', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 1. QR Code Section: Generate and display QR for instant join
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F432B).withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFF0F432B).withValues(alpha: 0.2)),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Icon(Icons.qr_code_2, size: 20, color: Color(0xFF0F432B)),
+                          SizedBox(width: 6),
+                          Text(
+                            'Instant Join via QR Code',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F432B)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: QrImageView(
+                          data: qrData,
+                          version: QrVersions.auto,
+                          size: 160.0,
+                          backgroundColor: Colors.white,
+                          eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Color(0xFF0F432B)),
+                          dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Color(0xFF0F432B)),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Musallis can scan this QR code with Silah App to join instantly!',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+                Row(
+                  children: const [
+                    Expanded(child: Divider()),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8),
+                      child: Text('OR Enter Manually', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                    ),
+                    Expanded(child: Divider()),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // 2. Manual Entry Section
+                TextField(
+                  controller: phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(
+                    labelText: 'Mobile Number (+91...) *',
+                    isDense: true,
+                    prefixIcon: const Icon(Icons.phone, size: 20),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: nameCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Member Name',
+                    isDense: true,
+                    prefixIcon: const Icon(Icons.person, size: 20),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F432B), foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F432B),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
             onPressed: () async {
-              if (phoneCtrl.text.isEmpty || _masjidId == null) return;
+              if (phoneCtrl.text.isEmpty || _masjidId == null) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter mobile number')));
+                return;
+              }
               Navigator.pop(ctx);
               try {
                 await ApiService.instance.addMasjidMember(_masjidId!, phone: phoneCtrl.text.trim(), name: nameCtrl.text.trim());
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Member added!')));
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Member added successfully!')));
+                }
                 _loadMasjidData();
               } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+                }
               }
             },
-            child: const Text('Add'),
+            child: const Text('Add Member'),
           ),
         ],
       ),

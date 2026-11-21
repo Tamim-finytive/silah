@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/l10n/language_provider.dart';
 import '../../../../core/network/api_service.dart';
+import '../../../prayer_times/data/prayer_times_provider.dart';
 import '../../../prayer_times/presentation/screens/home_screen.dart';
 
 class ConnectMasjidScreen extends ConsumerStatefulWidget {
@@ -73,6 +75,7 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen> with 
 
     try {
       await ApiService.instance.joinMasjid(masjidId, isPrimary: true);
+      await ref.read(prayerTimesProvider.notifier).refreshFromBackend();
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -96,6 +99,30 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen> with 
           ),
         );
       }
+    }
+  }
+
+  Future<void> _openMasjidLocation(Map<String, dynamic> masjid) async {
+    final mapUrl = masjid['mapUrl']?.toString();
+    if (mapUrl != null && mapUrl.trim().isNotEmpty && mapUrl.startsWith('http')) {
+      final uri = Uri.parse(mapUrl.trim());
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return;
+      }
+    }
+
+    final lat = masjid['latitude'];
+    final lng = masjid['longitude'];
+    String query;
+    if (lat != null && lng != null) {
+      query = '$lat,$lng';
+    } else {
+      query = Uri.encodeComponent('${masjid['name'] ?? ''}, ${masjid['city'] ?? ''}');
+    }
+    final mapsUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$query');
+    if (await canLaunchUrl(mapsUri)) {
+      await launchUrl(mapsUri, mode: LaunchMode.externalApplication);
     }
   }
 
@@ -248,16 +275,26 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen> with 
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
                         ),
-                        trailing: ElevatedButton(
-                          onPressed: _isProcessing
-                              ? null
-                              : () => _handleJoinMasjid(masjid['id'], name),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          ),
-                          child: Text(lang.tr(en: 'Join', ta: 'இணை')),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.directions, color: AppColors.primary, size: 22),
+                              tooltip: 'Open in Maps',
+                              onPressed: () => _openMasjidLocation(masjid),
+                            ),
+                            ElevatedButton(
+                              onPressed: _isProcessing
+                                  ? null
+                                  : () => _handleJoinMasjid(masjid['id'], name),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              ),
+                              child: Text(lang.tr(en: 'Join', ta: 'இணை')),
+                            ),
+                          ],
                         ),
                       ),
                     );

@@ -66,6 +66,14 @@ export class MasjidsController {
     return this.masjidsService.create(userId, dto);
   }
 
+  @Get('my/list')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get list of masjids joined or mapped to current user' })
+  async getMyMasjids(@CurrentUser('id') userId: string) {
+    return this.masjidsService.getMyMasjids(userId);
+  }
+
   @Post(':id/join')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -76,6 +84,17 @@ export class MasjidsController {
     @Body('isPrimary') isPrimary?: boolean,
   ) {
     return this.masjidsService.joinMasjid(userId, masjidId, isPrimary);
+  }
+
+  @Post(':id/leave')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Leave / Exit a joined masjid' })
+  async leaveMasjid(
+    @CurrentUser('id') userId: string,
+    @Param('id') masjidId: string,
+  ) {
+    return this.masjidsService.leaveMasjid(userId, masjidId);
   }
 
   @Put(':id')
