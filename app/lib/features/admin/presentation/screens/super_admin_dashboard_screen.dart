@@ -35,6 +35,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
       final masjids = await ApiService.instance.getMasjids();
       final pending = await ApiService.instance.getPendingMasjidRequests();
       final usersRes = await ApiService.instance.getUsers(search: _userSearchQuery);
+      final broadcasts = await ApiService.instance.getBroadcastAnnouncements();
 
       if (mounted) {
         setState(() {
@@ -42,6 +43,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
           _allMasjids = masjids;
           _pendingRequests = pending;
           _users = usersRes?['items'] ?? [];
+          _broadcasts = broadcasts;
           _isLoading = false;
         });
       }
@@ -340,8 +342,20 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                   child: ListTile(
                     leading: const Icon(Icons.campaign, color: Color(0xFF0F432B)),
                     title: Text(b['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text(b['body'] ?? ''),
-                    trailing: Text(b['audience'] ?? 'ALL', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                    subtitle: Text('${b['body'] ?? ''}\n${b['publishedAt']?.toString().split('T')[0] ?? ''}'),
+                    isThreeLine: true,
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                      onPressed: () async {
+                        try {
+                          await ApiService.instance.deleteBroadcastAnnouncement(b['id']);
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Broadcast deleted!')));
+                          _loadAllData();
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+                        }
+                      },
+                    ),
                   ),
                 );
               },
@@ -388,18 +402,26 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F432B), foregroundColor: Colors.white),
-              onPressed: () {
+              onPressed: () async {
                 if (titleCtrl.text.isEmpty || bodyCtrl.text.isEmpty) return;
-                setState(() {
-                  _broadcasts.insert(0, {
-                    'title': titleCtrl.text.trim(),
-                    'body': bodyCtrl.text.trim(),
-                    'audience': targetAudience,
-                    'sentAt': DateTime.now().toIso8601String(),
-                  });
-                });
                 Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Announcement broadcasted!')));
+                try {
+                  final res = await ApiService.instance.sendBroadcastAnnouncement(
+                    title: titleCtrl.text.trim(),
+                    body: bodyCtrl.text.trim(),
+                    targetAudience: targetAudience,
+                  );
+                  final recipients = res['data']?['recipientCount'] ?? 0;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      backgroundColor: Colors.green.shade800,
+                      content: Text('Broadcast sent to $targetAudience via Firebase Push ($recipients devices)!'),
+                    ),
+                  );
+                  _loadAllData();
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to broadcast: $e')));
+                }
               },
               child: const Text('Send Broadcast'),
             ),

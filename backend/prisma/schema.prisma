@@ -161,7 +161,7 @@ model SpecialSchedule {
 
 model Announcement {
   id          String               @id @default(uuid()) @db.Uuid
-  masjidId    String               @map("masjid_id") @db.Uuid
+  masjidId    String?              @map("masjid_id") @db.Uuid
   createdBy   String               @map("created_by") @db.Uuid
   category    AnnouncementCategory
   title       String               @db.VarChar(300)
@@ -175,7 +175,7 @@ model Announcement {
   createdAt   DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   creator     User                 @relation("AnnouncementCreator", fields: [createdBy], references: [id])
-  masjid      Masjid               @relation(fields: [masjidId], references: [id], onDelete: Cascade)
+  masjid      Masjid?              @relation(fields: [masjidId], references: [id], onDelete: Cascade)
 
   @@index([masjidId, publishedAt], map: "idx_announcements_published")
   @@map("announcements")

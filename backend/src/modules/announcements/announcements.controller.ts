@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Delete, Body, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AnnouncementsService } from './announcements.service';
-import { CreateAnnouncementDto } from './dto/announcement.dto';
+import { CreateAnnouncementDto, BroadcastAnnouncementDto } from './dto/announcement.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { MasjidRoleGuard } from '../../common/guards/masjid-role.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -9,8 +9,39 @@ import { MasjidRoles } from '../../common/decorators/roles.decorator';
 import { RoleType } from '@prisma/client';
 
 @ApiTags('Announcements')
+@Controller('announcements')
+export class BroadcastAnnouncementsController {
+  constructor(private readonly announcementsService: AnnouncementsService) {}
+
+  @Get('broadcasts')
+  @ApiOperation({ summary: 'List all system-wide broadcast announcements' })
+  async getBroadcasts() {
+    return this.announcementsService.findBroadcasts();
+  }
+
+  @Post('broadcasts')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Super Admin: Send system-wide broadcast announcement' })
+  async createBroadcast(
+    @CurrentUser('id') userId: string,
+    @Body() dto: BroadcastAnnouncementDto,
+  ) {
+    return this.announcementsService.createBroadcast(userId, dto);
+  }
+
+  @Delete('broadcasts/:id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Super Admin: Delete broadcast announcement' })
+  async deleteBroadcast(@Param('id') id: string) {
+    return this.announcementsService.deleteBroadcast(id);
+  }
+}
+
+@ApiTags('Announcements')
 @Controller('masjids/:masjidId/announcements')
-export class AnnouncementsController {
+export class MasjidAnnouncementsController {
   constructor(private readonly announcementsService: AnnouncementsService) {}
 
   @Get()
@@ -23,7 +54,7 @@ export class AnnouncementsController {
   @UseGuards(JwtAuthGuard, MasjidRoleGuard)
   @MasjidRoles(RoleType.ADMIN, RoleType.ANNOUNCEMENT)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Create and broadcast an announcement (Admin or Announcement volunteer)' })
+  @ApiOperation({ summary: 'Create and broadcast an announcement for a masjid' })
   async createAnnouncement(
     @Param('masjidId') masjidId: string,
     @CurrentUser('id') userId: string,

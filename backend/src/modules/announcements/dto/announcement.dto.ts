@@ -38,3 +38,35 @@ export class CreateAnnouncementDto {
   @IsBoolean()
   notifyPush?: boolean;
 }
+
+export class BroadcastAnnouncementDto {
+  @ApiProperty({ example: 'Important System Announcement' })
+  @IsNotEmpty()
+  @IsString()
+  title: string;
+
+  @ApiPropertyOptional({ example: 'முக்கிய அறிவிப்பு' })
+  @IsOptional()
+  @IsString()
+  titleTa?: string;
+
+  @ApiProperty({ example: 'New updates have been released for Silah.' })
+  @IsNotEmpty()
+  @IsString()
+  body: string;
+
+  @ApiPropertyOptional({ example: 'புதிய அம்சங்கள் சேர்க்கப்பட்டுள்ளன.' })
+  @IsOptional()
+  @IsString()
+  bodyTa?: string;
+
+  @ApiPropertyOptional({ example: 'All Users', enum: ['All Users', 'Admins Only', 'Musallis Only', 'ALL', 'ADMINS', 'MUSALLIS'] })
+  @IsOptional()
+  @IsString()
+  targetAudience?: string;
+
+  @ApiPropertyOptional({ example: true, default: true })
+  @IsOptional()
+  @IsBoolean()
+  notifyPush?: boolean;
+}

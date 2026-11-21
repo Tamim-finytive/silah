@@ -30,16 +30,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _loadInitialData() async {
-    await ApiService.instance.getProfile();
+    final profile = await ApiService.instance.getProfile();
     final masjids = await ApiService.instance.getMasjids();
     if (mounted) {
       setState(() => _masjids = masjids);
-      if (masjids.isNotEmpty) {
-        final activeId = masjids.first['id'];
+      final memberships = profile?['memberships'] as List<dynamic>?;
+      final primary = memberships?.firstWhere(
+        (m) => m['isPrimary'] == true,
+        orElse: () => memberships.isNotEmpty ? memberships.first : null,
+      );
+      if (primary != null) {
+        final activeId = primary['masjidId'];
         final notices = await ApiService.instance.getAnnouncements(activeId);
         if (mounted) {
           setState(() => _announcements = notices);
         }
+      } else {
+        setState(() => _announcements = []);
       }
     }
   }
@@ -190,17 +197,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               _buildActiveMasjidCard(activeMasjid),
               const SizedBox(height: 16),
 
-              // Hero "UP NEXT" Prayer Card
-              if (nextPrayer != null) _buildHeroUpNextCard(nextPrayer),
-              const SizedBox(height: 20),
+              if (activeMasjid == null) ...[
+                _buildNoMasjidConnectedPrompt(),
+                const SizedBox(height: 20),
+              ] else ...[
+                // Hero "UP NEXT" Prayer Card
+                if (nextPrayer != null) _buildHeroUpNextCard(nextPrayer),
+                const SizedBox(height: 20),
 
-              // Today's Timetable Table (strictly from backend / maintained state)
-              _buildTodayTimetableCard(times, nextPrayer?.name),
-              const SizedBox(height: 20),
+                // Today's Timetable Table (strictly from backend / maintained state)
+                _buildTodayTimetableCard(times, nextPrayer?.name),
+                const SizedBox(height: 20),
 
-              // Sun & Fasting Card
-              _buildSunAndFastingCard(times),
-              const SizedBox(height: 20),
+                // Sun & Fasting Card
+                _buildSunAndFastingCard(times),
+                const SizedBox(height: 20),
+              ],
 
               // Announcements Card
               _buildAnnouncementsCard(),
@@ -495,6 +507,73 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildNoMasjidConnectedPrompt() {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F432B).withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.mosque, size: 48, color: Color(0xFF0F432B)),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'No Masjid Connected',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'You are not linked to any masjid yet. Connect to a masjid via Search or QR Code scan to view verified Namaz & Jamaah times and community notices.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey, fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F432B),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: const Icon(Icons.search, size: 18),
+                    label: const Text('Search Masjid', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                    onPressed: () => setState(() => _selectedTabIndex = 1),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF0F432B),
+                      side: const BorderSide(color: Color(0xFF0F432B), width: 1.5),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: const Icon(Icons.qr_code_scanner, size: 18),
+                    label: const Text('Scan QR Code', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                    onPressed: () {
+                      setState(() => _selectedTabIndex = 1);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 

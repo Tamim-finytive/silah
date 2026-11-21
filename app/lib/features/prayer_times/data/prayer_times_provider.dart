@@ -101,24 +101,47 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
     try {
       final masjids = await ApiService.instance.getMasjids();
       if (masjids.isEmpty) {
-        state = state.copyWith(isLoading: false);
+        state = state.copyWith(isLoading: false, activeMasjid: null, times: null);
         return;
       }
 
-      // Selected or first active masjid
-      Map<String, dynamic> targetMasjid;
-      if (specificMasjidId != null) {
-        targetMasjid = masjids.firstWhere(
-          (m) => m['id'] == specificMasjidId,
-          orElse: () => masjids.first,
-        ) as Map<String, dynamic>;
-      } else if (state.activeMasjid != null) {
-        targetMasjid = masjids.firstWhere(
-          (m) => m['id'] == state.activeMasjid!['id'],
-          orElse: () => masjids.first,
-        ) as Map<String, dynamic>;
-      } else {
-        targetMasjid = masjids.first as Map<String, dynamic>;
+      // Check if user has an explicitly connected / primary masjid
+      final user = ApiService.instance.currentUser;
+      final memberships = user?['memberships'] as List<dynamic>?;
+      final primaryMembership = memberships?.firstWhere(
+        (m) => m['isPrimary'] == true,
+        orElse: () => memberships.isNotEmpty ? memberships.first : null,
+      );
+
+      final String? targetId = specificMasjidId ??
+          state.activeMasjid?['id'] ??
+          primaryMembership?['masjidId'];
+
+      // Do NOT auto-link to masjids.first! User must search or scan QR code.
+      if (targetId == null) {
+        state = state.copyWith(
+          activeMasjid: null,
+          times: null,
+          nextPrayer: null,
+          isLoading: false,
+          error: null,
+        );
+        return;
+      }
+
+      final targetMasjid = masjids.firstWhere(
+        (m) => m['id'] == targetId,
+        orElse: () => null,
+      ) as Map<String, dynamic>?;
+
+      if (targetMasjid == null) {
+        state = state.copyWith(
+          activeMasjid: null,
+          times: null,
+          nextPrayer: null,
+          isLoading: false,
+        );
+        return;
       }
 
       // Fetch today's prayer times for this masjid from backend
@@ -137,7 +160,7 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
         );
         _recalculateNextPrayer();
       } else {
-        state = state.copyWith(isLoading: false);
+        state = state.copyWith(activeMasjid: targetMasjid, isLoading: false);
       }
     } catch (e) {
       state = state.copyWith(

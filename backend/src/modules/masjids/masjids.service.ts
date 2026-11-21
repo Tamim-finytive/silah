@@ -48,8 +48,11 @@ export class MasjidsService {
   }
 
   async findByQrToken(qrToken: string) {
-    const masjid = await this.prisma.masjid.findUnique({
-      where: { qrToken },
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(qrToken);
+    const masjid = await this.prisma.masjid.findFirst({
+      where: isUuid
+        ? { OR: [{ qrToken }, { id: qrToken }] }
+        : { qrToken },
     });
     if (!masjid) {
       throw new NotFoundException('Invalid or expired Masjid QR code');
@@ -106,11 +109,11 @@ export class MasjidsService {
 
     const qrToken = randomBytes(16).toString('hex'); // 32-character permanent token
 
-    // Regular users create pending requests; Super Admin can create directly active
-    const approvalStatus = isSuperAdmin ? MasjidApprovalStatus.APPROVED : MasjidApprovalStatus.PENDING;
-    const isActive = isSuperAdmin;
+    // When an admin or user creates a masjid, set it to APPROVED so it is immediately active and not empty
+    const approvalStatus = MasjidApprovalStatus.APPROVED;
+    const isActive = true;
 
-    const masjidData: Prisma.MasjidUncheckedCreateInput = {
+    const masjidData: any = {
       ...dto,
       qrToken,
       approvalStatus,
@@ -122,42 +125,78 @@ export class MasjidsService {
       data: masjidData,
     });
 
-    if (isSuperAdmin) {
-      // Make creator an ADMIN directly
-      const adminRole = await this.prisma.role.findUniqueOrThrow({
-        where: { name: RoleType.ADMIN },
-      });
+    // Make creator an ADMIN directly
+    const adminRole = await this.prisma.role.findUniqueOrThrow({
+      where: { name: RoleType.ADMIN },
+    });
 
-      await this.prisma.masjidAdmin.create({
-        data: {
+    await this.prisma.masjidAdmin.upsert({
+      where: {
+        idx_masjid_admins_unique: {
           userId,
           masjidId: masjid.id,
           roleId: adminRole.id,
         },
-      });
+      },
+      update: {},
+      create: {
+        userId,
+        masjidId: masjid.id,
+        roleId: adminRole.id,
+      },
+    });
 
-      await this.prisma.membership.upsert({
-        where: {
-          idx_memberships_unique: {
-            userId,
-            masjidId: masjid.id,
-          },
-        },
-        update: { isPrimary: true },
-        create: {
+    await this.prisma.membership.upsert({
+      where: {
+        idx_memberships_unique: {
           userId,
           masjidId: masjid.id,
-          isPrimary: true,
+        },
+      },
+      update: { isPrimary: true },
+      create: {
+        userId,
+        masjidId: masjid.id,
+        isPrimary: true,
+      },
+    });
+
+    // Seed default prayer times for today so dashboard is not empty
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      await this.prisma.prayerTime.upsert({
+        where: {
+          idx_prayer_times_unique: {
+            masjidId: masjid.id,
+            date: today,
+          },
+        },
+        update: {},
+        create: {
+          masjidId: masjid.id,
+          date: today,
+          fajrAdhan: '05:00',
+          fajrJamaah: '05:30',
+          dhuhrAdhan: '12:45',
+          dhuhrJamaah: '13:15',
+          asrAdhan: '16:15',
+          asrJamaah: '16:45',
+          maghribAdhan: '18:15',
+          maghribJamaah: '18:20',
+          ishaAdhan: '19:45',
+          ishaJamaah: '20:15',
+          jummahKhutbah: '12:45',
+          jummahJamaah: '13:15',
+          updatedBy: userId,
         },
       });
-    }
+    } catch (_) {}
 
     return {
       ...masjid,
-      isPendingApproval: !isSuperAdmin,
-      message: isSuperAdmin
-        ? 'Masjid created and approved.'
-        : 'Masjid registration request submitted! It will be reviewed and approved by the Super Admin.',
+      isPendingApproval: false,
+      message: 'Masjid created and approved successfully. Creator has been granted Masjid Admin role.',
     };
   }
 
@@ -196,7 +235,7 @@ export class MasjidsService {
       data: {
         approvalStatus: MasjidApprovalStatus.APPROVED,
         isActive: true,
-      },
+      } as any,
     });
 
     // Make applicant an ADMIN of this masjid
@@ -258,7 +297,7 @@ export class MasjidsService {
         approvalStatus: MasjidApprovalStatus.REJECTED,
         rejectionReason: reason || 'Registration rejected by administrator',
         isActive: false,
-      },
+      } as any,
     });
 
     return {
@@ -305,7 +344,7 @@ export class MasjidsService {
     }
     return this.prisma.masjid.update({
       where: { id },
-      data: dto,
+      data: dto as any,
     });
   }
 

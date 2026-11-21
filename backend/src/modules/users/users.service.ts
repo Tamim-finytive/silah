@@ -38,7 +38,7 @@ export class UsersService {
       throw new BadRequestException('User with this mobile number already exists');
     }
 
-    const userData: Prisma.UserCreateInput = {
+    const userData: any = {
       phone: dto.phone,
       name: dto.name,
       age: dto.age,

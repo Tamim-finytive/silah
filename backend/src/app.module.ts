@@ -9,6 +9,7 @@ import { AnnouncementsModule } from './modules/announcements/announcements.modul
 import { SandhaModule } from './modules/sandha/sandha.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { SpecialSchedulesModule } from './modules/special-schedules/special-schedules.module';
+import { FirebaseModule } from './common/firebase/firebase.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { SpecialSchedulesModule } from './modules/special-schedules/special-sche
       envFilePath: '.env',
     }),
     PrismaModule,
+    FirebaseModule,
     AuthModule,
     UsersModule,
     MasjidsModule,

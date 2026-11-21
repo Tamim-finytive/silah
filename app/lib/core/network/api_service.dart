@@ -288,6 +288,40 @@ class ApiService {
     return null;
   }
 
+  Future<List<dynamic>> getBroadcastAnnouncements() async {
+    try {
+      final res = await _dio.get('/announcements/broadcasts');
+      if (res.data['success'] == true && res.data['data'] != null) {
+        return res.data['data'] as List<dynamic>;
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<Map<String, dynamic>> sendBroadcastAnnouncement({
+    required String title,
+    required String body,
+    String targetAudience = 'All Users',
+    String? titleTa,
+    String? bodyTa,
+  }) async {
+    await ensureSuperAdminAuth();
+    final res = await _dio.post('/announcements/broadcasts', data: {
+      'title': title,
+      'body': body,
+      'targetAudience': targetAudience,
+      if (titleTa != null && titleTa.isNotEmpty) 'titleTa': titleTa,
+      if (bodyTa != null && bodyTa.isNotEmpty) 'bodyTa': bodyTa,
+      'notifyPush': true,
+    });
+    return res.data;
+  }
+
+  Future<void> deleteBroadcastAnnouncement(String id) async {
+    await ensureSuperAdminAuth();
+    await _dio.delete('/announcements/broadcasts/$id');
+  }
+
   Future<Map<String, dynamic>?> getMasjidAdminOverview(String masjidId) async {
     try {
       final res = await _dio.get('/dashboard/masjid/$masjidId');
