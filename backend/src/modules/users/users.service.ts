@@ -78,4 +78,35 @@ export class UsersService {
 
     return { total, page, limit, items };
   }
+
+  async deleteUser(userId: string, adminUserId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (userId === adminUserId) {
+      throw new BadRequestException('Cannot delete your own Super Admin account');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      // Reassign or cleanup entities authored by this user so foreign keys don't violate
+      await tx.masjid.updateMany({ where: { createdBy: userId }, data: { createdBy: adminUserId } });
+      await tx.announcement.updateMany({ where: { createdBy: userId }, data: { createdBy: adminUserId } });
+      await tx.specialSchedule.updateMany({ where: { createdBy: userId }, data: { createdBy: adminUserId } });
+      await tx.sandhaPlan.updateMany({ where: { createdBy: userId }, data: { createdBy: adminUserId } });
+      await tx.sandhaPayment.updateMany({ where: { recordedBy: userId }, data: { recordedBy: adminUserId } });
+      await tx.sandhaPayment.deleteMany({ where: { userId } });
+      await tx.sandhaPlanMember.updateMany({ where: { userId }, data: { userId: null } });
+      await tx.prayerTime.updateMany({ where: { updatedBy: userId }, data: { updatedBy: adminUserId } });
+
+      // Delete user relations
+      await tx.masjidAdmin.deleteMany({ where: { userId } });
+      await tx.membership.deleteMany({ where: { userId } });
+      await tx.device.deleteMany({ where: { userId } });
+      await tx.notificationPref.deleteMany({ where: { userId } });
+
+      return tx.user.delete({ where: { id: userId } });
+    });
+  }
 }

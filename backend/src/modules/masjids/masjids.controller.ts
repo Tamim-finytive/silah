@@ -1,11 +1,12 @@
-import { Controller, Get, Post, Put, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { MasjidsService } from './masjids.service';
 import { CreateMasjidDto, UpdateMasjidDto, AssignRoleDto, AddMemberDto } from './dto/masjid.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { MasjidRoleGuard } from '../../common/guards/masjid-role.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { MasjidRoles } from '../../common/decorators/roles.decorator';
+import { Roles, MasjidRoles } from '../../common/decorators/roles.decorator';
 import { RoleType } from '@prisma/client';
 
 @ApiTags('Masjids')
@@ -111,5 +112,14 @@ export class MasjidsController {
   @ApiOperation({ summary: 'Assign custom role (Finance/Announcement/Admin) to a member' })
   async assignRole(@Param('masjidId') masjidId: string, @Body() dto: AssignRoleDto) {
     return this.masjidsService.assignRole(masjidId, dto);
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Super Admin: Delete a masjid and its related records' })
+  async deleteMasjid(@Param('id') id: string) {
+    return this.masjidsService.deleteMasjid(id);
   }
 }

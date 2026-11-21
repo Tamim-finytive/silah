@@ -118,14 +118,25 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                             ),
                           ],
                         ),
-                        trailing: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.green.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.green.shade300),
-                          ),
-                          child: const Text('ACTIVE', style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.green.shade300),
+                              ),
+                              child: const Text('ACTIVE', style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
+                            ),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                              tooltip: 'Delete Masjid',
+                              onPressed: () => _confirmDeleteMasjid(m as Map<String, dynamic>),
+                            ),
+                          ],
                         ),
                       ),
                     );
@@ -535,13 +546,24 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                               ),
                               title: Text(u['name'] ?? 'No Name', style: const TextStyle(fontWeight: FontWeight.bold)),
                               subtitle: Text('${u['phone'] ?? ''} ${u['address'] != null ? '• ${u['address']}' : ''}'),
-                              trailing: u['isSuperAdmin'] == true
-                                  ? Container(
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (u['isSuperAdmin'] == true) ...[
+                                    Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(color: Colors.purple.shade50, borderRadius: BorderRadius.circular(6)),
                                       child: const Text('SUPER ADMIN', style: TextStyle(color: Colors.purple, fontSize: 10, fontWeight: FontWeight.bold)),
-                                    )
-                                  : null,
+                                    ),
+                                    const SizedBox(width: 4),
+                                  ],
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                                    tooltip: 'Delete User',
+                                    onPressed: () => _confirmDeleteUser(u as Map<String, dynamic>),
+                                  ),
+                                ],
+                              ),
                             ),
                           );
                         },
@@ -735,6 +757,92 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
             Text(msg, textAlign: TextAlign.center, style: TextStyle(fontSize: 15, color: Colors.grey.shade600, fontWeight: FontWeight.w500)),
           ],
         ),
+      ),
+    );
+  }
+
+  void _confirmDeleteMasjid(Map<String, dynamic> masjid) {
+    final name = masjid['name'] ?? 'this Masjid';
+    final id = masjid['id']?.toString() ?? '';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Delete Masjid?', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to permanently delete "$name"? All its prayer timings, announcements, and schedules will be deleted from the database.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await ApiService.instance.deleteMasjid(id);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Masjid "$name" deleted successfully'), backgroundColor: Colors.red),
+                  );
+                }
+                _loadAllData();
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+                }
+              }
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteUser(Map<String, dynamic> user) {
+    final name = user['name'] ?? user['phone'] ?? 'this user';
+    final id = user['id']?.toString() ?? '';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.person_remove, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Delete User?', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text('Are you sure you want to delete user "$name" (${user['phone'] ?? ''})?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await ApiService.instance.deleteUser(id);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('User "$name" deleted successfully'), backgroundColor: Colors.red),
+                  );
+                }
+                _loadAllData();
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+                }
+              }
+            },
+            child: const Text('Delete'),
+          ),
+        ],
       ),
     );
   }

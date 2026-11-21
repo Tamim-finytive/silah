@@ -437,6 +437,18 @@ class ApiService {
     return res.data;
   }
 
+  Future<Map<String, dynamic>> deleteMasjid(String masjidId) async {
+    await ensureSuperAdminAuth();
+    final res = await _dio.delete('/masjids/$masjidId');
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>> deleteUser(String userId) async {
+    await ensureSuperAdminAuth();
+    final res = await _dio.delete('/users/$userId');
+    return res.data;
+  }
+
   Future<Map<String, dynamic>> createUser(Map<String, dynamic> dto) async {
     await ensureSuperAdminAuth();
     final res = await _dio.post('/users', data: dto);

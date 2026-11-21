@@ -118,10 +118,12 @@ model PrayerTime {
   date          DateTime @db.Date
   fajrAdhan     String?  @map("fajr_adhan") @db.VarChar(8)
   fajrJamaah    String   @map("fajr_jamaah") @db.VarChar(8)
+  sunrise       String?  @map("sunrise") @db.VarChar(8)
   dhuhrAdhan    String?  @map("dhuhr_adhan") @db.VarChar(8)
   dhuhrJamaah   String   @map("dhuhr_jamaah") @db.VarChar(8)
   asrAdhan      String?  @map("asr_adhan") @db.VarChar(8)
   asrJamaah     String   @map("asr_jamaah") @db.VarChar(8)
+  sunset        String?  @map("sunset") @db.VarChar(8)
   maghribAdhan  String?  @map("maghrib_adhan") @db.VarChar(8)
   maghribJamaah String   @map("maghrib_jamaah") @db.VarChar(8)
   ishaAdhan     String?  @map("isha_adhan") @db.VarChar(8)

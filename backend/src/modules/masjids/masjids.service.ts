@@ -536,4 +536,37 @@ export class MasjidsService {
       },
     });
   }
+
+  async deleteMasjid(masjidId: string) {
+    const masjid = await this.prisma.masjid.findUnique({ where: { id: masjidId } });
+    if (!masjid) {
+      throw new NotFoundException('Masjid not found');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Delete prayer times & special schedules
+      await tx.prayerTime.deleteMany({ where: { masjidId } });
+      await tx.specialSchedule.deleteMany({ where: { masjidId } });
+
+      // 2. Delete announcements
+      await tx.announcement.deleteMany({ where: { masjidId } });
+
+      // 3. Delete memberships, notification prefs & masjid admins
+      await tx.membership.deleteMany({ where: { masjidId } });
+      await tx.notificationPref.deleteMany({ where: { masjidId } });
+      await tx.masjidAdmin.deleteMany({ where: { masjidId } });
+
+      // 4. Delete sandha plans, plan members & payments
+      const plans = await tx.sandhaPlan.findMany({ where: { masjidId }, select: { id: true } });
+      const planIds = plans.map((p) => p.id);
+      if (planIds.length > 0) {
+        await tx.sandhaPayment.deleteMany({ where: { planId: { in: planIds } } });
+        await tx.sandhaPlanMember.deleteMany({ where: { planId: { in: planIds } } });
+        await tx.sandhaPlan.deleteMany({ where: { masjidId } });
+      }
+
+      // 5. Delete the masjid
+      return tx.masjid.delete({ where: { id: masjidId } });
+    });
+  }
 }

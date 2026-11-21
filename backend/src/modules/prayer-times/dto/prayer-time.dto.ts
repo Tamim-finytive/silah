@@ -10,62 +10,62 @@ export class UpdatePrayerTimeDto {
   @ApiPropertyOptional({ example: '05:00' })
   @IsOptional()
   @IsString()
-  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: 'Time must be HH:mm (24hr)' })
   fajrAdhan?: string;
 
-  @ApiProperty({ example: '05:30' })
-  @IsNotEmpty()
+  @ApiPropertyOptional({ example: '05:30' })
+  @IsOptional()
   @IsString()
-  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
-  fajrJamaah: string;
+  fajrJamaah?: string;
+
+  @ApiPropertyOptional({ example: '06:05' })
+  @IsOptional()
+  @IsString()
+  sunrise?: string;
 
   @ApiPropertyOptional({ example: '12:30' })
   @IsOptional()
   @IsString()
-  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
   dhuhrAdhan?: string;
 
-  @ApiProperty({ example: '13:15' })
-  @IsNotEmpty()
+  @ApiPropertyOptional({ example: '13:15' })
+  @IsOptional()
   @IsString()
-  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
-  dhuhrJamaah: string;
+  dhuhrJamaah?: string;
 
   @ApiPropertyOptional({ example: '16:15' })
   @IsOptional()
   @IsString()
-  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
   asrAdhan?: string;
 
-  @ApiProperty({ example: '16:45' })
-  @IsNotEmpty()
+  @ApiPropertyOptional({ example: '16:45' })
+  @IsOptional()
   @IsString()
-  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
-  asrJamaah: string;
+  asrJamaah?: string;
 
   @ApiPropertyOptional({ example: '18:15' })
   @IsOptional()
   @IsString()
-  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
+  sunset?: string;
+
+  @ApiPropertyOptional({ example: '18:15' })
+  @IsOptional()
+  @IsString()
   maghribAdhan?: string;
 
-  @ApiProperty({ example: '18:20' })
-  @IsNotEmpty()
+  @ApiPropertyOptional({ example: '18:20' })
+  @IsOptional()
   @IsString()
-  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
-  maghribJamaah: string;
+  maghribJamaah?: string;
 
   @ApiPropertyOptional({ example: '19:45' })
   @IsOptional()
   @IsString()
-  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
   ishaAdhan?: string;
 
-  @ApiProperty({ example: '20:15' })
-  @IsNotEmpty()
+  @ApiPropertyOptional({ example: '20:15' })
+  @IsOptional()
   @IsString()
-  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
-  ishaJamaah: string;
+  ishaJamaah?: string;
 
   @ApiPropertyOptional({ example: '12:45' })
   @IsOptional()
@@ -99,6 +99,11 @@ export class UpdatePrayerTimeRangeDto {
   @IsString()
   fajrJamaah: string;
 
+  @ApiPropertyOptional({ example: '06:05' })
+  @IsOptional()
+  @IsString()
+  sunrise?: string;
+
   @ApiPropertyOptional({ example: '12:30' })
   @IsOptional()
   @IsString()
@@ -118,6 +123,11 @@ export class UpdatePrayerTimeRangeDto {
   @IsNotEmpty()
   @IsString()
   asrJamaah: string;
+
+  @ApiPropertyOptional({ example: '18:15' })
+  @IsOptional()
+  @IsString()
+  sunset?: string;
 
   @ApiPropertyOptional({ example: '18:15' })
   @IsOptional()

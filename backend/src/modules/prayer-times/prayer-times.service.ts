@@ -28,22 +28,8 @@ export class PrayerTimesService {
     }
 
     if (!times) {
-      // Default standard fallback times
-      return {
-        masjidId,
-        date: targetDate.toISOString().split('T')[0],
-        fajrAdhan: '05:00',
-        fajrJamaah: '05:30',
-        dhuhrAdhan: '12:30',
-        dhuhrJamaah: '01:15',
-        asrAdhan: '16:15',
-        asrJamaah: '16:45',
-        maghribAdhan: '18:15',
-        maghribJamaah: '18:20',
-        ishaAdhan: '19:45',
-        ishaJamaah: '20:15',
-        isDefaultFallback: true,
-      };
+      // Zero mock data: Return null when no timings are configured in database
+      return null;
     }
 
     return times;
@@ -85,10 +71,12 @@ export class PrayerTimesService {
         update: {
           fajrAdhan: dto.fajrAdhan,
           fajrJamaah: dto.fajrJamaah,
+          sunrise: dto.sunrise,
           dhuhrAdhan: dto.dhuhrAdhan,
           dhuhrJamaah: dto.dhuhrJamaah,
           asrAdhan: dto.asrAdhan,
           asrJamaah: dto.asrJamaah,
+          sunset: dto.sunset,
           maghribAdhan: dto.maghribAdhan,
           maghribJamaah: dto.maghribJamaah,
           ishaAdhan: dto.ishaAdhan,
@@ -103,10 +91,12 @@ export class PrayerTimesService {
           date: targetDate,
           fajrAdhan: dto.fajrAdhan,
           fajrJamaah: dto.fajrJamaah,
+          sunrise: dto.sunrise,
           dhuhrAdhan: dto.dhuhrAdhan,
           dhuhrJamaah: dto.dhuhrJamaah,
           asrAdhan: dto.asrAdhan,
           asrJamaah: dto.asrJamaah,
+          sunset: dto.sunset,
           maghribAdhan: dto.maghribAdhan,
           maghribJamaah: dto.maghribJamaah,
           ishaAdhan: dto.ishaAdhan,
@@ -132,6 +122,32 @@ export class PrayerTimesService {
     const date = new Date(dto.date);
     date.setHours(0, 0, 0, 0);
 
+    const existing = await this.prisma.prayerTime.findUnique({
+      where: {
+        idx_prayer_times_unique: {
+          masjidId,
+          date,
+        },
+      },
+    });
+
+    const dataToSave = {
+      fajrAdhan: dto.fajrAdhan !== undefined ? dto.fajrAdhan : existing?.fajrAdhan,
+      fajrJamaah: dto.fajrJamaah || existing?.fajrJamaah || '--:--',
+      sunrise: dto.sunrise !== undefined ? dto.sunrise : existing?.sunrise,
+      dhuhrAdhan: dto.dhuhrAdhan !== undefined ? dto.dhuhrAdhan : existing?.dhuhrAdhan,
+      dhuhrJamaah: dto.dhuhrJamaah || existing?.dhuhrJamaah || '--:--',
+      asrAdhan: dto.asrAdhan !== undefined ? dto.asrAdhan : existing?.asrAdhan,
+      asrJamaah: dto.asrJamaah || existing?.asrJamaah || '--:--',
+      sunset: dto.sunset !== undefined ? dto.sunset : existing?.sunset,
+      maghribAdhan: dto.maghribAdhan !== undefined ? dto.maghribAdhan : existing?.maghribAdhan,
+      maghribJamaah: dto.maghribJamaah || existing?.maghribJamaah || '--:--',
+      ishaAdhan: dto.ishaAdhan !== undefined ? dto.ishaAdhan : existing?.ishaAdhan,
+      ishaJamaah: dto.ishaJamaah || existing?.ishaJamaah || '--:--',
+      jummahKhutbah: dto.jummahKhutbah !== undefined ? dto.jummahKhutbah : existing?.jummahKhutbah,
+      jummahJamaah: dto.jummahJamaah !== undefined ? dto.jummahJamaah : existing?.jummahJamaah,
+    };
+
     return this.prisma.prayerTime.upsert({
       where: {
         idx_prayer_times_unique: {
@@ -140,12 +156,12 @@ export class PrayerTimesService {
         },
       },
       update: {
-        ...dto,
+        ...dataToSave,
         date,
         updatedBy: userId,
       },
       create: {
-        ...dto,
+        ...dataToSave,
         masjidId,
         date,
         updatedBy: userId,
