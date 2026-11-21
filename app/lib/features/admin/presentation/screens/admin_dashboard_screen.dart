@@ -64,20 +64,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             setState(() {
               _adminOverview = overview;
               _masjidDetails = overview?['masjid'];
-              _todayPrayerTimes = todayTimes ?? {
-                'fajrAdhan': '05:00',
-                'fajrJamaah': '05:30',
-                'dhuhrAdhan': '12:45',
-                'dhuhrJamaah': '13:15',
-                'asrAdhan': '16:15',
-                'asrJamaah': '16:45',
-                'maghribAdhan': '18:15',
-                'maghribJamaah': '18:20',
-                'ishaAdhan': '19:45',
-                'ishaJamaah': '20:15',
-                'jummahKhutbah': '12:45',
-                'jummahJamaah': '13:15',
-              };
+              _todayPrayerTimes = todayTimes;
               _specialSchedules = schedules;
               _announcements = notices;
               _membersData = members;
@@ -433,8 +420,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   void _editSinglePrayerTime(String prayerKey, String prayerName, String? currentAdhan, String? currentJamaah) {
     final dateStr = DateTime.now().toIso8601String().split('T')[0];
-    final adhanCtrl = TextEditingController(text: currentAdhan ?? '05:00');
-    final jamaahCtrl = TextEditingController(text: currentJamaah ?? '05:30');
+    final adhanCtrl = TextEditingController(text: currentAdhan ?? '');
+    final jamaahCtrl = TextEditingController(text: currentJamaah ?? '');
 
     showDialog(
       context: context,
@@ -639,34 +626,64 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         child: Padding(
                           padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text('Tap Jamaah time to edit:', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                                  TextButton.icon(
-                                    icon: const Icon(Icons.edit, size: 14),
-                                    label: const Text('Edit All Today'),
-                                    onPressed: _showSingleDayPrayerDialog,
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              _prayerRowEditable('fajr', 'Fajr', _todayPrayerTimes?['fajrAdhan'], _todayPrayerTimes?['fajrJamaah']),
-                              const Divider(),
-                              _prayerRowEditable('dhuhr', 'Dhuhr', _todayPrayerTimes?['dhuhrAdhan'], _todayPrayerTimes?['dhuhrJamaah']),
-                              const Divider(),
-                              _prayerRowEditable('asr', 'Asr', _todayPrayerTimes?['asrAdhan'], _todayPrayerTimes?['asrJamaah']),
-                              const Divider(),
-                              _prayerRowEditable('maghrib', 'Maghrib', _todayPrayerTimes?['maghribAdhan'], _todayPrayerTimes?['maghribJamaah']),
-                              const Divider(),
-                              _prayerRowEditable('isha', 'Isha', _todayPrayerTimes?['ishaAdhan'], _todayPrayerTimes?['ishaJamaah']),
-                              const Divider(),
-                              _prayerRowEditable('jummah', 'Jummah', _todayPrayerTimes?['jummahKhutbah'], _todayPrayerTimes?['jummahJamaah']),
-                            ],
-                          ),
+                          child: _todayPrayerTimes == null
+                              ? Column(
+                                  children: [
+                                    const Icon(Icons.access_time, size: 40, color: Colors.grey),
+                                    const SizedBox(height: 10),
+                                    const Text(
+                                      'No Prayer Timings Configured for Today',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    const Text(
+                                      'Configure today\'s Adhan & Jamaah times so musallis can see the updated schedule.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                                    ),
+                                    const SizedBox(height: 14),
+                                    ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF0F432B),
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                      icon: const Icon(Icons.add_alarm, size: 18),
+                                      label: const Text('Set Today\'s Timings'),
+                                      onPressed: _showSingleDayPrayerDialog,
+                                    ),
+                                  ],
+                                )
+                              : Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        const Text('Tap Jamaah time to edit:', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                        TextButton.icon(
+                                          icon: const Icon(Icons.edit, size: 14),
+                                          label: const Text('Edit All Today'),
+                                          onPressed: _showSingleDayPrayerDialog,
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    _prayerRowEditable('fajr', 'Fajr', _todayPrayerTimes?['fajrAdhan'], _todayPrayerTimes?['fajrJamaah']),
+                                    const Divider(),
+                                    _prayerRowEditable('dhuhr', 'Dhuhr', _todayPrayerTimes?['dhuhrAdhan'], _todayPrayerTimes?['dhuhrJamaah']),
+                                    const Divider(),
+                                    _prayerRowEditable('asr', 'Asr', _todayPrayerTimes?['asrAdhan'], _todayPrayerTimes?['asrJamaah']),
+                                    const Divider(),
+                                    _prayerRowEditable('maghrib', 'Maghrib', _todayPrayerTimes?['maghribAdhan'], _todayPrayerTimes?['maghribJamaah']),
+                                    const Divider(),
+                                    _prayerRowEditable('isha', 'Isha', _todayPrayerTimes?['ishaAdhan'], _todayPrayerTimes?['ishaJamaah']),
+                                    if (_todayPrayerTimes?['jummahJamaah'] != null) ...[
+                                      const Divider(),
+                                      _prayerRowEditable('jummah', 'Jummah', _todayPrayerTimes?['jummahKhutbah'], _todayPrayerTimes?['jummahJamaah']),
+                                    ],
+                                  ],
+                                ),
                         ),
                       ),
                       const SizedBox(height: 24),
@@ -722,11 +739,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   void _showSingleDayPrayerDialog() {
     final dateStr = DateTime.now().toIso8601String().split('T')[0];
-    final fajrJCtrl = TextEditingController(text: _todayPrayerTimes?['fajrJamaah'] ?? '05:30');
-    final dhuhrJCtrl = TextEditingController(text: _todayPrayerTimes?['dhuhrJamaah'] ?? '13:15');
-    final asrJCtrl = TextEditingController(text: _todayPrayerTimes?['asrJamaah'] ?? '16:45');
-    final maghribJCtrl = TextEditingController(text: _todayPrayerTimes?['maghribJamaah'] ?? '18:20');
-    final ishaJCtrl = TextEditingController(text: _todayPrayerTimes?['ishaJamaah'] ?? '20:15');
+    final fajrJCtrl = TextEditingController(text: _todayPrayerTimes?['fajrJamaah'] ?? '');
+    final dhuhrJCtrl = TextEditingController(text: _todayPrayerTimes?['dhuhrJamaah'] ?? '');
+    final asrJCtrl = TextEditingController(text: _todayPrayerTimes?['asrJamaah'] ?? '');
+    final maghribJCtrl = TextEditingController(text: _todayPrayerTimes?['maghribJamaah'] ?? '');
+    final ishaJCtrl = TextEditingController(text: _todayPrayerTimes?['ishaJamaah'] ?? '');
 
     showDialog(
       context: context,
