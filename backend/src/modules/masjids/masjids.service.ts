@@ -151,14 +151,17 @@ export class MasjidsService {
     let assignedAdminUserId = userId;
     if (adminPhone && adminPhone.trim().length >= 10) {
       const cleanPhone = adminPhone.trim().replace(/\D/g, '').slice(-10);
-      let adminUser = await this.prisma.user.findUnique({
-        where: { phone: cleanPhone },
+      const normalizedPhone = `+91${cleanPhone}`;
+      let adminUser = await this.prisma.user.findFirst({
+        where: {
+          OR: [{ phone: normalizedPhone }, { phone: cleanPhone }],
+        },
       });
 
       if (!adminUser) {
         adminUser = await this.prisma.user.create({
           data: {
-            phone: cleanPhone,
+            phone: normalizedPhone,
             name: adminName?.trim() || 'Masjid Admin',
             age: 30,
             isOnboarded: true,
@@ -169,6 +172,7 @@ export class MasjidsService {
         await this.prisma.user.update({
           where: { id: adminUser.id },
           data: {
+            phone: normalizedPhone,
             isOnboarded: true,
             ...(adminName && adminName.trim().length > 0 ? { name: adminName.trim() } : {}),
           } as any,

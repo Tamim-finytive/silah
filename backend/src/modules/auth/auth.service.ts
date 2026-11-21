@@ -16,11 +16,18 @@ export class AuthService {
   ) {}
 
   async checkUser(dto: CheckUserDto) {
-    const phone = this.otpService.normalizePhone(dto.phone);
-    const isMasterSuperAdmin = phone.includes('1234567890');
+    const raw10 = dto.phone.trim().replace(/\D/g, '').slice(-10);
+    const normalized = raw10.length === 10 ? `+91${raw10}` : this.otpService.normalizePhone(dto.phone);
+    const isMasterSuperAdmin = raw10.includes('1234567890');
 
-    const user = await this.prisma.user.findUnique({
-      where: { phone },
+    const user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { phone: normalized },
+          { phone: raw10 },
+          { phone: dto.phone.trim() },
+        ],
+      },
       include: {
         memberships: true,
         masjidAdmins: { include: { role: true, masjid: true } },
@@ -47,11 +54,19 @@ export class AuthService {
   }
 
   async loginDirect(dto: CheckUserDto) {
-    const phone = this.otpService.normalizePhone(dto.phone);
-    const isMasterSuperAdmin = phone.includes('1234567890');
+    const raw10 = dto.phone.trim().replace(/\D/g, '').slice(-10);
+    const normalized = raw10.length === 10 ? `+91${raw10}` : this.otpService.normalizePhone(dto.phone);
+    const phone = normalized;
+    const isMasterSuperAdmin = raw10.includes('1234567890');
 
-    let user = await this.prisma.user.findUnique({
-      where: { phone },
+    let user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { phone: normalized },
+          { phone: raw10 },
+          { phone: dto.phone.trim() },
+        ],
+      },
       include: {
         memberships: true,
         masjidAdmins: { include: { role: true, masjid: true } },
