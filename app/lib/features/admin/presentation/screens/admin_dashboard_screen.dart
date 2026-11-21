@@ -28,37 +28,64 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   void initState() {
     super.initState();
+    final cachedUser = ApiService.instance.currentUser;
+    final cachedRoles = cachedUser?['adminRoles'] as List<dynamic>?;
+    if (cachedRoles != null && cachedRoles.isNotEmpty) {
+      final firstRole = cachedRoles.first;
+      if (firstRole is Map<String, dynamic>) {
+        _masjidId = firstRole['masjidId'];
+        _masjidName = firstRole['masjidName'] ?? 'Masjid Admin';
+      }
+    }
     _loadMasjidData();
   }
 
   Future<void> _loadMasjidData() async {
     setState(() => _isLoading = true);
     try {
-      final user = await ApiService.instance.getProfile();
-      final adminRoles = user?['adminRoles'] as List<dynamic>?;
+      final user = await ApiService.instance.getProfile() ?? ApiService.instance.currentUser;
+      final adminRoles = (user?['adminRoles'] as List<dynamic>?) ??
+          (ApiService.instance.currentUser?['adminRoles'] as List<dynamic>?);
 
       if (adminRoles != null && adminRoles.isNotEmpty) {
         final primary = adminRoles.first;
-        final mId = primary['masjidId'];
-        _masjidId = mId;
-        _masjidName = primary['masjidName'] ?? 'Masjid Admin';
+        final mId = primary is Map<String, dynamic> ? primary['masjidId'] : null;
+        if (mId != null) {
+          _masjidId = mId;
+          _masjidName = primary['masjidName'] ?? 'Masjid Admin';
 
-        final overview = await ApiService.instance.getMasjidAdminOverview(mId);
-        final todayTimes = await ApiService.instance.getTodayPrayerTimes(mId);
-        final schedules = await ApiService.instance.getSpecialSchedules(mId);
-        final notices = await ApiService.instance.getAnnouncements(mId);
-        final members = await ApiService.instance.getMasjidMembers(mId);
+          final overview = await ApiService.instance.getMasjidAdminOverview(mId);
+          final todayTimes = await ApiService.instance.getTodayPrayerTimes(mId);
+          final schedules = await ApiService.instance.getSpecialSchedules(mId);
+          final notices = await ApiService.instance.getAnnouncements(mId);
+          final members = await ApiService.instance.getMasjidMembers(mId);
 
-        if (mounted) {
-          setState(() {
-            _adminOverview = overview;
-            _masjidDetails = overview?['masjid'];
-            _todayPrayerTimes = todayTimes;
-            _specialSchedules = schedules;
-            _announcements = notices;
-            _membersData = members;
-            _isLoading = false;
-          });
+          if (mounted) {
+            setState(() {
+              _adminOverview = overview;
+              _masjidDetails = overview?['masjid'];
+              _todayPrayerTimes = todayTimes ?? {
+                'fajrAdhan': '05:00',
+                'fajrJamaah': '05:30',
+                'dhuhrAdhan': '12:45',
+                'dhuhrJamaah': '13:15',
+                'asrAdhan': '16:15',
+                'asrJamaah': '16:45',
+                'maghribAdhan': '18:15',
+                'maghribJamaah': '18:20',
+                'ishaAdhan': '19:45',
+                'ishaJamaah': '20:15',
+                'jummahKhutbah': '12:45',
+                'jummahJamaah': '13:15',
+              };
+              _specialSchedules = schedules;
+              _announcements = notices;
+              _membersData = members;
+              _isLoading = false;
+            });
+          }
+        } else {
+          if (mounted) setState(() => _isLoading = false);
         }
       } else {
         if (mounted) setState(() => _isLoading = false);
@@ -324,20 +351,203 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Widget _prayerRow(String name, String? adhan, String? jamaah) {
+    return _prayerRowEditable(name.toLowerCase(), name, adhan, jamaah);
+  }
+
+  Widget _prayerRowEditable(String prayerKey, String name, String? adhan, String? jamaah) {
+    IconData icon;
+    switch (prayerKey.toLowerCase()) {
+      case 'fajr':
+        icon = Icons.wb_twilight;
+        break;
+      case 'dhuhr':
+        icon = Icons.wb_sunny;
+        break;
+      case 'asr':
+        icon = Icons.filter_drama;
+        break;
+      case 'maghrib':
+        icon = Icons.nights_stay;
+        break;
+      case 'isha':
+        icon = Icons.bedtime;
+        break;
+      case 'jummah':
+        icon = Icons.mosque;
+        break;
+      default:
+        icon = Icons.access_time;
+    }
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
           Row(
             children: [
-              if (adhan != null) ...[
-                Text('Adhan: $adhan', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                const SizedBox(width: 14),
-              ],
-              Text('Jamaah: ${jamaah ?? '--:--'}', style: const TextStyle(color: Color(0xFF0F432B), fontWeight: FontWeight.bold, fontSize: 14)),
+              Icon(icon, size: 18, color: const Color(0xFF0F432B)),
+              const SizedBox(width: 8),
+              Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             ],
+          ),
+          Row(
+            children: [
+              if (adhan != null && adhan.isNotEmpty) ...[
+                Text('Adhan: $adhan', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                const SizedBox(width: 10),
+              ],
+              InkWell(
+                onTap: () => _editSinglePrayerTime(prayerKey.toLowerCase(), name, adhan, jamaah),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F432B).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF0F432B).withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Jamaah: ${jamaah ?? '--:--'}',
+                        style: const TextStyle(
+                          color: Color(0xFF0F432B),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.edit, size: 14, color: Color(0xFF0F432B)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _editSinglePrayerTime(String prayerKey, String prayerName, String? currentAdhan, String? currentJamaah) {
+    final dateStr = DateTime.now().toIso8601String().split('T')[0];
+    final adhanCtrl = TextEditingController(text: currentAdhan ?? '05:00');
+    final jamaahCtrl = TextEditingController(text: currentJamaah ?? '05:30');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.edit_calendar, color: Color(0xFF0F432B)),
+            const SizedBox(width: 8),
+            Text('Edit $prayerName Time', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Date: $dateStr (Today)', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: adhanCtrl,
+              decoration: InputDecoration(
+                labelText: '$prayerName Adhan Time (HH:mm)',
+                prefixIcon: const Icon(Icons.access_time, size: 20),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.schedule),
+                  onPressed: () async {
+                    final parts = adhanCtrl.text.split(':');
+                    final initialTime = TimeOfDay(
+                      hour: int.tryParse(parts.first) ?? 12,
+                      minute: parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0,
+                    );
+                    final picked = await showTimePicker(context: ctx, initialTime: initialTime);
+                    if (picked != null) {
+                      final h = picked.hour.toString().padLeft(2, '0');
+                      final m = picked.minute.toString().padLeft(2, '0');
+                      adhanCtrl.text = '$h:$m';
+                    }
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: jamaahCtrl,
+              decoration: InputDecoration(
+                labelText: '$prayerName Jamaah Time (HH:mm) *',
+                prefixIcon: const Icon(Icons.people, size: 20),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.schedule),
+                  onPressed: () async {
+                    final parts = jamaahCtrl.text.split(':');
+                    final initialTime = TimeOfDay(
+                      hour: int.tryParse(parts.first) ?? 12,
+                      minute: parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0,
+                    );
+                    final picked = await showTimePicker(context: ctx, initialTime: initialTime);
+                    if (picked != null) {
+                      final h = picked.hour.toString().padLeft(2, '0');
+                      final m = picked.minute.toString().padLeft(2, '0');
+                      jamaahCtrl.text = '$h:$m';
+                    }
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F432B),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () async {
+              if (_masjidId == null) return;
+              Navigator.pop(ctx);
+              try {
+                final adhanVal = adhanCtrl.text.trim();
+                final jamaahVal = jamaahCtrl.text.trim();
+
+                setState(() {
+                  _todayPrayerTimes = {
+                    ...?_todayPrayerTimes,
+                    '${prayerKey}Adhan': adhanVal,
+                    '${prayerKey}Jamaah': jamaahVal,
+                  };
+                });
+
+                await ApiService.instance.updatePrayerTimes(_masjidId!, {
+                  'date': dateStr,
+                  '${prayerKey}Adhan': adhanVal,
+                  '${prayerKey}Jamaah': jamaahVal,
+                });
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('$prayerName timing updated to $jamaahVal!'),
+                      backgroundColor: const Color(0xFF0F432B),
+                    ),
+                  );
+                }
+                _loadMasjidData();
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+                }
+              }
+            },
+            child: const Text('Save Timing'),
           ),
         ],
       ),
@@ -354,141 +564,159 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         title: const Text('Manage Prayer & Events', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF0F432B),
         foregroundColor: Colors.white,
-      ),
-      body: _masjidId == null
-          ? _buildNoMasjidAdminCard()
-          : ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Prayer Times Section Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Prayer Timings', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F432B), foregroundColor: Colors.white),
-                icon: const Icon(Icons.date_range, size: 16),
-                label: const Text('Set Date Range', style: TextStyle(fontSize: 12)),
-                onPressed: _showDateRangePrayerDialog,
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Solar Times Card
-          Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.wb_sunny_outlined, color: Colors.orange, size: 20),
-                      const SizedBox(width: 8),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Sunrise (Ishraq)', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                          Text(_todayPrayerTimes?['fajrJamaah'] != null ? '06:05 AM' : '--:--', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                    ],
-                  ),
-                  Container(height: 24, width: 1, color: Colors.grey.shade300),
-                  Row(
-                    children: [
-                      const Icon(Icons.nights_stay_outlined, color: Colors.indigo, size: 20),
-                      const SizedBox(width: 8),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Sunset (Maghrib)', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                          Text(_todayPrayerTimes?['maghribJamaah'] != null ? '${_todayPrayerTimes?['maghribJamaah']} PM' : '--:--', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // Daily Prayer Times Config Card
-          Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Today Timings', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                      TextButton.icon(
-                        icon: const Icon(Icons.edit, size: 14),
-                        label: const Text('Edit Today'),
-                        onPressed: _showSingleDayPrayerDialog,
-                      ),
-                    ],
-                  ),
-                  _prayerRow('Fajr', _todayPrayerTimes?['fajrAdhan'], _todayPrayerTimes?['fajrJamaah']),
-                  const Divider(),
-                  _prayerRow('Dhuhr', _todayPrayerTimes?['dhuhrAdhan'], _todayPrayerTimes?['dhuhrJamaah']),
-                  const Divider(),
-                  _prayerRow('Asr', _todayPrayerTimes?['asrAdhan'], _todayPrayerTimes?['asrJamaah']),
-                  const Divider(),
-                  _prayerRow('Maghrib', _todayPrayerTimes?['maghribAdhan'], _todayPrayerTimes?['maghribJamaah']),
-                  const Divider(),
-                  _prayerRow('Isha', _todayPrayerTimes?['ishaAdhan'], _todayPrayerTimes?['ishaJamaah']),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Special Events Section (Ramadan, Eid, Taraweeh, Tahajjud)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Special Events (Ramadan / Eid)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F432B), foregroundColor: Colors.white),
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('Add Event', style: TextStyle(fontSize: 12)),
-                onPressed: _showAddSpecialEventDialog,
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          if (_specialSchedules.isEmpty)
-            _buildEmptyCard('No Special Events Scheduled Yet (e.g. Ramadan, Eid, Taraweeh)')
-          else
-            ..._specialSchedules.map((s) {
-              return Card(
-                margin: const EdgeInsets.only(bottom: 10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: const Color(0xFF0F432B).withValues(alpha: 0.1),
-                    child: const Icon(Icons.event, color: Color(0xFF0F432B)),
-                  ),
-                  title: Text(s['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('Time: ${s['startTime']} • ${s['startDate']?.toString().split('T')[0] ?? ''}\n${s['notes'] ?? ''}'),
-                  isThreeLine: s['notes'] != null,
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    onPressed: () => _deleteSpecialSchedule(s['id']),
-                  ),
-                ),
-              );
-            }),
+        actions: [
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadMasjidData),
         ],
       ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF0F432B)))
+          : _masjidId == null
+              ? _buildNoMasjidAdminCard()
+              : RefreshIndicator(
+                  onRefresh: _loadMasjidData,
+                  color: const Color(0xFF0F432B),
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      // Prayer Times Section Header
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Today Prayer Timings', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F432B), foregroundColor: Colors.white),
+                            icon: const Icon(Icons.date_range, size: 16),
+                            label: const Text('Set Date Range', style: TextStyle(fontSize: 12)),
+                            onPressed: _showDateRangePrayerDialog,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Solar Times Card
+                      Card(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.wb_sunny_outlined, color: Colors.orange, size: 20),
+                                  const SizedBox(width: 8),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text('Sunrise (Ishraq)', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                      Text(_todayPrayerTimes?['fajrJamaah'] != null ? '06:05 AM' : '--:--', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              Container(height: 24, width: 1, color: Colors.grey.shade300),
+                              Row(
+                                children: [
+                                  const Icon(Icons.nights_stay_outlined, color: Colors.indigo, size: 20),
+                                  const SizedBox(width: 8),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text('Sunset (Maghrib)', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                      Text(_todayPrayerTimes?['maghribJamaah'] != null ? '${_todayPrayerTimes?['maghribJamaah']} PM' : '--:--', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Daily Prayer Times Config Card
+                      Card(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('Tap Jamaah time to edit:', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                  TextButton.icon(
+                                    icon: const Icon(Icons.edit, size: 14),
+                                    label: const Text('Edit All Today'),
+                                    onPressed: _showSingleDayPrayerDialog,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              _prayerRowEditable('fajr', 'Fajr', _todayPrayerTimes?['fajrAdhan'], _todayPrayerTimes?['fajrJamaah']),
+                              const Divider(),
+                              _prayerRowEditable('dhuhr', 'Dhuhr', _todayPrayerTimes?['dhuhrAdhan'], _todayPrayerTimes?['dhuhrJamaah']),
+                              const Divider(),
+                              _prayerRowEditable('asr', 'Asr', _todayPrayerTimes?['asrAdhan'], _todayPrayerTimes?['asrJamaah']),
+                              const Divider(),
+                              _prayerRowEditable('maghrib', 'Maghrib', _todayPrayerTimes?['maghribAdhan'], _todayPrayerTimes?['maghribJamaah']),
+                              const Divider(),
+                              _prayerRowEditable('isha', 'Isha', _todayPrayerTimes?['ishaAdhan'], _todayPrayerTimes?['ishaJamaah']),
+                              const Divider(),
+                              _prayerRowEditable('jummah', 'Jummah', _todayPrayerTimes?['jummahKhutbah'], _todayPrayerTimes?['jummahJamaah']),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Special Events Section (Ramadan, Eid, Taraweeh, Tahajjud)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Special Events (Ramadan / Eid)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F432B), foregroundColor: Colors.white),
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('Add Event', style: TextStyle(fontSize: 12)),
+                            onPressed: _showAddSpecialEventDialog,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+
+                      if (_specialSchedules.isEmpty)
+                        _buildEmptyCard('No Special Events Scheduled Yet (e.g. Ramadan, Eid, Taraweeh)')
+                      else
+                        ..._specialSchedules.map((s) {
+                          if (s is! Map<String, dynamic>) return const SizedBox.shrink();
+                          final notes = s['notes']?.toString();
+                          final title = s['title']?.toString() ?? 'Special Event';
+                          final startTime = s['startTime']?.toString() ?? '';
+                          final startDate = s['startDate']?.toString().split('T').first ?? '';
+
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: const Color(0xFF0F432B).withValues(alpha: 0.1),
+                                child: const Icon(Icons.event, color: Color(0xFF0F432B)),
+                              ),
+                              title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('Time: $startTime • $startDate${notes != null && notes.isNotEmpty ? '\n$notes' : ''}'),
+                              isThreeLine: notes != null && notes.isNotEmpty,
+                              trailing: IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                onPressed: () => _deleteSpecialSchedule(s['id']?.toString() ?? ''),
+                              ),
+                            ),
+                          );
+                        }),
+                    ],
+                  ),
+                ),
     );
   }
 
