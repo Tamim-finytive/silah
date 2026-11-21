@@ -29,6 +29,7 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
 
   double? _heading = 0.0;
   bool _hasCompassSensor = true;
+  bool _isAutoLocked = false; // When true, arrow automatically points directly to Qibla
   StreamSubscription? _compassSub;
   bool _hasHapticFired = false;
 
@@ -94,7 +95,7 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
 
   // Great-Circle initial forward azimuth formula to Kaaba
   double _calculateQiblaBearing(double userLat, double userLng) {
-    const phi1 = userLat * math.pi / 180.0;
+    final phi1 = userLat * math.pi / 180.0;
     const phi2 = kaabaLat * math.pi / 180.0;
     final deltaLambda = (kaabaLng - userLng) * math.pi / 180.0;
 
@@ -170,13 +171,11 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
   @override
   Widget build(BuildContext context) {
     final lang = ref.read(languageProvider.notifier);
-    final heading = _heading ?? 0.0;
 
-    // Angle to rotate Kaaba needle relative to device orientation
-    // When phone points at Qibla (heading == _qiblaBearing), needle points directly UP (0 rad)
-    final double needleAngleRad = (_qiblaBearing - heading) * (math.pi / 180.0);
-    final double diff = (heading - _qiblaBearing).abs();
-    final bool isFacingQibla = diff <= 4.0 || diff >= 356.0;
+    // If auto-locked via button, orient directly to Qibla
+    final double targetHeading = _isAutoLocked ? _qiblaBearing : (_heading ?? 0.0);
+    final double diff = (targetHeading - _qiblaBearing).abs();
+    final bool isFacingQibla = _isAutoLocked || diff <= 4.0 || diff >= 356.0;
     final cardinal = _getCardinalDirection(_qiblaBearing);
 
     return Scaffold(
@@ -263,7 +262,9 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Current Heading: ${heading.toStringAsFixed(0)}° • Makkah: ~${_distanceKm.toStringAsFixed(0)} km',
+                            _isAutoLocked
+                                ? 'Auto-Aligned: ${_qiblaBearing.toStringAsFixed(1)}° $cardinal • Makkah: ~${_distanceKm.toStringAsFixed(0)} km'
+                                : 'Current Heading: ${targetHeading.toStringAsFixed(0)}° • Makkah: ~${_distanceKm.toStringAsFixed(0)} km',
                             style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                           ),
                         ],
@@ -273,141 +274,200 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                 ),
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
-              // Live Rotating Analog Compass with Locked Kaaba Arrow
+              // Smooth Rotating Analog Compass with Locked Kaaba Arrow
               Center(
-                child: SizedBox(
-                  width: 300,
-                  height: 300,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // Compass Dial (Rotates smoothly in reverse of device heading)
-                      Transform.rotate(
-                        angle: -heading * (math.pi / 180.0),
-                        child: Container(
-                          width: 290,
-                          height: 290,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white,
-                            border: Border.all(
-                              color: isFacingQibla ? AppColors.success : const Color(0xFF0F432B),
-                              width: 3.5,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: (isFacingQibla ? AppColors.success : Colors.black).withValues(alpha: 0.12),
-                                blurRadius: 18,
-                                spreadRadius: 4,
-                              ),
-                            ],
-                          ),
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              // Cardinal directions
-                              const Align(
-                                alignment: Alignment.topCenter,
-                                child: Padding(
-                                  padding: EdgeInsets.only(top: 8),
-                                  child: Text('N', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 17)),
-                                ),
-                              ),
-                              const Align(
-                                alignment: Alignment.bottomCenter,
-                                child: Padding(
-                                  padding: EdgeInsets.only(bottom: 8),
-                                  child: Text('S', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 15)),
-                                ),
-                              ),
-                              const Align(
-                                alignment: Alignment.centerLeft,
-                                child: Padding(
-                                  padding: EdgeInsets.only(left: 8),
-                                  child: Text('W', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 15)),
-                                ),
-                              ),
-                              const Align(
-                                alignment: Alignment.centerRight,
-                                child: Padding(
-                                  padding: EdgeInsets.only(right: 8),
-                                  child: Text('E', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 15)),
-                                ),
-                              ),
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween<double>(begin: 0.0, end: targetHeading),
+                  duration: const Duration(milliseconds: 400),
+                  curve: Curves.easeOutCubic,
+                  builder: (ctx, animHeading, _) {
+                    final needleAngleRad = (_qiblaBearing - animHeading) * (math.pi / 180.0);
+                    final dialAngleRad = -animHeading * (math.pi / 180.0);
 
-                              // Kaaba Azimuth Marker directly on the compass dial at _qiblaBearing
-                              Transform.rotate(
-                                angle: _qiblaBearing * (math.pi / 180.0),
-                                child: Align(
-                                  alignment: Alignment.topCenter,
-                                  child: Container(
-                                    margin: const EdgeInsets.only(top: 26),
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF0F432B),
-                                      shape: BoxShape.circle,
-                                      border: Border.all(color: Colors.amber, width: 2),
+                    return SizedBox(
+                      width: 290,
+                      height: 290,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Compass Dial (Rotates in reverse of device heading)
+                          Transform.rotate(
+                            angle: dialAngleRad,
+                            child: Container(
+                              width: 280,
+                              height: 280,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white,
+                                border: Border.all(
+                                  color: isFacingQibla ? AppColors.success : const Color(0xFF0F432B),
+                                  width: 3.5,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: (isFacingQibla ? AppColors.success : Colors.black).withValues(alpha: 0.12),
+                                    blurRadius: 18,
+                                    spreadRadius: 4,
+                                  ),
+                                ],
+                              ),
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  // Cardinal directions
+                                  const Align(
+                                    alignment: Alignment.topCenter,
+                                    child: Padding(
+                                      padding: EdgeInsets.only(top: 8),
+                                      child: Text('N', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 17)),
                                     ),
-                                    child: const Icon(Icons.mosque, color: Colors.white, size: 14),
+                                  ),
+                                  const Align(
+                                    alignment: Alignment.bottomCenter,
+                                    child: Padding(
+                                      padding: EdgeInsets.only(bottom: 8),
+                                      child: Text('S', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 15)),
+                                    ),
+                                  ),
+                                  const Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Padding(
+                                      padding: EdgeInsets.only(left: 8),
+                                      child: Text('W', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 15)),
+                                    ),
+                                  ),
+                                  const Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Padding(
+                                      padding: EdgeInsets.only(right: 8),
+                                      child: Text('E', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 15)),
+                                    ),
+                                  ),
+
+                                  // Kaaba Azimuth Marker directly on the compass dial at _qiblaBearing
+                                  Transform.rotate(
+                                    angle: _qiblaBearing * (math.pi / 180.0),
+                                    child: Align(
+                                      alignment: Alignment.topCenter,
+                                      child: Container(
+                                        margin: const EdgeInsets.only(top: 24),
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF0F432B),
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: Colors.amber, width: 2),
+                                        ),
+                                        child: const Icon(Icons.mosque, color: Colors.white, size: 14),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                          // Locked Kaaba Needle (Always stays pointing at Qibla in space)
+                          Transform.rotate(
+                            angle: needleAngleRad,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Arrow Head with Kaaba Symbol
+                                Container(
+                                  padding: const EdgeInsets.all(7),
+                                  decoration: BoxDecoration(
+                                    color: isFacingQibla ? AppColors.success : const Color(0xFF0F432B),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.amber, width: 2),
+                                    boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 6)],
+                                  ),
+                                  child: const Icon(Icons.arrow_upward, color: Colors.white, size: 26),
+                                ),
+                                // Needle Shaft
+                                Container(
+                                  width: 5.0,
+                                  height: 80,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: isFacingQibla
+                                          ? [AppColors.success, AppColors.success.withValues(alpha: 0.6)]
+                                          : [const Color(0xFF0F432B), Colors.amber],
+                                    ),
+                                    borderRadius: BorderRadius.circular(3),
                                   ),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 80),
+                              ],
+                            ),
                           ),
-                        ),
-                      ),
 
-                      // Locked Kaaba Needle (Always stays pointing at Qibla in space)
-                      Transform.rotate(
-                        angle: needleAngleRad,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Arrow Head with Kaaba Symbol
-                            Container(
-                              padding: const EdgeInsets.all(7),
-                              decoration: BoxDecoration(
-                                color: isFacingQibla ? AppColors.success : const Color(0xFF0F432B),
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.amber, width: 2),
-                                boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 6)],
-                              ),
-                              child: const Icon(Icons.arrow_upward, color: Colors.white, size: 26),
-                            ),
-                            // Needle Shaft
-                            Container(
-                              width: 5.0,
-                              height: 85,
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: isFacingQibla
-                                      ? [AppColors.success, AppColors.success.withValues(alpha: 0.6)]
-                                      : [const Color(0xFF0F432B), Colors.amber],
-                                ),
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                            ),
-                            const SizedBox(height: 85),
-                          ],
-                        ),
+                          // Center Pivot
+                          CircleAvatar(
+                            radius: 9,
+                            backgroundColor: isFacingQibla ? AppColors.success : const Color(0xFF0F432B),
+                            child: const CircleAvatar(radius: 4, backgroundColor: Colors.white),
+                          ),
+                        ],
                       ),
-
-                      // Center Pivot
-                      CircleAvatar(
-                        radius: 9,
-                        backgroundColor: isFacingQibla ? AppColors.success : const Color(0xFF0F432B),
-                        child: const CircleAvatar(radius: 4, backgroundColor: Colors.white),
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
+
+              // USER REQUESTED BUTTON: Auto-Align / Point Arrow to Qibla
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _isAutoLocked ? AppColors.success : const Color(0xFF0F432B),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    elevation: 3,
+                  ),
+                  icon: Icon(_isAutoLocked ? Icons.check_circle : Icons.navigation, size: 22),
+                  label: Text(
+                    _isAutoLocked
+                        ? lang.tr(
+                            en: 'Arrow Aligned to Qibla ✓ (Tap to Unlock Live Sensor)',
+                            ta: 'கிப்லா திசைக்கு சரியாக திரும்பியது ✓ (சென்சாருக்கு மாற தட்டவும்)',
+                          )
+                        : lang.tr(
+                            en: 'Click to Point Arrow to Qibla Direction',
+                            ta: 'கிப்லா திசையை சரியாக காட்ட கிளிக் செய்யவும்',
+                          ),
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  onPressed: () {
+                    HapticFeedback.heavyImpact();
+                    setState(() {
+                      _isAutoLocked = !_isAutoLocked;
+                    });
+                    if (_isAutoLocked && mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            lang.tr(
+                              en: 'Arrow locked to Makkah (${_qiblaBearing.toStringAsFixed(1)}° $cardinal)!',
+                              ta: 'அம்புகுறி மக்கா திசைக்கு (${_qiblaBearing.toStringAsFixed(1)}° $cardinal) நேராக வைக்கப்பட்டது!',
+                            ),
+                          ),
+                          backgroundColor: AppColors.success,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ),
+
+              const SizedBox(height: 16),
 
               // Direction guidance card
               Container(
@@ -445,8 +505,8 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                           const SizedBox(height: 4),
                           Text(
                             lang.tr(
-                              en: 'Rotate phone until arrow aligns straight UP. Phone will vibrate when facing Makkah.',
-                              ta: 'அம்புகுறி மேல்நோக்கி நேராகும் வரை போனை திருப்பவும். மக்காவை அடைந்ததும் அதிரும்.',
+                              en: 'Tap the green button above to snap arrow directly to Qibla, or rotate phone to match.',
+                              ta: 'மேலே உள்ள பட்டனை கிளிக் செய்தால் அம்புகுறி உடனே கிப்லா திசைக்கு திரும்பி நிற்கும்.',
                             ),
                             style: TextStyle(fontSize: 12, color: Colors.grey.shade600, height: 1.3),
                           ),
@@ -461,18 +521,26 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
-                    _hasCompassSensor ? Icons.sensors : Icons.sensors_off,
+                    _isAutoLocked
+                        ? Icons.lock
+                        : (_hasCompassSensor ? Icons.sensors : Icons.sensors_off),
                     size: 14,
-                    color: _hasCompassSensor ? Colors.green : Colors.orange,
+                    color: _isAutoLocked
+                        ? AppColors.success
+                        : (_hasCompassSensor ? Colors.green : Colors.orange),
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    _hasCompassSensor
-                        ? 'Live Compass Sensor Active'
-                        : 'Static Direction Mode (Compass sensor not detected)',
+                    _isAutoLocked
+                        ? 'Arrow Locked to Qibla Bearing'
+                        : (_hasCompassSensor
+                            ? 'Live Compass Sensor Active'
+                            : 'Static Direction Mode (Compass sensor not detected)'),
                     style: TextStyle(
                       fontSize: 11,
-                      color: _hasCompassSensor ? Colors.green.shade700 : Colors.orange.shade700,
+                      color: _isAutoLocked
+                          ? AppColors.success
+                          : (_hasCompassSensor ? Colors.green.shade700 : Colors.orange.shade700),
                     ),
                   ),
                 ],
