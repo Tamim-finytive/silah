@@ -16,6 +16,7 @@ model User {
   avatarUrl         String?            @map("avatar_url") @db.VarChar(500)
   language          Language           @default(en)
   isSuperAdmin      Boolean            @default(false) @map("is_super_admin")
+  isOnboarded       Boolean            @default(false) @map("is_onboarded")
   isActive          Boolean            @default(true) @map("is_active")
   createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -52,6 +53,8 @@ model Masjid {
   photoUrl          String?            @map("photo_url") @db.VarChar(500)
   qrToken           String             @unique @map("qr_token") @db.VarChar(64)
   qrTokenExpiresAt  DateTime?          @map("qr_token_expires_at") @db.Timestamptz(6)
+  approvalStatus    MasjidApprovalStatus @default(PENDING) @map("approval_status")
+  rejectionReason   String?            @map("rejection_reason")
   isActive          Boolean            @default(true) @map("is_active")
   createdBy         String             @map("created_by") @db.Uuid
   createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -286,6 +289,12 @@ model OtpVerification {
 enum Language {
   en
   ta
+}
+
+enum MasjidApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum RoleType {

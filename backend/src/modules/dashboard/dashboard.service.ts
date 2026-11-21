@@ -13,6 +13,8 @@ export class DashboardService {
       totalSandhaPlans,
       paymentsSummary,
       recentMasjids,
+      pendingRequestsCount,
+      pendingRequests,
     ] = await Promise.all([
       this.prisma.masjid.count({ where: { isActive: true } }),
       this.prisma.user.count({ where: { isActive: true } }),
@@ -24,10 +26,19 @@ export class DashboardService {
       }),
       this.prisma.masjid.findMany({
         take: 5,
+        where: { isActive: true },
         orderBy: { createdAt: 'desc' },
         include: {
           _count: { select: { memberships: true, admins: true } },
         },
+      }),
+      this.prisma.masjid.count({ where: { approvalStatus: 'PENDING' } }),
+      this.prisma.masjid.findMany({
+        where: { approvalStatus: 'PENDING' },
+        include: {
+          creator: { select: { id: true, name: true, phone: true } },
+        },
+        orderBy: { createdAt: 'desc' },
       }),
     ]);
 
@@ -39,8 +50,10 @@ export class DashboardService {
         totalSandhaPlans,
         totalSandhaCollected: paymentsSummary._sum.amount || 0,
         totalTransactions: paymentsSummary._count.id,
+        pendingRequestsCount,
       },
       recentMasjids,
+      pendingRequests,
     };
   }
 

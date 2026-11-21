@@ -30,6 +30,7 @@ export class AuthService {
     if (user) {
       return {
         exists: true,
+        isOnboarded: user.isOnboarded,
         isSuperAdmin: user.isSuperAdmin || isMasterSuperAdmin,
         name: user.name,
         hasMasjid: user.memberships.length > 0,
@@ -38,6 +39,7 @@ export class AuthService {
 
     return {
       exists: false,
+      isOnboarded: false,
       isSuperAdmin: isMasterSuperAdmin,
     };
   }
@@ -86,6 +88,7 @@ export class AuthService {
         name: user.name,
         age: user.age,
         address: user.address,
+        isOnboarded: user.isOnboarded,
         isSuperAdmin: user.isSuperAdmin,
         hasMasjid: user.memberships.length > 0,
         primaryMasjidId: user.memberships.find((m) => m.isPrimary)?.masjidId ?? user.memberships[0]?.masjidId,
@@ -109,6 +112,7 @@ export class AuthService {
         name: dto.name,
         age: dto.age,
         address: dto.address,
+        isOnboarded: true,
         isActive: true,
       },
       create: {
@@ -116,6 +120,7 @@ export class AuthService {
         name: dto.name,
         age: dto.age,
         address: dto.address,
+        isOnboarded: true,
         isSuperAdmin: isMasterSuperAdmin,
         isActive: true,
       },
@@ -135,6 +140,7 @@ export class AuthService {
         name: user.name,
         age: user.age,
         address: user.address,
+        isOnboarded: user.isOnboarded,
         isSuperAdmin: user.isSuperAdmin,
         hasMasjid: user.memberships.length > 0,
         adminRoles: user.masjidAdmins.map((ma) => ({
@@ -230,6 +236,7 @@ export class AuthService {
         phone: user.phone,
         name: user.name,
         language: user.language,
+        isOnboarded: user.isOnboarded,
         isSuperAdmin: user.isSuperAdmin,
         hasMasjid: user.memberships.length > 0,
         adminRoles: user.masjidAdmins.map((ma) => ({
@@ -272,7 +279,7 @@ export class AuthService {
       }),
       this.jwtService.signAsync(payload, {
         secret: process.env.JWT_REFRESH_SECRET || 'masjid_super_secret_jwt_refresh_key_2026',
-        expiresIn: '30d',
+        expiresIn: '120d', // 120 days persistent session
       }),
     ]);
 
@@ -280,6 +287,7 @@ export class AuthService {
       accessToken,
       refreshToken,
       expiresIn: 900, // 15 mins in seconds
+      refreshExpiresIn: 10368000, // 120 days in seconds
     };
   }
 

@@ -21,6 +21,30 @@ export class MasjidsController {
     return this.masjidsService.findAll({ city, search });
   }
 
+  @Get('requests/pending')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Super Admin: List pending masjid creation requests' })
+  async getPendingRequests() {
+    return this.masjidsService.getPendingRequests();
+  }
+
+  @Post('requests/:id/approve')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Super Admin: Approve a pending masjid request' })
+  async approveRequest(@Param('id') id: string) {
+    return this.masjidsService.approveRequest(id);
+  }
+
+  @Post('requests/:id/reject')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Super Admin: Reject a pending masjid request' })
+  async rejectRequest(@Param('id') id: string, @Body('reason') reason?: string) {
+    return this.masjidsService.rejectRequest(id, reason);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get masjid details by ID' })
   async getMasjid(@Param('id') id: string) {
