@@ -90,7 +90,11 @@ class ApiService {
         try {
           final profile = await getProfile();
           if (profile != null) {
-            currentUser = profile;
+            currentUser = {
+              ...?currentUser,
+              ...profile,
+              'isOnboarded': profile['isOnboarded'] ?? currentUser?['isOnboarded'] ?? true,
+            };
             await _storage.write(key: _userKey, value: jsonEncode(currentUser));
           }
         } catch (_) {}

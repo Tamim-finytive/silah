@@ -2,8 +2,9 @@ import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/commo
 import { PrismaClient } from '@prisma/client';
 
 const SUPABASE_DB_URL =
+  process.env.DIRECT_URL ||
   process.env.DATABASE_URL ||
-  'postgresql://postgres.eojasudtbpgwwtivcvbs:Tickora%401234@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true';
+  'postgresql://postgres.eojasudtbpgwwtivcvbs:Tickora%401234@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {

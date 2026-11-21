@@ -56,7 +56,8 @@ class _AppStartupGateState extends State<AppStartupGate> {
       }
 
       // 2. Incomplete onboarding route
-      final isOnboarded = user['isOnboarded'] == true;
+      final isOnboarded = user['isOnboarded'] == true ||
+          (user['name'] != null && user['name'].toString().trim().isNotEmpty && user['name'].toString().trim() != 'User');
       if (!isOnboarded) {
         Navigator.pushReplacement(
           context,
