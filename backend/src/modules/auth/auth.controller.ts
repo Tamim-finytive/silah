@@ -81,14 +81,14 @@ export class AuthController {
       isSuperAdmin: user.isSuperAdmin,
       adminRoles: user.masjidAdmins?.map((ma: any) => ({
         masjidId: ma.masjidId,
-        masjidName: ma.masjid.name,
-        masjidNameTa: ma.masjid.nameTa,
-        role: ma.role.name,
+        masjidName: ma.masjid?.name,
+        masjidNameTa: ma.masjid?.nameTa,
+        role: ma.role?.name,
       })) || [],
       memberships: user.memberships?.map((m: any) => ({
         masjidId: m.masjidId,
-        masjidName: m.masjid.name,
-        masjidNameTa: m.masjid.nameTa,
+        masjidName: m.masjid?.name,
+        masjidNameTa: m.masjid?.nameTa,
         isPrimary: m.isPrimary,
       })) || [],
     };

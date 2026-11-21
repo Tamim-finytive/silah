@@ -227,9 +227,12 @@ class ApiService {
     return null;
   }
 
-  Future<List<dynamic>> getMasjids() async {
+  Future<List<dynamic>> getMasjids({String? search}) async {
     try {
-      final res = await _dio.get('/masjids');
+      final res = await _dio.get(
+        '/masjids',
+        queryParameters: search != null && search.trim().isNotEmpty ? {'search': search.trim()} : null,
+      );
       if (res.data['success'] == true) {
         return res.data['data'] as List<dynamic>;
       }
@@ -242,7 +245,7 @@ class ApiService {
   Future<Map<String, dynamic>?> getTodayPrayerTimes(String masjidId) async {
     try {
       final res = await _dio.get('/masjids/$masjidId/prayer-times/today');
-      if (res.data['success'] == true) {
+      if (res.data['success'] == true && res.data['data'] != null) {
         return res.data['data'] as Map<String, dynamic>;
       }
     } catch (e) {

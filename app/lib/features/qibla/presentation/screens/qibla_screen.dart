@@ -179,8 +179,9 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
         onTimeout: () => CompassEvent.fromList([_heading ?? 0.0, 0.0, 0.0]),
       );
 
-      if (event != null && event.heading != null) {
-        final normalized = (event.heading! % 360.0 + 360.0) % 360.0;
+      final rawHeading = event?.heading;
+      if (rawHeading != null) {
+        final normalized = (rawHeading % 360.0 + 360.0) % 360.0;
         setState(() {
           _heading = normalized;
           _hasCompassSensor = true;

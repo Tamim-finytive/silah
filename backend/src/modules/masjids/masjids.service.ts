@@ -11,7 +11,6 @@ export class MasjidsService {
   async findAll(query?: { city?: string; search?: string }) {
     const where: any = {
       isActive: true,
-      approvalStatus: MasjidApprovalStatus.APPROVED,
     };
     if (query?.city) {
       where.city = { contains: query.city, mode: 'insensitive' };
@@ -30,7 +29,7 @@ export class MasjidsService {
   }
 
   async findById(id: string) {
-    const masjid = await this.prisma.masjid.findUnique({
+    let masjid = await this.prisma.masjid.findUnique({
       where: { id },
       include: {
         admins: {
@@ -43,6 +42,22 @@ export class MasjidsService {
     });
     if (!masjid) {
       throw new NotFoundException('Masjid not found');
+    }
+    // Auto-generate qrToken if missing
+    if (!masjid.qrToken) {
+      const generated = randomBytes(16).toString('hex');
+      masjid = await this.prisma.masjid.update({
+        where: { id },
+        data: { qrToken: generated },
+        include: {
+          admins: {
+            include: {
+              user: { select: { id: true, name: true, phone: true } },
+              role: true,
+            },
+          },
+        },
+      });
     }
     return masjid;
   }

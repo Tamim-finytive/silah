@@ -1521,12 +1521,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     const SizedBox(height: 14),
                     ElevatedButton.icon(
                       onPressed: () {
+                        final currentMasjid = ref.read(prayerTimesProvider).activeMasjid;
                         Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (_) => isSuperAdmin
                                 ? const SuperAdminDashboardScreen()
-                                : const AdminDashboardScreen(),
+                                : AdminDashboardScreen(
+                                    masjidId: currentMasjid?['id'],
+                                    masjidName: currentMasjid?['name'],
+                                  ),
                           ),
                         ).then((_) => setState(() {}));
                       },
@@ -1612,13 +1616,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               onTap: () {
+                final currentMasjid = ref.read(prayerTimesProvider).activeMasjid;
                 Navigator.pop(context);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (_) => isSuperAdmin
                         ? const SuperAdminDashboardScreen()
-                        : const AdminDashboardScreen(),
+                        : AdminDashboardScreen(
+                            masjidId: currentMasjid?['id'],
+                            masjidName: currentMasjid?['name'],
+                          ),
                   ),
                 ).then((_) => setState(() {}));
               },

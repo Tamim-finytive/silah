@@ -30,7 +30,7 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen> with 
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _scannerController = MobileScannerController();
-    _loadMasjids();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadMasjids());
   }
 
   @override
@@ -42,7 +42,6 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen> with 
   }
 
   Future<void> _loadMasjids() async {
-    setState(() => _isLoading = true);
     final masjids = await ApiService.instance.getMasjids();
     if (mounted) {
       setState(() {
@@ -53,20 +52,28 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen> with 
     }
   }
 
-  void _onSearchChanged(String query) {
-    if (query.isEmpty) {
+  Future<void> _onSearchChanged(String query) async {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) {
       setState(() => _filteredMasjids = _allMasjids);
       return;
     }
-    final q = query.toLowerCase();
-    setState(() {
-      _filteredMasjids = _allMasjids.where((m) {
-        final name = (m['name'] ?? '').toString().toLowerCase();
-        final nameTa = (m['nameTa'] ?? '').toString().toLowerCase();
-        final city = (m['city'] ?? '').toString().toLowerCase();
-        return name.contains(q) || nameTa.contains(q) || city.contains(q);
-      }).toList();
-    });
+    final localMatches = _allMasjids.where((m) {
+      final name = (m['name'] ?? '').toString().toLowerCase();
+      final nameTa = (m['nameTa'] ?? '').toString().toLowerCase();
+      final city = (m['city'] ?? '').toString().toLowerCase();
+      return name.contains(q) || nameTa.contains(q) || city.contains(q);
+    }).toList();
+
+    setState(() => _filteredMasjids = localMatches);
+
+    // Query backend if local is empty or to get fresh results
+    try {
+      final serverMatches = await ApiService.instance.getMasjids(search: q);
+      if (mounted && _searchCtrl.text.trim().toLowerCase() == q) {
+        setState(() => _filteredMasjids = serverMatches.isNotEmpty ? serverMatches : localMatches);
+      }
+    } catch (_) {}
   }
 
   Future<void> _handleJoinMasjid(String masjidId, String masjidName) async {
