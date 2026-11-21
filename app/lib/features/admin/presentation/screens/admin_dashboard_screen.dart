@@ -3,6 +3,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:masjid_namaz_app/core/network/api_service.dart';
 import 'package:masjid_namaz_app/features/prayer_times/presentation/screens/home_screen.dart';
 import 'package:masjid_namaz_app/features/auth/presentation/screens/otp_login_screen.dart';
+import 'package:masjid_namaz_app/features/masjid/presentation/widgets/location_input_widget.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -229,10 +230,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final addrCtrl = TextEditingController();
     final latCtrl = TextEditingController();
     final lngCtrl = TextEditingController();
+    final mapUrlCtrl = TextEditingController();
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: const Text('Register New Masjid'),
         content: SingleChildScrollView(
           child: Column(
@@ -242,8 +246,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               TextField(controller: nameTaCtrl, decoration: const InputDecoration(labelText: 'Tamil Name (Optional)')),
               TextField(controller: cityCtrl, decoration: const InputDecoration(labelText: 'City *')),
               TextField(controller: addrCtrl, decoration: const InputDecoration(labelText: 'Address *')),
-              TextField(controller: latCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Latitude')),
-              TextField(controller: lngCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Longitude')),
+              const SizedBox(height: 12),
+              LocationInputWidget(
+                latController: latCtrl,
+                lngController: lngCtrl,
+                mapUrlController: mapUrlCtrl,
+                masjidNameController: nameCtrl,
+                cityController: cityCtrl,
+              ),
             ],
           ),
         ),
@@ -265,6 +275,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   nameTa: nameTaCtrl.text.trim().isEmpty ? null : nameTaCtrl.text.trim(),
                   latitude: double.tryParse(latCtrl.text),
                   longitude: double.tryParse(lngCtrl.text),
+                  mapUrl: mapUrlCtrl.text.trim().isEmpty ? null : mapUrlCtrl.text.trim(),
                 );
                 // Refresh profile to immediately obtain admin roles and masjid assignment
                 try {

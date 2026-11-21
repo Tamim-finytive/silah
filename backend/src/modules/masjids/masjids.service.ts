@@ -115,8 +115,24 @@ export class MasjidsService {
 
     const { adminName, adminPhone, ...masjidPayload } = dto;
 
+    // Auto-extract lat/lng from mapUrl if not manually provided
+    let latitude = dto.latitude;
+    let longitude = dto.longitude;
+    if ((latitude == null || longitude == null) && dto.mapUrl) {
+      const atMatch = dto.mapUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+      const qMatch = dto.mapUrl.match(/(?:q|query|ll)=(-?\d+\.\d+)(?:%2C|,)(-?\d+\.\d+)/);
+      const genMatch = dto.mapUrl.match(/(-?\d{1,2}\.\d{3,10})\s*,\s*(-?\d{1,3}\.\d{3,10})/);
+      const match = atMatch || qMatch || genMatch;
+      if (match) {
+        latitude = parseFloat(match[1]);
+        longitude = parseFloat(match[2]);
+      }
+    }
+
     const masjidData: any = {
       ...masjidPayload,
+      ...(latitude != null ? { latitude } : {}),
+      ...(longitude != null ? { longitude } : {}),
       qrToken,
       approvalStatus,
       isActive,

@@ -42,6 +42,11 @@ export class CreateMasjidDto {
   @IsString()
   phone?: string;
 
+  @ApiPropertyOptional({ example: 'https://maps.app.goo.gl/xyz' })
+  @IsOptional()
+  @IsString()
+  mapUrl?: string;
+
   @ApiPropertyOptional({ example: 'Ahmed' })
   @IsOptional()
   @IsString()
@@ -93,6 +98,11 @@ export class UpdateMasjidDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @ApiPropertyOptional({ example: 'https://maps.app.goo.gl/xyz' })
+  @IsOptional()
+  @IsString()
+  mapUrl?: string;
 
   @ApiPropertyOptional({ example: 'Ahmed' })
   @IsOptional()

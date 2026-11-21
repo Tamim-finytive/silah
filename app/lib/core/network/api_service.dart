@@ -240,6 +240,7 @@ class ApiService {
     String? nameTa,
     double? latitude,
     double? longitude,
+    String? mapUrl,
     String? adminName,
     String? adminPhone,
   }) async {
@@ -250,6 +251,7 @@ class ApiService {
       if (nameTa != null && nameTa.isNotEmpty) 'nameTa': nameTa,
       if (latitude != null) 'latitude': latitude,
       if (longitude != null) 'longitude': longitude,
+      if (mapUrl != null && mapUrl.isNotEmpty) 'mapUrl': mapUrl,
       if (adminName != null && adminName.isNotEmpty) 'adminName': adminName,
       if (adminPhone != null && adminPhone.isNotEmpty) 'adminPhone': adminPhone,
     });

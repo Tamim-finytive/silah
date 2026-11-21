@@ -902,8 +902,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final name = masjid?['name'] ?? 'Masjid';
     final city = masjid?['city'] ?? '';
 
+    final mapUrl = masjid?['mapUrl'];
+
     Uri url;
-    if (lat != null && lng != null) {
+    if (mapUrl != null && mapUrl.toString().trim().isNotEmpty) {
+      url = Uri.parse(mapUrl.toString().trim());
+    } else if (lat != null && lng != null) {
       url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
     } else {
       url = Uri.parse('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent('$name $city')}');

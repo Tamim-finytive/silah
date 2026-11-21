@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:masjid_namaz_app/core/constants/app_colors.dart';
 import 'package:masjid_namaz_app/core/constants/app_spacing.dart';
 import 'package:masjid_namaz_app/core/network/api_service.dart';
@@ -8,6 +7,7 @@ import 'package:masjid_namaz_app/core/services/notification_service.dart';
 import 'package:masjid_namaz_app/core/l10n/language_provider.dart';
 import 'package:masjid_namaz_app/features/prayer_times/presentation/screens/home_screen.dart';
 import 'package:masjid_namaz_app/features/admin/presentation/screens/admin_dashboard_screen.dart';
+import 'package:masjid_namaz_app/features/masjid/presentation/widgets/location_input_widget.dart';
 
 enum UserRoleChoice {
   regularUser,
@@ -46,7 +46,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final _masjidAddressController = TextEditingController();
   final _latController = TextEditingController();
   final _lngController = TextEditingController();
-  bool _isFetchingLocation = false;
+  final _mapUrlController = TextEditingController();
 
   @override
   void initState() {
@@ -78,72 +78,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     _masjidAddressController.dispose();
     _latController.dispose();
     _lngController.dispose();
+    _mapUrlController.dispose();
     super.dispose();
-  }
-
-  Future<void> _fetchCurrentLocation() async {
-    setState(() {
-      _isFetchingLocation = true;
-      _errorMessage = null;
-    });
-
-    try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        setState(() {
-          _isFetchingLocation = false;
-          _errorMessage = 'Location services are disabled. Please enable GPS.';
-        });
-        return;
-      }
-
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          setState(() {
-            _isFetchingLocation = false;
-            _errorMessage = 'Location permissions are denied.';
-          });
-          return;
-        }
-      }
-
-      if (permission == LocationPermission.deniedForever) {
-        setState(() {
-          _isFetchingLocation = false;
-          _errorMessage = 'Location permissions permanently denied. Enter coordinates manually.';
-        });
-        return;
-      }
-
-      final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 10),
-      );
-
-      setState(() {
-        _latController.text = position.latitude.toStringAsFixed(6);
-        _lngController.text = position.longitude.toStringAsFixed(6);
-        _isFetchingLocation = false;
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            backgroundColor: Colors.green,
-            content: Text('GPS coordinates captured successfully!'),
-          ),
-        );
-      }
-    } catch (e) {
-      setState(() {
-        _isFetchingLocation = false;
-        // Fallback default coordinates (Chennai)
-        _latController.text = '13.0827';
-        _lngController.text = '80.2707';
-      });
-    }
   }
 
   Future<void> _handleStep1Next() async {
@@ -252,6 +188,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         nameTa: _masjidNameTaController.text.trim(),
         latitude: lat,
         longitude: lng,
+        mapUrl: _mapUrlController.text.trim().isEmpty ? null : _mapUrlController.text.trim(),
         adminName: name,
         adminPhone: widget.phone,
       );
@@ -759,75 +696,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           ),
           const SizedBox(height: 18),
 
-          // GPS Coordinates Box
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade300),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'GPS Location Coordinates',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: _isFetchingLocation ? null : _fetchCurrentLocation,
-                      icon: _isFetchingLocation
-                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.my_location, size: 16),
-                      label: const Text('Use Current GPS', style: TextStyle(fontSize: 12)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.secondary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _latController,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: InputDecoration(
-                          labelText: 'Latitude',
-                          hintText: '13.0604',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: _lngController,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: InputDecoration(
-                          labelText: 'Longitude',
-                          hintText: '80.2496',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Note: Duplicate entries matching the same location or name will be rejected.',
-                  style: TextStyle(fontSize: 11, color: Colors.grey),
-                ),
-              ],
-            ),
+          // Location: Google Maps Link or Manual Lat & Lng
+          LocationInputWidget(
+            latController: _latController,
+            lngController: _lngController,
+            mapUrlController: _mapUrlController,
+            masjidNameController: _masjidNameController,
+            cityController: _masjidCityController,
           ),
           const SizedBox(height: 24),
 

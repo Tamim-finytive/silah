@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:masjid_namaz_app/core/network/api_service.dart';
 import 'package:masjid_namaz_app/features/prayer_times/presentation/screens/home_screen.dart';
 import 'package:masjid_namaz_app/features/auth/presentation/screens/otp_login_screen.dart';
+import 'package:masjid_namaz_app/features/masjid/presentation/widgets/location_input_widget.dart';
 
 class SuperAdminDashboardScreen extends StatefulWidget {
   const SuperAdminDashboardScreen({super.key});
@@ -140,12 +141,15 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     final addrCtrl = TextEditingController();
     final latCtrl = TextEditingController();
     final lngCtrl = TextEditingController();
+    final mapUrlCtrl = TextEditingController();
     final adminNameCtrl = TextEditingController();
     final adminPhoneCtrl = TextEditingController();
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: const Text('Create New Masjid (Super Admin)'),
         content: SingleChildScrollView(
           child: Column(
@@ -156,8 +160,14 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
               TextField(controller: nameTaCtrl, decoration: const InputDecoration(labelText: 'Tamil Name (Optional)')),
               TextField(controller: cityCtrl, decoration: const InputDecoration(labelText: 'City *')),
               TextField(controller: addrCtrl, decoration: const InputDecoration(labelText: 'Address *')),
-              TextField(controller: latCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Latitude')),
-              TextField(controller: lngCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Longitude')),
+              const SizedBox(height: 12),
+              LocationInputWidget(
+                latController: latCtrl,
+                lngController: lngCtrl,
+                mapUrlController: mapUrlCtrl,
+                masjidNameController: nameCtrl,
+                cityController: cityCtrl,
+              ),
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(10),
@@ -201,6 +211,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                   nameTa: nameTaCtrl.text.trim().isEmpty ? null : nameTaCtrl.text.trim(),
                   latitude: double.tryParse(latCtrl.text),
                   longitude: double.tryParse(lngCtrl.text),
+                  mapUrl: mapUrlCtrl.text.trim().isEmpty ? null : mapUrlCtrl.text.trim(),
                   adminName: adminNameCtrl.text.trim().isEmpty ? null : adminNameCtrl.text.trim(),
                   adminPhone: adminPhoneCtrl.text.trim().isEmpty ? null : adminPhoneCtrl.text.trim(),
                 );

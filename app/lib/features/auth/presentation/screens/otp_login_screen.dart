@@ -57,8 +57,9 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
       final checkRes = await ApiService.instance.checkUser(phone);
       final exists = checkRes['exists'] == true;
       final isOnboarded = checkRes['isOnboarded'] == true;
+      final isMasjidAdmin = checkRes['isMasjidAdmin'] == true;
 
-      if (exists && isOnboarded) {
+      if (exists && (isOnboarded || isMasjidAdmin)) {
         // Existing onboarded user -> Login directly with 120-day database session
         await ApiService.instance.loginDirect(phone);
         try {
