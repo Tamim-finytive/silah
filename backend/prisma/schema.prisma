@@ -5,8 +5,8 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = "postgresql://postgres.eojasudtbpgwwtivcvbs:Tickora%401234@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
-  directUrl = "postgresql://postgres.eojasudtbpgwwtivcvbs:Tickora%401234@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -51,6 +51,7 @@ model Masjid {
   country           String             @default("India") @db.VarChar(100)
   phone             String?            @db.VarChar(20)
   photoUrl          String?            @map("photo_url") @db.VarChar(500)
+  mapUrl            String?            @map("map_url") @db.VarChar(500)
   qrToken           String             @unique @map("qr_token") @db.VarChar(64)
   qrTokenExpiresAt  DateTime?          @map("qr_token_expires_at") @db.Timestamptz(6)
   approvalStatus    MasjidApprovalStatus @default(PENDING) @map("approval_status")

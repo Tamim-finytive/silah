@@ -410,9 +410,10 @@ export class MasjidsService {
     if (!masjid) {
       throw new NotFoundException('Masjid not found');
     }
+    const { adminName, adminPhone, ...updatePayload } = dto;
     return this.prisma.masjid.update({
       where: { id },
-      data: dto as any,
+      data: updatePayload as any,
     });
   }
 
