@@ -57,7 +57,14 @@ class ApiService {
 
   Future<Map<String, dynamic>> checkUser(String phone) async {
     final res = await _dio.post('/auth/check-user', data: {'phone': phone});
-    return res.data;
+    if (res.data is Map<String, dynamic>) {
+      final map = res.data as Map<String, dynamic>;
+      if (map['data'] is Map<String, dynamic>) {
+        return map['data'] as Map<String, dynamic>;
+      }
+      return map;
+    }
+    return {};
   }
 
   Future<void> _saveSession(Map<String, dynamic> data) async {

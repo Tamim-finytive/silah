@@ -60,7 +60,7 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
       final isMasjidAdmin = checkRes['isMasjidAdmin'] == true;
 
       if (exists && (isOnboarded || isMasjidAdmin)) {
-        // Existing onboarded user -> Login directly with 120-day database session
+        // Existing onboarded user or masjid admin -> Login directly with 120-day database session
         await ApiService.instance.loginDirect(phone);
         try {
           await ApiService.instance.getProfile();
@@ -77,7 +77,7 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
             context,
             MaterialPageRoute(builder: (_) => const SuperAdminDashboardScreen()),
           );
-        } else if (ApiService.instance.isMasjidAdmin) {
+        } else if (ApiService.instance.isMasjidAdmin || isMasjidAdmin) {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
