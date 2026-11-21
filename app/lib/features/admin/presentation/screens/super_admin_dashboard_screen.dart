@@ -140,6 +140,8 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     final addrCtrl = TextEditingController();
     final latCtrl = TextEditingController();
     final lngCtrl = TextEditingController();
+    final adminNameCtrl = TextEditingController();
+    final adminPhoneCtrl = TextEditingController();
 
     showDialog(
       context: context,
@@ -148,6 +150,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Masjid Name *')),
               TextField(controller: nameTaCtrl, decoration: const InputDecoration(labelText: 'Tamil Name (Optional)')),
@@ -155,6 +158,28 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
               TextField(controller: addrCtrl, decoration: const InputDecoration(labelText: 'Address *')),
               TextField(controller: latCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Latitude')),
               TextField(controller: lngCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Longitude')),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F432B).withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Assign Masjid Administrator', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F432B))),
+                    const SizedBox(height: 4),
+                    const Text('This admin will be registered and can directly login to manage this masjid.', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                    TextField(controller: adminNameCtrl, decoration: const InputDecoration(labelText: 'Admin Name (e.g. Ahmed)')),
+                    TextField(
+                      controller: adminPhoneCtrl,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(labelText: 'Admin Mobile Number (10 digits) *', hintText: '9876543210'),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -176,8 +201,10 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                   nameTa: nameTaCtrl.text.trim().isEmpty ? null : nameTaCtrl.text.trim(),
                   latitude: double.tryParse(latCtrl.text),
                   longitude: double.tryParse(lngCtrl.text),
+                  adminName: adminNameCtrl.text.trim().isEmpty ? null : adminNameCtrl.text.trim(),
+                  adminPhone: adminPhoneCtrl.text.trim().isEmpty ? null : adminPhoneCtrl.text.trim(),
                 );
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Masjid created successfully!')));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Masjid and Admin created successfully!')));
                 _loadAllData();
               } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));

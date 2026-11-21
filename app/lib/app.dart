@@ -55,24 +55,24 @@ class _AppStartupGateState extends State<AppStartupGate> {
         return;
       }
 
-      // 2. Incomplete onboarding route
-      final isOnboarded = user['isOnboarded'] == true ||
-          (user['name'] != null && user['name'].toString().trim().isNotEmpty && user['name'].toString().trim() != 'User');
-      if (!isOnboarded) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => OnboardingScreen(phone: phone)),
-        );
-        return;
-      }
-
-      // 3. Check if user is Masjid Admin
+      // 2. Check if user is Masjid Admin
       final adminRoles = user['adminRoles'] as List<dynamic>?;
       if (adminRoles != null && adminRoles.isNotEmpty) {
         NotificationService.instance.configureAfterLogin();
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+        );
+        return;
+      }
+
+      // 3. Incomplete onboarding route
+      final isOnboarded = user['isOnboarded'] == true ||
+          (user['name'] != null && user['name'].toString().trim().isNotEmpty && user['name'].toString().trim() != 'User');
+      if (!isOnboarded) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => OnboardingScreen(phone: phone)),
         );
         return;
       }

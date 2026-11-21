@@ -187,16 +187,32 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   style: TextStyle(color: Colors.grey, fontSize: 13, height: 1.4),
                 ),
                 const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0F432B),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Register / Create Masjid', style: TextStyle(fontWeight: FontWeight.bold)),
-                  onPressed: _showCreateMasjidDialog,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF0F432B),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text('Refresh'),
+                      onPressed: _loadMasjidData,
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F432B),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Register Masjid', style: TextStyle(fontWeight: FontWeight.bold)),
+                      onPressed: _showCreateMasjidDialog,
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -250,10 +266,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   latitude: double.tryParse(latCtrl.text),
                   longitude: double.tryParse(lngCtrl.text),
                 );
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Masjid created successfully!')));
-                _loadMasjidData();
+                // Refresh profile to immediately obtain admin roles and masjid assignment
+                try {
+                  await ApiService.instance.getProfile();
+                } catch (_) {}
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Masjid created successfully!')));
+                }
+                await _loadMasjidData();
               } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+                }
               }
             },
             child: const Text('Create'),
@@ -320,7 +344,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         backgroundColor: const Color(0xFF0F432B),
         foregroundColor: Colors.white,
       ),
-      body: ListView(
+      body: _masjidId == null
+          ? _buildNoMasjidAdminCard()
+          : ListView(
         padding: const EdgeInsets.all(16),
         children: [
           // Prayer Times Section Header
@@ -660,58 +686,62 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         backgroundColor: const Color(0xFF0F432B),
         foregroundColor: Colors.white,
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: const Color(0xFF0F432B),
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add_alert),
-        label: const Text('New Notice'),
-        onPressed: _showCreateNoticeDialog,
-      ),
-      body: _announcements.isEmpty
-          ? _buildEmptyCard('No Announcements Published for this Masjid Yet')
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _announcements.length,
-              itemBuilder: (ctx, i) {
-                final a = _announcements[i];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      floatingActionButton: _masjidId == null
+          ? null
+          : FloatingActionButton.extended(
+              backgroundColor: const Color(0xFF0F432B),
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add_alert),
+              label: const Text('New Notice'),
+              onPressed: _showCreateNoticeDialog,
+            ),
+      body: _masjidId == null
+          ? _buildNoMasjidAdminCard()
+          : _announcements.isEmpty
+              ? _buildEmptyCard('No Announcements Published for this Masjid Yet')
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _announcements.length,
+                  itemBuilder: (ctx, i) {
+                    final a = _announcements[i];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: Text(a['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(a['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                                  onPressed: () => _deleteNotice(a['id']),
+                                ),
+                              ],
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                              onPressed: () => _deleteNotice(a['id']),
+                            if (a['titleTa'] != null) Text(a['titleTa'], style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                            const SizedBox(height: 8),
+                            Text(a['body'] ?? ''),
+                            if (a['bodyTa'] != null) ...[
+                              const SizedBox(height: 4),
+                              Text(a['bodyTa'], style: const TextStyle(color: Colors.black87, fontSize: 13)),
+                            ],
+                            const SizedBox(height: 8),
+                            Text(
+                              'Sent to all connected musallis • ${a['publishedAt']?.toString().split('T')[0] ?? ''}',
+                              style: const TextStyle(color: Colors.grey, fontSize: 11),
                             ),
                           ],
                         ),
-                        if (a['titleTa'] != null) Text(a['titleTa'], style: const TextStyle(color: Colors.grey, fontSize: 13)),
-                        const SizedBox(height: 8),
-                        Text(a['body'] ?? ''),
-                        if (a['bodyTa'] != null) ...[
-                          const SizedBox(height: 4),
-                          Text(a['bodyTa'], style: const TextStyle(color: Colors.black87, fontSize: 13)),
-                        ],
-                        const SizedBox(height: 8),
-                        Text(
-                          'Sent to all connected musallis • ${a['publishedAt']?.toString().split('T')[0] ?? ''}',
-                          style: const TextStyle(color: Colors.grey, fontSize: 11),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
+                      ),
+                    );
+                  },
+                ),
     );
   }
 
@@ -797,14 +827,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: const Color(0xFF0F432B),
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.person_add),
-        label: const Text('Add Member'),
-        onPressed: _showAddMemberDialog,
-      ),
-      body: ListView(
+      floatingActionButton: _masjidId == null
+          ? null
+          : FloatingActionButton.extended(
+              backgroundColor: const Color(0xFF0F432B),
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.person_add),
+              label: const Text('Add Member'),
+              onPressed: _showAddMemberDialog,
+            ),
+      body: _masjidId == null
+          ? _buildNoMasjidAdminCard()
+          : ListView(
         padding: const EdgeInsets.all(16),
         children: [
           // Invite Members via QR Banner Card

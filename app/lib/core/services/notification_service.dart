@@ -112,4 +112,37 @@ class NotificationService {
     }
     return null;
   }
+
+  /// Trigger immediate prayer alarm and alert notification on device
+  Future<void> triggerPrayerAlarm({required String prayerName, required String time}) async {
+    await initialize();
+
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'silah_adhan_alarm',
+      'Prayer Alarms & Adhan Alerts',
+      channelDescription: 'Audible prayer alarms and reminders for Adhan and Jamaah',
+      importance: Importance.max,
+      priority: Priority.high,
+      playSound: true,
+      enableVibration: true,
+      fullScreenIntent: true,
+    );
+
+    const NotificationDetails details = NotificationDetails(
+      android: androidDetails,
+      iOS: DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+        interruptionLevel: InterruptionLevel.timeSensitive,
+      ),
+    );
+
+    await _localNotifications.show(
+      DateTime.now().millisecond,
+      '🕌 $prayerName Adhan Alarm',
+      'It is time for $prayerName prayer ($time). Prepare for congregation at your Masjid!',
+      details,
+    );
+  }
 }

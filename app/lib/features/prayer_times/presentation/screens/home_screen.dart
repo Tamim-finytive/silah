@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:masjid_namaz_app/core/network/api_service.dart';
+import 'package:masjid_namaz_app/core/services/notification_service.dart';
 import 'package:masjid_namaz_app/features/prayer_times/data/prayer_times_provider.dart';
 import 'package:masjid_namaz_app/features/qibla/presentation/screens/qibla_screen.dart';
 import 'package:masjid_namaz_app/features/masjid/presentation/screens/connect_masjid_screen.dart';
@@ -202,7 +204,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 const SizedBox(height: 20),
               ] else ...[
                 // Hero "UP NEXT" Prayer Card
-                if (nextPrayer != null) _buildHeroUpNextCard(nextPrayer),
+                if (nextPrayer != null) _buildHeroUpNextCard(nextPrayer, activeMasjid),
                 const SizedBox(height: 20),
 
                 // Today's Timetable Table (strictly from backend / maintained state)
@@ -577,8 +579,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // 3. Hero "UP NEXT" Prayer Card
-  Widget _buildHeroUpNextCard(NextPrayerInfo next) {
+  // 3. Hero "UP NEXT" Prayer Card - EXACT MATCH TO DESIGN
+  Widget _buildHeroUpNextCard(NextPrayerInfo next, Map<String, dynamic>? activeMasjid) {
     final hours = next.timeUntilAdhan.inHours.toString().padLeft(2, '0');
     final minutes = (next.timeUntilAdhan.inMinutes % 60).toString().padLeft(2, '0');
     final seconds = (next.timeUntilAdhan.inSeconds % 60).toString().padLeft(2, '0');
@@ -588,210 +590,368 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final iqamahTimeStr = iqamahHours > 0 ? '${iqamahHours}h ${iqamahMins}m' : '${iqamahMins}m';
 
     return Container(
-      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0F432B), Color(0xFF0A3420)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
+        color: const Color(0xFF0F432B),
+        borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F432B).withOpacity(0.25),
-            blurRadius: 16,
+            color: const Color(0xFF0F432B).withValues(alpha: 0.35),
+            blurRadius: 18,
             offset: const Offset(0, 8),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
         children: [
-          // Top Badges
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(20),
+          // Background Mosque Architecture Silhouette
+          Positioned.fill(
+            child: CustomPaint(
+              painter: MosqueSilhouettePainter(),
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.all(22),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top Row: [ ● UP NEXT ] and [ ⌛ Iqamah in 1h 44m ]
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF135034),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFF287950), width: 1.2),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF48D38A),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'UP NEXT',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0B3320),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFF1D5A3A), width: 1),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('⌛', style: TextStyle(fontSize: 12)),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Iqamah in $iqamahTimeStr',
+                            style: const TextStyle(
+                              color: Color(0xFFE8F5E9),
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.circle, color: Color(0xFF4ECCA3), size: 7),
-                    SizedBox(width: 5),
+                const SizedBox(height: 18),
+
+                // Main Prayer Name & Congregation Pill
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
                     Text(
-                      'UP NEXT',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
+                      next.name,
+                      style: GoogleFonts.cormorantGaramond(
+                        fontSize: 44,
                         fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        height: 1.05,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF135034),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFF287950), width: 1.2),
+                      ),
+                      child: const Text(
+                        'Congregation',
+                        style: TextStyle(
+                          color: Color(0xFF6EE7B7),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+
+                // Timings Row: ADHAN 12:30 PM  •  IQAMAH 12:45 PM
+                Row(
+                  children: [
+                    const Text(
+                      'ADHAN ',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF82B89A),
+                        fontWeight: FontWeight.w700,
                         letterSpacing: 0.8,
                       ),
                     ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.25),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.hourglass_empty, color: Color(0xFFFFD54F), size: 12),
-                    const SizedBox(width: 4),
                     Text(
-                      'Iqamah in $iqamahTimeStr',
+                      next.adhan,
                       style: const TextStyle(
-                        color: Color(0xFFFFD54F),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Container(
+                      width: 4,
+                      height: 4,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF3B8259),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'IQAMAH ',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF82B89A),
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    Text(
+                      next.iqamah,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        color: Color(0xFF4ADE80),
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ],
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
+                const SizedBox(height: 16),
 
-          // Prayer Name & Congregation Pill
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                next.name,
-                style: GoogleFonts.cormorantGaramond(
-                  fontSize: 34,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                // Horizontal Divider
+                Divider(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  height: 1,
+                  thickness: 1,
                 ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  border: Border.all(color: const Color(0xFF4ECCA3).withOpacity(0.5)),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Text(
-                  'Congregation',
-                  style: TextStyle(
-                    color: Color(0xFF4ECCA3),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
+                const SizedBox(height: 16),
 
-          // Dynamic Adhan & Iqamah from Backend
-          Row(
-            children: [
-              Text(
-                'ADHAN ',
-                style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.7), fontWeight: FontWeight.w600),
-              ),
-              Text(
-                next.adhan,
-                style: const TextStyle(fontSize: 13, color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-              Text('  ·  ', style: TextStyle(color: Colors.white.withOpacity(0.4))),
-              Text(
-                'IQAMAH ',
-                style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.7), fontWeight: FontWeight.w600),
-              ),
-              Text(
-                next.iqamah,
-                style: const TextStyle(fontSize: 13, color: Color(0xFF4ECCA3), fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-
-          // Bottom Section: Ticking Countdown + Action Buttons
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                // Bottom Row: [TIME REMAINING TO ADHAN / CLOCK] and [Map / Alert]
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'TIME REMAINING TO ADHAN',
-                      style: TextStyle(
-                        fontSize: 9,
-                        letterSpacing: 1.1,
-                        color: Colors.white.withOpacity(0.7),
-                        fontWeight: FontWeight.w700,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'TIME REMAINING TO\nADHAN',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Color(0xFF82B89A),
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.1,
+                              height: 1.2,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              '$hours:$minutes:$seconds',
+                              style: GoogleFonts.spaceMono(
+                                fontSize: 30,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          const Padding(
+                            padding: EdgeInsets.only(left: 2),
+                            child: Text(
+                              'HRS      MIN      SEC',
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: Color(0xFF82B89A),
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.8,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '$hours : $minutes : $seconds',
-                      style: GoogleFonts.spaceMono(
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        letterSpacing: 1.5,
-                      ),
-                    ),
+                    const SizedBox(width: 8),
+
+                    // Map & Alert Buttons
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text('HRS', style: TextStyle(fontSize: 9, color: Colors.white.withOpacity(0.5), fontWeight: FontWeight.w600)),
-                        const SizedBox(width: 24),
-                        Text('MIN', style: TextStyle(fontSize: 9, color: Colors.white.withOpacity(0.5), fontWeight: FontWeight.w600)),
-                        const SizedBox(width: 24),
-                        Text('SEC', style: TextStyle(fontSize: 9, color: Colors.white.withOpacity(0.5), fontWeight: FontWeight.w600)),
+                        // Map Button
+                        InkWell(
+                          onTap: () => _openMasjidMap(activeMasjid),
+                          borderRadius: BorderRadius.circular(16),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF135034),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFF287950), width: 1.2),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(Icons.turn_right, color: Colors.white, size: 15),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Map',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+
+                        // Alert Button
+                        InkWell(
+                          onTap: () => _triggerPrayerAlert(next),
+                          borderRadius: BorderRadius.circular(16),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF135034),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFF287950), width: 1.2),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(Icons.notifications_active_outlined, color: Color(0xFF6EE7B7), size: 15),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Alert',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ],
                 ),
-              ),
-              Row(
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Opening Google Maps directions to Masjid...')),
-                      );
-                    },
-                    icon: const Icon(Icons.navigation_outlined, size: 14, color: Colors.white),
-                    label: const Text('Map', style: TextStyle(color: Colors.white, fontSize: 12)),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      side: BorderSide(color: Colors.white.withOpacity(0.3)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Adhan alert reminder set!')),
-                      );
-                    },
-                    icon: const Icon(Icons.notifications_active_outlined, size: 14, color: Colors.white),
-                    label: const Text('Alert', style: TextStyle(color: Colors.white, fontSize: 12)),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      side: BorderSide(color: Colors.white.withOpacity(0.3)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _openMasjidMap(Map<String, dynamic>? masjid) async {
+    final lat = masjid?['latitude'];
+    final lng = masjid?['longitude'];
+    final name = masjid?['name'] ?? 'Masjid';
+    final city = masjid?['city'] ?? '';
+
+    Uri url;
+    if (lat != null && lng != null) {
+      url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+    } else {
+      url = Uri.parse('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent('$name $city')}');
+    }
+
+    try {
+      final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        await launchUrl(url, mode: LaunchMode.platformDefault);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open map: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _triggerPrayerAlert(NextPrayerInfo next) async {
+    try {
+      await NotificationService.instance.triggerPrayerAlarm(
+        prayerName: next.name,
+        time: next.adhan,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF0F432B),
+            content: Row(
+              children: [
+                const Icon(Icons.alarm_on, color: Color(0xFF48D38A)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text('Alarm triggered & scheduled for ${next.name} (${next.adhan})!'),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to trigger alert: $e')),
+        );
+      }
+    }
   }
 
   // 4. Today's Timetable Card - STRICTLY FROM BACKEND MAP
@@ -1581,4 +1741,48 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       },
     );
   }
+}
+
+class MosqueSilhouettePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFF165C3A).withValues(alpha: 0.35)
+      ..style = PaintingStyle.fill;
+
+    final w = size.width;
+    final h = size.height;
+
+    // Dome (center-right)
+    final path = Path();
+    final cx1 = w * 0.62;
+    final r1 = w * 0.20;
+    path.moveTo(cx1 - r1, h);
+    path.quadraticBezierTo(cx1 - r1, h * 0.40, cx1, h * 0.28);
+    path.quadraticBezierTo(cx1 + r1, h * 0.40, cx1 + r1, h);
+    path.close();
+
+    // Minaret 1 (right side)
+    final mx1 = w * 0.86;
+    path.moveTo(mx1 - 10, h);
+    path.lineTo(mx1 - 8, h * 0.48);
+    path.lineTo(mx1, h * 0.40);
+    path.lineTo(mx1 + 8, h * 0.48);
+    path.lineTo(mx1 + 10, h);
+    path.close();
+
+    // Minaret 2 (center-left)
+    final mx2 = w * 0.44;
+    path.moveTo(mx2 - 8, h);
+    path.lineTo(mx2 - 6, h * 0.52);
+    path.lineTo(mx2, h * 0.45);
+    path.lineTo(mx2 + 6, h * 0.52);
+    path.lineTo(mx2 + 8, h);
+    path.close();
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

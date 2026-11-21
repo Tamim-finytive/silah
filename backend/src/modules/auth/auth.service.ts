@@ -23,7 +23,7 @@ export class AuthService {
       where: { phone },
       include: {
         memberships: true,
-        masjidAdmins: { include: { role: true } },
+        masjidAdmins: { include: { role: true, masjid: true } },
       },
     });
 
@@ -32,6 +32,7 @@ export class AuthService {
         exists: true,
         isOnboarded: user.isOnboarded,
         isSuperAdmin: user.isSuperAdmin || isMasterSuperAdmin,
+        isMasjidAdmin: (user.masjidAdmins?.length ?? 0) > 0,
         name: user.name,
         hasMasjid: user.memberships.length > 0,
       };
@@ -41,6 +42,7 @@ export class AuthService {
       exists: false,
       isOnboarded: false,
       isSuperAdmin: isMasterSuperAdmin,
+      isMasjidAdmin: false,
     };
   }
 
@@ -52,7 +54,7 @@ export class AuthService {
       where: { phone },
       include: {
         memberships: true,
-        masjidAdmins: { include: { role: true } },
+        masjidAdmins: { include: { role: true, masjid: true } },
       },
     });
 
@@ -66,7 +68,7 @@ export class AuthService {
         },
         include: {
           memberships: true,
-          masjidAdmins: { include: { role: true } },
+          masjidAdmins: { include: { role: true, masjid: true } },
         },
       });
     }
@@ -92,9 +94,11 @@ export class AuthService {
         isSuperAdmin: user.isSuperAdmin,
         hasMasjid: user.memberships.length > 0,
         primaryMasjidId: user.memberships.find((m) => m.isPrimary)?.masjidId ?? user.memberships[0]?.masjidId,
-        adminRoles: user.masjidAdmins.map((ma) => ({
+        adminRoles: user.masjidAdmins.map((ma: any) => ({
           masjidId: ma.masjidId,
-          role: ma.role.name,
+          masjidName: ma.masjid?.name,
+          masjidNameTa: ma.masjid?.nameTa,
+          role: ma.role?.name,
         })),
       },
       tokens,
@@ -125,7 +129,7 @@ export class AuthService {
         isActive: true,
       },
       include: {
-        masjidAdmins: { include: { role: true } },
+        masjidAdmins: { include: { role: true, masjid: true } },
         memberships: true,
       },
     });
@@ -143,9 +147,11 @@ export class AuthService {
         isOnboarded: user.isOnboarded,
         isSuperAdmin: user.isSuperAdmin,
         hasMasjid: user.memberships.length > 0,
-        adminRoles: user.masjidAdmins.map((ma) => ({
+        adminRoles: user.masjidAdmins.map((ma: any) => ({
           masjidId: ma.masjidId,
-          role: ma.role.name,
+          masjidName: ma.masjid?.name,
+          masjidNameTa: ma.masjid?.nameTa,
+          role: ma.role?.name,
         })),
       },
       tokens,
@@ -206,7 +212,7 @@ export class AuthService {
         include: {
           memberships: true,
           masjidAdmins: {
-            include: { role: true },
+            include: { role: true, masjid: true },
           },
         },
       });
@@ -218,7 +224,7 @@ export class AuthService {
         include: {
           memberships: true,
           masjidAdmins: {
-            include: { role: true },
+            include: { role: true, masjid: true },
           },
         },
       });
@@ -239,9 +245,11 @@ export class AuthService {
         isOnboarded: user.isOnboarded,
         isSuperAdmin: user.isSuperAdmin,
         hasMasjid: user.memberships.length > 0,
-        adminRoles: user.masjidAdmins.map((ma) => ({
+        adminRoles: user.masjidAdmins.map((ma: any) => ({
           masjidId: ma.masjidId,
-          role: ma.role.name,
+          masjidName: ma.masjid?.name,
+          masjidNameTa: ma.masjid?.nameTa,
+          role: ma.role?.name,
         })),
       },
       tokens,

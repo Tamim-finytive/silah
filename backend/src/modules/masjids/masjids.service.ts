@@ -113,8 +113,10 @@ export class MasjidsService {
     const approvalStatus = MasjidApprovalStatus.APPROVED;
     const isActive = true;
 
+    const { adminName, adminPhone, ...masjidPayload } = dto;
+
     const masjidData: any = {
-      ...dto,
+      ...masjidPayload,
       qrToken,
       approvalStatus,
       isActive,
@@ -125,22 +127,72 @@ export class MasjidsService {
       data: masjidData,
     });
 
-    // Make creator an ADMIN directly
     const adminRole = await this.prisma.role.findUniqueOrThrow({
       where: { name: RoleType.ADMIN },
     });
 
+    // Check if an admin phone was specified (e.g. created by Super Admin)
+    let assignedAdminUserId = userId;
+    if (adminPhone && adminPhone.trim().length >= 10) {
+      const cleanPhone = adminPhone.trim().replace(/\D/g, '').slice(-10);
+      let adminUser = await this.prisma.user.findUnique({
+        where: { phone: cleanPhone },
+      });
+
+      if (!adminUser) {
+        adminUser = await this.prisma.user.create({
+          data: {
+            phone: cleanPhone,
+            name: adminName?.trim() || 'Masjid Admin',
+            age: 30,
+            isOnboarded: true,
+            isActive: true,
+          } as any,
+        });
+      } else {
+        await this.prisma.user.update({
+          where: { id: adminUser.id },
+          data: {
+            isOnboarded: true,
+            ...(adminName && adminName.trim().length > 0 ? { name: adminName.trim() } : {}),
+          } as any,
+        });
+      }
+
+      assignedAdminUserId = adminUser.id;
+
+      // Also assign creator if creator is different
+      if (userId !== assignedAdminUserId) {
+        await this.prisma.masjidAdmin.upsert({
+          where: {
+            idx_masjid_admins_unique: {
+              userId,
+              masjidId: masjid.id,
+              roleId: adminRole.id,
+            },
+          },
+          update: {},
+          create: {
+            userId,
+            masjidId: masjid.id,
+            roleId: adminRole.id,
+          },
+        });
+      }
+    }
+
+    // Link assignedAdminUserId as ADMIN
     await this.prisma.masjidAdmin.upsert({
       where: {
         idx_masjid_admins_unique: {
-          userId,
+          userId: assignedAdminUserId,
           masjidId: masjid.id,
           roleId: adminRole.id,
         },
       },
       update: {},
       create: {
-        userId,
+        userId: assignedAdminUserId,
         masjidId: masjid.id,
         roleId: adminRole.id,
       },
@@ -149,13 +201,13 @@ export class MasjidsService {
     await this.prisma.membership.upsert({
       where: {
         idx_memberships_unique: {
-          userId,
+          userId: assignedAdminUserId,
           masjidId: masjid.id,
         },
       },
       update: { isPrimary: true },
       create: {
-        userId,
+        userId: assignedAdminUserId,
         masjidId: masjid.id,
         isPrimary: true,
       },

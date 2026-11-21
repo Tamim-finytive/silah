@@ -41,6 +41,16 @@ export class CreateMasjidDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @ApiPropertyOptional({ example: 'Ahmed' })
+  @IsOptional()
+  @IsString()
+  adminName?: string;
+
+  @ApiPropertyOptional({ example: '9876543210' })
+  @IsOptional()
+  @IsString()
+  adminPhone?: string;
 }
 
 export class UpdateMasjidDto {
@@ -83,6 +93,16 @@ export class UpdateMasjidDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @ApiPropertyOptional({ example: 'Ahmed' })
+  @IsOptional()
+  @IsString()
+  adminName?: string;
+
+  @ApiPropertyOptional({ example: '9876543210' })
+  @IsOptional()
+  @IsString()
+  adminPhone?: string;
 }
 
 export class AddMemberDto {

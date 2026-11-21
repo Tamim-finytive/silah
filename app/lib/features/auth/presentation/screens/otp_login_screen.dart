@@ -7,6 +7,7 @@ import 'package:masjid_namaz_app/core/services/notification_service.dart';
 import 'package:masjid_namaz_app/core/l10n/language_provider.dart';
 import 'package:masjid_namaz_app/features/prayer_times/presentation/screens/home_screen.dart';
 import 'package:masjid_namaz_app/features/admin/presentation/screens/super_admin_dashboard_screen.dart';
+import 'package:masjid_namaz_app/features/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:masjid_namaz_app/features/auth/presentation/screens/onboarding_screen.dart';
 
 class OtpLoginScreen extends ConsumerStatefulWidget {
@@ -60,17 +61,25 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
       if (exists && isOnboarded) {
         // Existing onboarded user -> Login directly with 120-day database session
         await ApiService.instance.loginDirect(phone);
+        try {
+          await ApiService.instance.getProfile();
+        } catch (_) {}
         if (!mounted) return;
 
         // Configure FCM Push Notifications in background
         NotificationService.instance.configureAfterLogin();
         setState(() => _isLoading = false);
 
-        // Check if user has Super Admin privileges
+        // Check user role privileges: Super Admin, Masjid Admin, or Musalli
         if (ApiService.instance.isSuperAdmin || phone.contains('1234567890')) {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (_) => const SuperAdminDashboardScreen()),
+          );
+        } else if (ApiService.instance.isMasjidAdmin) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
           );
         } else {
           // Direct to User Home Screen with complete bottom navigation bar
@@ -113,15 +122,30 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
 
     try {
       await ApiService.instance.verifyOtp(phone, otp);
+      try {
+        await ApiService.instance.getProfile();
+      } catch (_) {}
       if (!mounted) return;
 
       NotificationService.instance.configureAfterLogin();
       setState(() => _isLoading = false);
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const SuperAdminDashboardScreen()),
-      );
+      if (ApiService.instance.isSuperAdmin || phone.contains('1234567890')) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const SuperAdminDashboardScreen()),
+        );
+      } else if (ApiService.instance.isMasjidAdmin) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+        );
+      }
     } catch (e) {
       if (mounted) {
         setState(() {

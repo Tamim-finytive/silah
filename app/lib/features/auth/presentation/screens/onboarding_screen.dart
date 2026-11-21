@@ -7,6 +7,7 @@ import 'package:masjid_namaz_app/core/network/api_service.dart';
 import 'package:masjid_namaz_app/core/services/notification_service.dart';
 import 'package:masjid_namaz_app/core/l10n/language_provider.dart';
 import 'package:masjid_namaz_app/features/prayer_times/presentation/screens/home_screen.dart';
+import 'package:masjid_namaz_app/features/admin/presentation/screens/admin_dashboard_screen.dart';
 
 enum UserRoleChoice {
   regularUser,
@@ -243,7 +244,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         address: address.isEmpty ? null : address,
       );
 
-      // 2. Submit Masjid creation request
+      // 2. Submit Masjid creation request with this user as designated Admin
       await ApiService.instance.createMasjid(
         name: masjidName,
         city: city,
@@ -251,13 +252,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         nameTa: _masjidNameTaController.text.trim(),
         latitude: lat,
         longitude: lng,
+        adminName: name,
+        adminPhone: widget.phone,
       );
+
+      // Hydrate profile so user is immediately assigned as Masjid Admin
+      try {
+        await ApiService.instance.getProfile();
+      } catch (_) {}
 
       if (!mounted) return;
       NotificationService.instance.configureAfterLogin();
       setState(() => _isLoading = false);
 
-      // Show Super Admin Pending Confirmation Dialog
+      // Show Admin Confirmation Dialog
       _showRequestSubmittedDialog(masjidName);
     } catch (e) {
       if (mounted) {
@@ -281,7 +289,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           children: const [
             Icon(Icons.check_circle, color: Colors.green, size: 28),
             SizedBox(width: 10),
-            Text('Request Submitted'),
+            Text('Masjid Registered'),
           ],
         ),
         content: Column(
@@ -289,19 +297,19 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Your registration request for "$masjidName" has been submitted to the Super Administrator.',
+              'Your masjid "$masjidName" is registered and active! You are authorized as administrator.',
               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
             ),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.amber.shade50,
+                color: const Color(0xFF0F432B).withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.amber.shade300),
+                border: Border.all(color: const Color(0xFF0F432B).withValues(alpha: 0.3)),
               ),
               child: const Text(
-                'Once approved by Super Admin, your app bar will display the "Switch to Masjid Admin" toggle button to manage Namaz times, announcements, and roles.',
+                'You can now update prayer timings, generate member QR codes, post community announcements, and manage your congregation.',
                 style: TextStyle(fontSize: 12, color: Colors.black87),
               ),
             ),
@@ -313,14 +321,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               Navigator.pop(ctx);
               Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(builder: (_) => const HomeScreen()),
+                MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
               );
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Continue to App'),
+            child: const Text('Open Admin Dashboard'),
           ),
         ],
       ),
