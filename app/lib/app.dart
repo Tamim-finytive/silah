@@ -43,8 +43,7 @@ class _AppStartupGateState extends State<AppStartupGate> {
 
     if (hasSession && ApiService.instance.currentUser != null) {
       final user = ApiService.instance.currentUser!;
-      final phone = (user['phone'] ?? '').toString();
-      final isSuperAdmin = ApiService.instance.isSuperAdmin || phone.contains('1234567890');
+      final isSuperAdmin = ApiService.instance.isSuperAdmin;
 
       // 1. Super Admin route
       if (isSuperAdmin) {
@@ -73,7 +72,9 @@ class _AppStartupGateState extends State<AppStartupGate> {
       if (!isOnboarded) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => OnboardingScreen(phone: phone)),
+          MaterialPageRoute(
+            builder: (_) => OnboardingScreen(phone: user['phone']?.toString() ?? ''),
+          ),
         );
         return;
       }

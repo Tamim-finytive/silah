@@ -55,7 +55,7 @@ export class UsersService {
 
   async listAllUsers(query?: { search?: string; page?: number; limit?: number }) {
     const page = query?.page || 1;
-    const limit = query?.limit || 20;
+    const limit = Math.min(100, Math.max(1, query?.limit || 20));
     const skip = (page - 1) * limit;
 
     const where: any = {};
@@ -77,6 +77,19 @@ export class UsersService {
     ]);
 
     return { total, page, limit, items };
+  }
+
+  async setUserActive(userId: string, isActive: boolean, adminUserId: string) {
+    if (userId === adminUserId && !isActive) {
+      throw new BadRequestException('Cannot deactivate your own account');
+    }
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.isSuperAdmin && !isActive) {
+      const activeSuperAdmins = await this.prisma.user.count({ where: { isSuperAdmin: true, isActive: true } });
+      if (activeSuperAdmins <= 1) throw new BadRequestException('At least one active Super Admin must remain');
+    }
+    return this.prisma.user.update({ where: { id: userId }, data: { isActive } });
   }
 
   async deleteUser(userId: string, adminUserId: string) {

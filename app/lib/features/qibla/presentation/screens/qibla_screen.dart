@@ -22,12 +22,13 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
   static const double kaabaLat = 21.422487;
   static const double kaabaLng = 39.826206;
 
-  // Qibla bearing relative to true North (default South India ~294°)
-  double _qiblaBearing = 294.0;
-  double _distanceKm = 4320.0;
-  String _userCity = 'Tamil Nadu';
+  double _qiblaBearing = 0;
+  double _distanceKm = 0;
+  String _userCity = '';
+  bool _hasValidLocation = false;
+  double _magneticDeclination = 0;
 
-  double? _heading = 0.0;
+  double? _heading;
   bool _hasCompassSensor = true;
   bool _isDetecting = false;
   StreamSubscription? _compassSub;
@@ -80,18 +81,29 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
         }
       }
 
-      // 3. Fallback to Tamil Nadu / South India coordinates
-      lat ??= 10.7905;
-      lng ??= 78.7047;
+      if (lat == null || lng == null) {
+        if (mounted) setState(() => _hasValidLocation = false);
+        return;
+      }
 
       // 4. Compute exact Qibla bearing & distance
       final bearing = _calculateQiblaBearing(lat, lng);
       final dist = _calculateDistance(lat, lng, kaabaLat, kaabaLng);
+      double declination = 0;
+      try {
+        declination = await const MethodChannel('silah/compass').invokeMethod<double>(
+              'magneticDeclination',
+              {'latitude': lat, 'longitude': lng},
+            ) ?? 0;
+      } catch (_) {}
 
       if (mounted) {
         setState(() {
           _qiblaBearing = bearing;
           _distanceKm = dist;
+          _magneticDeclination = declination;
+          _hasValidLocation = true;
+          if (_userCity.isEmpty) _userCity = 'Your current location';
         });
       }
     } catch (_) {}
@@ -131,7 +143,7 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
           final heading = event.heading;
           if (heading != null) {
             // Normalize heading between 0 and 360
-            final normalized = (heading % 360.0 + 360.0) % 360.0;
+            final normalized = ((heading + _magneticDeclination) % 360.0 + 360.0) % 360.0;
             setState(() {
               _heading = normalized;
               _hasCompassSensor = true;
@@ -172,16 +184,20 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
     try {
       // 1. Recalibrate GPS coordinates
       await _initLocationAndQibla();
+      if (!_hasValidLocation) {
+        if (mounted) {
+          setState(() => _isDetecting = false);
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Location is required to find Qibla.')));
+        }
+        return;
+      }
 
       // 2. Fetch fresh sensor reading
-      final event = await FlutterCompass.events?.first.timeout(
-        const Duration(seconds: 2),
-        onTimeout: () => CompassEvent.fromList([_heading ?? 0.0, 0.0, 0.0]),
-      );
+      final event = await FlutterCompass.events?.first.timeout(const Duration(seconds: 2));
 
       final rawHeading = event?.heading;
       if (rawHeading != null) {
-        final normalized = (rawHeading % 360.0 + 360.0) % 360.0;
+        final normalized = ((rawHeading + _magneticDeclination) % 360.0 + 360.0) % 360.0;
         setState(() {
           _heading = normalized;
           _hasCompassSensor = true;
@@ -193,7 +209,8 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
       setState(() => _isDetecting = false);
       HapticFeedback.heavyImpact();
 
-      final currentH = _heading ?? 0.0;
+      if (_heading == null) return;
+      final currentH = _heading!;
       double diff = (_qiblaBearing - currentH);
       while (diff > 180) {
         diff -= 360;
@@ -235,7 +252,7 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
     if (angle >= 157.5 && angle < 202.5) return 'S';
     if (angle >= 202.5 && angle < 247.5) return 'SW';
     if (angle >= 247.5 && angle < 292.5) return 'W';
-    return 'WNW';
+    return 'NW';
   }
 
   @override
@@ -254,7 +271,7 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
       diff += 360;
     }
 
-    final bool isFacingQibla = diff.abs() <= 5.0;
+    final bool isFacingQibla = _hasValidLocation && _heading != null && diff.abs() <= 5.0;
     final qiblaCardinal = _getCardinalDirection(_qiblaBearing);
     final phoneCardinal = _getCardinalDirection(phoneHeading);
 
@@ -283,7 +300,9 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Qibla angle calibrated to ${_qiblaBearing.toStringAsFixed(1)}° for $_userCity'),
+                    content: Text(_hasValidLocation
+                        ? 'Qibla direction calibrated to ${_qiblaBearing.toStringAsFixed(1)}° for $_userCity'
+                        : 'Location is unavailable. Enable location or connect a masjid with coordinates.'),
                     duration: const Duration(seconds: 2),
                   ),
                 );
@@ -331,9 +350,11 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            isFacingQibla
-                                ? lang.tr(en: 'Facing Qibla! (Makkah)', ta: 'கிப்லாவை நோக்கி உள்ளீர்கள்!')
-                                : 'Qibla: ${_qiblaBearing.toStringAsFixed(0)}° $qiblaCardinal • ${lang.tr(en: 'Kaaba Direction', ta: 'கஅபா திசை')}',
+                            !_hasValidLocation
+                                ? lang.tr(en: 'Location is required to find Qibla', ta: 'கிப்லா திசைக்கு இடம் தேவை')
+                                : isFacingQibla
+                                    ? lang.tr(en: 'Facing Qibla! (Makkah)', ta: 'கிப்லாவை நோக்கி உள்ளீர்கள்!')
+                                    : 'Qibla: ${_qiblaBearing.toStringAsFixed(0)}° $qiblaCardinal • ${lang.tr(en: 'Kaaba Direction', ta: 'கஅபா திசை')}',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -342,7 +363,9 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Phone Facing: ${phoneHeading.toStringAsFixed(0)}° ($phoneCardinal) • Makkah: ~${_distanceKm.toStringAsFixed(0)} km',
+                            _hasValidLocation
+                                ? 'Phone Facing: ${phoneHeading.toStringAsFixed(0)}° ($phoneCardinal) • Makkah: ~${_distanceKm.toStringAsFixed(0)} km'
+                                : 'Enable location or connect a masjid with saved coordinates.',
                             style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                           ),
                         ],
@@ -370,17 +393,21 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      isFacingQibla
-                          ? Icons.done_all
-                          : (diff > 0 ? Icons.turn_right : Icons.turn_left),
+                      !_hasValidLocation
+                          ? Icons.location_off
+                          : isFacingQibla
+                              ? Icons.done_all
+                              : (diff > 0 ? Icons.turn_right : Icons.turn_left),
                       size: 18,
                       color: isFacingQibla ? AppColors.success : Colors.indigo,
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      isFacingQibla
-                          ? lang.tr(en: 'Directly Facing Makkah', ta: 'நேரடியாக மக்காவை நோக்கி நிற்கிறது')
-                          : diff > 0
+                      !_hasValidLocation
+                          ? lang.tr(en: 'Allow location to calculate direction', ta: 'திசையை கணக்கிட இட அனுமதி அளிக்கவும்')
+                          : isFacingQibla
+                              ? lang.tr(en: 'Directly Facing Makkah', ta: 'நேரடியாக மக்காவை நோக்கி நிற்கிறது')
+                              : diff > 0
                               ? lang.tr(
                                   en: 'Turn Right by ${diff.toStringAsFixed(0)}° to face Qibla',
                                   ta: 'வலதுபுறம் ${diff.toStringAsFixed(0)}° திரும்பவும்',
@@ -472,7 +499,8 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                                   ),
 
                                   // Kaaba Azimuth Marker directly on the compass dial at _qiblaBearing
-                                  Transform.rotate(
+                                  if (_hasValidLocation)
+                                    Transform.rotate(
                                     angle: _qiblaBearing * (math.pi / 180.0),
                                     child: Align(
                                       alignment: Alignment.topCenter,
@@ -494,7 +522,8 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                           ),
 
                           // Kaaba Needle: Points towards physical Kaaba location relative to where phone is currently pointing
-                          Transform.rotate(
+                          if (_hasValidLocation && _heading != null)
+                            Transform.rotate(
                             angle: animatedNeedleRad,
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
@@ -528,7 +557,9 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                                 const SizedBox(height: 80),
                               ],
                             ),
-                          ),
+                          )
+                          else
+                            const Icon(Icons.location_off, color: Colors.orange, size: 42),
 
                           // Center Pivot
                           CircleAvatar(
@@ -567,7 +598,7 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                     _isDetecting
                         ? lang.tr(en: 'Detecting Phone Orientation...', ta: 'திசையைக் கண்டுபிடிக்கிறது...')
                         : lang.tr(
-                            en: 'Point Arrow to Qibla (Detect Now)',
+                            en: 'Calibrate & Point Arrow to Qibla',
                             ta: 'கிப்லா திசையை சரியாக காட்டு (Detect Now)',
                           ),
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),

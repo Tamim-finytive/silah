@@ -199,7 +199,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               CircularProgressIndicator(color: Color(0xFF0F432B)),
               SizedBox(height: 16),
               Text(
-                'Syncing times from Masjid server...',
+                'Loading prayer times...',
                 style: TextStyle(color: Colors.grey, fontSize: 13),
               ),
             ],
@@ -211,6 +211,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final times = prayerState.times;
     final activeMasjid = prayerState.activeMasjid;
     final nextPrayer = prayerState.nextPrayer;
+    final isLocalTimes = prayerState.isLocalTimes;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9F7),
@@ -231,11 +232,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               const SizedBox(height: 16),
 
               // Active Masjid Card
-              _buildActiveMasjidCard(activeMasjid),
+              _buildActiveMasjidCard(activeMasjid, isLocalTimes),
               const SizedBox(height: 16),
 
-              if (activeMasjid == null) ...[
+              if (activeMasjid == null && isLocalTimes && times != null) ...[
+                if (nextPrayer != null) _buildHeroUpNextCard(nextPrayer, {'name': 'Local Prayer Times'}),
+                const SizedBox(height: 20),
+                _buildTodayTimetableCard(times, nextPrayer?.name),
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Local calculated prayer times. Jamaah times are shown only when supplied by a masjid.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _buildSunAndFastingCard(times),
+                const SizedBox(height: 20),
                 _buildNoMasjidConnectedPrompt(),
+              ] else if (activeMasjid == null) ...[
+                _buildNoMasjidConnectedPrompt(),
+                if (prayerState.error != null) ...[
+                  const SizedBox(height: 10),
+                  Text(prayerState.error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+                ],
                 const SizedBox(height: 20),
               ] else ...[
                 // Hero "UP NEXT" Prayer Card
@@ -427,9 +448,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   // 2. Active Masjid Card
-  Widget _buildActiveMasjidCard(Map<String, dynamic>? activeMasjid) {
-    final masjidName = activeMasjid?['name'] ?? 'Select Masjid';
-    final masjidAddress = activeMasjid?['address'] ?? 'Tap to select an active masjid';
+  Widget _buildActiveMasjidCard(Map<String, dynamic>? activeMasjid, bool isLocalTimes) {
+    final masjidName = isLocalTimes ? 'Local Prayer Times' : (activeMasjid?['name'] ?? 'Select Masjid');
+    final masjidAddress = isLocalTimes ? 'Calculated for your current location' : (activeMasjid?['address'] ?? 'Tap to select a masjid or local times');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -438,11 +459,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Row(
-              children: const [
+              children: [
                 Icon(Icons.mosque, size: 14, color: Color(0xFF1E824C)),
                 SizedBox(width: 5),
                 Text(
-                  'ACTIVE MASJID',
+                  isLocalTimes ? 'LOCAL PRAYER TIMES' : 'ACTIVE MASJID',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
@@ -452,7 +473,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ],
             ),
-            if (activeMasjid != null && activeMasjid['city'] != null)
+            if (!isLocalTimes && activeMasjid != null && activeMasjid['city'] != null)
               Row(
                 children: [
                   const Icon(Icons.location_city, size: 12, color: Colors.grey),
@@ -504,7 +525,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          if (activeMasjid != null) ...[
+                          if (activeMasjid != null && !isLocalTimes) ...[
                             const SizedBox(width: 6),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -538,7 +559,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ],
                   ),
                 ),
-                if (activeMasjid != null)
+                if (activeMasjid != null && !isLocalTimes)
                   IconButton(
                     icon: const Icon(Icons.directions, color: Color(0xFF0F432B), size: 22),
                     tooltip: 'Open in Google Maps',
@@ -622,6 +643,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   // 3. Hero "UP NEXT" Prayer Card - EXACT MATCH TO DESIGN
   Widget _buildHeroUpNextCard(NextPrayerInfo next, Map<String, dynamic>? activeMasjid) {
+    final isLocalTimes = activeMasjid?['id'] == null;
     final hours = next.timeUntilAdhan.inHours.toString().padLeft(2, '0');
     final minutes = (next.timeUntilAdhan.inMinutes % 60).toString().padLeft(2, '0');
     final seconds = (next.timeUntilAdhan.inSeconds % 60).toString().padLeft(2, '0');
@@ -629,6 +651,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final iqamahHours = next.timeUntilIqamah.inHours;
     final iqamahMins = next.timeUntilIqamah.inMinutes % 60;
     final iqamahTimeStr = iqamahHours > 0 ? '${iqamahHours}h ${iqamahMins}m' : '${iqamahMins}m';
+    final prayerTimeStr = next.timeUntilAdhan.inHours > 0
+        ? '${next.timeUntilAdhan.inHours}h ${next.timeUntilAdhan.inMinutes % 60}m'
+        : '${next.timeUntilAdhan.inMinutes}m';
 
     return Container(
       decoration: BoxDecoration(
@@ -705,7 +730,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           const Text('⌛', style: TextStyle(fontSize: 12)),
                           const SizedBox(width: 6),
                           Text(
-                            'Iqamah in $iqamahTimeStr',
+                            isLocalTimes ? 'Prayer in $prayerTimeStr' : 'Iqamah in $iqamahTimeStr',
                             style: const TextStyle(
                               color: Color(0xFFE8F5E9),
                               fontSize: 12,
@@ -733,7 +758,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         height: 1.05,
                       ),
                     ),
-                    Container(
+                    if (!isLocalTimes) Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
                       decoration: BoxDecoration(
                         color: const Color(0xFF135034),
@@ -773,6 +798,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
+                    if (!isLocalTimes) ...[
                     const SizedBox(width: 12),
                     Container(
                       width: 4,
@@ -800,6 +826,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -1736,8 +1763,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         children: [
           SimpleDialogOption(
             onPressed: () {
-              setState(() => _calcMethod = 'Hanafi');
-              Navigator.pop(ctx);
+              _setCalculationMethod('Hanafi', ctx);
             },
             child: Row(
               children: [
@@ -1749,8 +1775,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
           SimpleDialogOption(
             onPressed: () {
-              setState(() => _calcMethod = 'Standard / Shafi');
-              Navigator.pop(ctx);
+              _setCalculationMethod('Standard / Shafi', ctx);
             },
             child: Row(
               children: [
@@ -1763,6 +1788,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ],
       ),
     );
+  }
+
+  void _setCalculationMethod(String method, BuildContext dialogContext) {
+    setState(() => _calcMethod = method);
+    Navigator.pop(dialogContext);
+    if (ref.read(prayerTimesProvider).isLocalTimes) {
+      unawaited(ref.read(prayerTimesProvider.notifier).selectLocalTimes(school: method == 'Hanafi' ? 1 : 0));
+    }
   }
 
   Future<void> _openMasjidLocation(Map<String, dynamic> masjid) async {
@@ -1846,54 +1879,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         return const Center(child: CircularProgressIndicator(color: Color(0xFF0F432B)));
                       }
                       final myMasjids = snapshot.data ?? [];
-
-                      if (myMasjids.isEmpty) {
-                        return Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24.0),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.mosque_outlined, size: 48, color: Colors.grey),
-                                const SizedBox(height: 12),
-                                const Text(
-                                  'No Joined Masjids',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                                ),
-                                const SizedBox(height: 6),
-                                const Text(
-                                  'Search and join your local Masjid to see daily prayer timings & announcements.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(color: Colors.grey, fontSize: 12),
-                                ),
-                                const SizedBox(height: 18),
-                                ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF0F432B),
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  ),
-                                  icon: const Icon(Icons.search, size: 18),
-                                  label: const Text('Search & Join Masjid'),
-                                  onPressed: () {
-                                    Navigator.pop(ctx);
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(builder: (_) => const ConnectMasjidScreen()),
-                                    );
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }
-
+                      final localSelected = ref.read(prayerTimesProvider).isLocalTimes;
+                      final localIndex = myMasjids.isEmpty ? 0 : myMasjids.length;
                       return ListView.separated(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        itemCount: myMasjids.length,
+                        itemCount: myMasjids.length + (myMasjids.isEmpty ? 2 : 1),
                         separatorBuilder: (_, __) => const Divider(height: 8),
                         itemBuilder: (context, i) {
+                          if (i == localIndex) {
+                            return ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              leading: Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: localSelected ? const Color(0xFF0F432B) : const Color(0xFF0F432B).withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(Icons.my_location, color: localSelected ? Colors.white : const Color(0xFF0F432B)),
+                              ),
+                              title: const Text('Local Prayer Times', style: TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: const Text('Use your current location', style: TextStyle(fontSize: 11)),
+                              trailing: localSelected ? const Icon(Icons.check_circle, color: Color(0xFF0F432B)) : null,
+                              onTap: () async {
+                                Navigator.pop(ctx);
+                                await ref.read(prayerTimesProvider.notifier).selectLocalTimes(school: _calcMethod == 'Hanafi' ? 1 : 0);
+                              },
+                            );
+                          }
+                          if (myMasjids.isEmpty && i == 1) {
+                            return const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Text('No joined masjids yet. Local prayer times are available above; search or scan to connect to a masjid.', textAlign: TextAlign.center),
+                            );
+                          }
                           final m = myMasjids[i];
                           if (m is! Map<String, dynamic>) return const SizedBox.shrink();
                           final isSelected = m['id'] == activeMasjid?['id'];

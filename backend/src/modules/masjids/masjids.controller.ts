@@ -22,8 +22,23 @@ export class MasjidsController {
     return this.masjidsService.findAll({ city, search });
   }
 
+  @Get('admin/directory')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Super Admin paginated masjid directory including inactive records' })
+  async listAdminDirectory(
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.masjidsService.listAdminDirectory({ search, status, page: Number(page), limit: Number(limit) });
+  }
+
   @Get('requests/pending')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Super Admin: List pending masjid creation requests' })
   async getPendingRequests() {
@@ -31,7 +46,8 @@ export class MasjidsController {
   }
 
   @Post('requests/:id/approve')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Super Admin: Approve a pending masjid request' })
   async approveRequest(@Param('id') id: string) {
@@ -39,7 +55,8 @@ export class MasjidsController {
   }
 
   @Post('requests/:id/reject')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Super Admin: Reject a pending masjid request' })
   async rejectRequest(@Param('id') id: string, @Body('reason') reason?: string) {
@@ -140,5 +157,14 @@ export class MasjidsController {
   @ApiOperation({ summary: 'Super Admin: Delete a masjid and its related records' })
   async deleteMasjid(@Param('id') id: string) {
     return this.masjidsService.deleteMasjid(id);
+  }
+
+  @Put('admin/:id/status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Super Admin: Activate or deactivate an approved masjid' })
+  async setMasjidStatus(@Param('id') id: string, @Body('isActive') isActive: boolean) {
+    return this.masjidsService.setMasjidActive(id, isActive);
   }
 }

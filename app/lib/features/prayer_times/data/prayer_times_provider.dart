@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:masjid_namaz_app/core/network/api_service.dart';
+import 'package:masjid_namaz_app/features/prayer_times/data/local_prayer_times_service.dart';
 
 class NextPrayerInfo {
   final String name;
@@ -27,6 +29,7 @@ class PrayerTimesState {
   final Map<String, dynamic>? activeMasjid;
   final NextPrayerInfo? nextPrayer;
   final String? error;
+  final bool isLocalTimes;
 
   PrayerTimesState({
     this.isLoading = false,
@@ -34,6 +37,7 @@ class PrayerTimesState {
     this.activeMasjid,
     this.nextPrayer,
     this.error,
+    this.isLocalTimes = false,
   });
 
   PrayerTimesState copyWith({
@@ -46,6 +50,7 @@ class PrayerTimesState {
     bool clearMasjid = false,
     bool clearNextPrayer = false,
     bool clearError = false,
+    bool? isLocalTimes,
   }) {
     return PrayerTimesState(
       isLoading: isLoading ?? this.isLoading,
@@ -53,6 +58,7 @@ class PrayerTimesState {
       activeMasjid: clearMasjid ? null : activeMasjid ?? this.activeMasjid,
       nextPrayer: clearNextPrayer ? null : nextPrayer ?? this.nextPrayer,
       error: clearError ? null : error ?? this.error,
+      isLocalTimes: isLocalTimes ?? this.isLocalTimes,
     );
   }
 }
@@ -107,12 +113,7 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
       // large and must never be treated as the user's selected masjid.
       final masjids = await ApiService.instance.getMyMasjids();
       if (masjids.isEmpty) {
-        state = state.copyWith(
-          isLoading: false,
-          clearMasjid: true,
-          clearTimes: true,
-          clearNextPrayer: true,
-        );
+        await selectLocalTimes();
         return;
       }
 
@@ -139,23 +140,16 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
       final defaultMasjid = primaryMasjids.isNotEmpty
           ? primaryMasjids.first
           : (userMasjids.isNotEmpty ? userMasjids.first : null);
-      final String? targetId = specificMasjidId ??
-          (availableIds.contains(primaryId) ? primaryId : null) ??
-          (cachedIsJoined ? cachedId : null) ??
-          defaultMasjid?['id']?.toString();
+      final String? targetId = state.isLocalTimes && specificMasjidId == null
+          ? null
+          : specificMasjidId ??
+              (availableIds.contains(primaryId) ? primaryId : null) ??
+              (cachedIsJoined ? cachedId : null) ??
+              defaultMasjid?['id']?.toString();
 
       // Do NOT auto-link to masjids.first! User must search or scan QR code.
       if (targetId == null) {
-        state = state.copyWith(
-          activeMasjid: null,
-          times: null,
-          nextPrayer: null,
-          isLoading: false,
-          clearMasjid: true,
-          clearTimes: true,
-          clearNextPrayer: true,
-          clearError: true,
-        );
+        await selectLocalTimes();
         return;
       }
 
@@ -193,6 +187,7 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
           activeMasjid: targetMasjid,
           isLoading: false,
           error: null,
+          isLocalTimes: false,
         );
         _recalculateNextPrayer();
       } else {
@@ -201,6 +196,7 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
           isLoading: false,
           clearTimes: true,
           clearNextPrayer: true,
+          isLocalTimes: false,
         );
       }
     } catch (e) {
@@ -212,8 +208,106 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
   }
 
   Future<void> switchMasjid(Map<String, dynamic> newMasjid) async {
-    state = state.copyWith(isLoading: true, activeMasjid: newMasjid);
+    state = state.copyWith(
+        isLoading: true, activeMasjid: newMasjid, isLocalTimes: false);
     await refreshFromBackend(specificMasjidId: newMasjid['id']);
+  }
+
+  Future<void> selectLocalTimes({int school = 1}) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        throw StateError('Allow location access to show local prayer times.');
+      }
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings:
+            const LocationSettings(accuracy: LocationAccuracy.medium),
+      );
+      final today = DateTime.now().toIso8601String().split('T').first;
+      Map<String, dynamic>? cachedTimes;
+      final cachedRaw =
+          await _storage.read(key: 'cached_local_prayer_times_json');
+      final cachedDate = await _storage.read(key: 'cached_local_prayer_date');
+      final cachedSchool = await _storage.read(key: 'cached_local_prayer_school');
+      final cachedLat = double.tryParse(
+          (await _storage.read(key: 'cached_local_prayer_lat')) ?? '');
+      final cachedLng = double.tryParse(
+          (await _storage.read(key: 'cached_local_prayer_lng')) ?? '');
+      final sameLocation = cachedLat != null &&
+          cachedLng != null &&
+          (cachedLat - position.latitude).abs() < 0.02 &&
+          (cachedLng - position.longitude).abs() < 0.02;
+      if (cachedRaw != null && cachedDate == today && sameLocation && cachedSchool == school.toString()) {
+        cachedTimes = jsonDecode(cachedRaw) as Map<String, dynamic>;
+        state = state.copyWith(
+          times: cachedTimes,
+          clearMasjid: true,
+          isLocalTimes: true,
+          isLoading: false,
+          clearError: true,
+        );
+        _recalculateNextPrayer();
+      }
+      final times = await LocalPrayerTimesService.fetchDaily(
+        latitude: position.latitude,
+        longitude: position.longitude,
+        school: school,
+      );
+      times['latitude'] = position.latitude;
+      times['longitude'] = position.longitude;
+      await _storage.write(
+          key: 'cached_local_prayer_times_json', value: jsonEncode(times));
+      await _storage.write(
+          key: 'cached_local_prayer_date', value: times['date']?.toString());
+      await _storage.write(
+          key: 'cached_local_prayer_school', value: school.toString());
+      await _storage.write(
+          key: 'cached_local_prayer_lat', value: position.latitude.toString());
+      await _storage.write(
+          key: 'cached_local_prayer_lng', value: position.longitude.toString());
+      state = state.copyWith(
+        times: times,
+        clearMasjid: true,
+        isLocalTimes: true,
+        isLoading: false,
+        clearError: true,
+      );
+      _recalculateNextPrayer();
+    } catch (e) {
+      final cachedRaw =
+          await _storage.read(key: 'cached_local_prayer_times_json');
+      final cachedDate = await _storage.read(key: 'cached_local_prayer_date');
+      final cachedSchool = await _storage.read(key: 'cached_local_prayer_school');
+      if (cachedRaw != null &&
+          cachedDate == DateTime.now().toIso8601String().split('T').first &&
+          cachedSchool == school.toString()) {
+        final cachedTimes = jsonDecode(cachedRaw) as Map<String, dynamic>;
+        state = state.copyWith(
+          times: cachedTimes,
+          clearMasjid: true,
+          clearNextPrayer: true,
+          isLocalTimes: true,
+          isLoading: false,
+          error:
+              'Showing saved local prayer times. Refresh when you are online.',
+        );
+        _recalculateNextPrayer();
+        return;
+      }
+      state = state.copyWith(
+        isLoading: false,
+        clearMasjid: true,
+        clearTimes: true,
+        clearNextPrayer: true,
+        isLocalTimes: true,
+        error: e.toString().replaceFirst('Bad state: ', ''),
+      );
+    }
   }
 
   void _startTimer() {
@@ -229,97 +323,75 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
 
     final now = DateTime.now();
 
-    DateTime parseTime(String? timeStr, int fallbackHour, int fallbackMin) {
+    DateTime? parseTime(String? timeStr) {
       if (timeStr == null || timeStr.isEmpty) {
-        return DateTime(
-            now.year, now.month, now.day, fallbackHour, fallbackMin);
+        return null;
       }
       final clean = timeStr.replaceAll(RegExp(r'[^\d:]'), '');
       final parts = clean.split(':');
       if (parts.length >= 2) {
-        int h = int.tryParse(parts[0]) ?? fallbackHour;
-        final m = int.tryParse(parts[1]) ?? fallbackMin;
+        int? h = int.tryParse(parts[0]);
+        final m = int.tryParse(parts[1]);
+        if (h == null || m == null) return null;
         if (timeStr.toUpperCase().contains('PM') && h < 12) h += 12;
         if (timeStr.toUpperCase().contains('AM') && h == 12) h = 0;
-        // 24hr format handling
-        if (!timeStr.toUpperCase().contains('AM') &&
-            !timeStr.toUpperCase().contains('PM')) {
-          if (fallbackHour >= 12 && h < 12) h += 12;
-        }
         return DateTime(now.year, now.month, now.day, h, m);
       }
-      return DateTime(now.year, now.month, now.day, fallbackHour, fallbackMin);
+      return null;
     }
 
-    final fajrAdhan = parseTime(times['fajrAdhan'], 5, 0);
-    final fajrIqamah = parseTime(times['fajrJamaah'], 5, 15);
-
-    final dhuhrAdhan = parseTime(times['dhuhrAdhan'], 12, 30);
-    final dhuhrIqamah = parseTime(times['dhuhrJamaah'], 12, 45);
-
-    final asrAdhan = parseTime(times['asrAdhan'], 16, 30);
-    final asrIqamah = parseTime(times['asrJamaah'], 16, 45);
-
-    final maghribAdhan = parseTime(times['maghribAdhan'], 18, 0);
-    final maghribIqamah = parseTime(times['maghribJamaah'], 18, 10);
-
-    final ishaAdhan = parseTime(times['ishaAdhan'], 19, 30);
-    final ishaIqamah = parseTime(times['ishaJamaah'], 19, 45);
-
-    DateTime nextAdhanTarget;
-    DateTime nextIqamahTarget;
-    String name;
-    String adhanStr;
-    String iqamahStr;
-
-    if (now.isBefore(fajrAdhan)) {
-      nextAdhanTarget = fajrAdhan;
-      nextIqamahTarget = fajrIqamah;
-      name = 'Fajr';
-      adhanStr = times['fajrAdhan'] ?? 'Fajr';
-      iqamahStr = times['fajrJamaah'] ?? 'Fajr';
-    } else if (now.isBefore(dhuhrAdhan)) {
-      nextAdhanTarget = dhuhrAdhan;
-      nextIqamahTarget = dhuhrIqamah;
-      name = now.weekday == DateTime.friday ? 'Jumu\'ah' : 'Dhuhr';
-      adhanStr = times['dhuhrAdhan'] ?? 'Dhuhr';
-      iqamahStr = times['dhuhrJamaah'] ?? 'Dhuhr';
-    } else if (now.isBefore(asrAdhan)) {
-      nextAdhanTarget = asrAdhan;
-      nextIqamahTarget = asrIqamah;
-      name = 'Asr';
-      adhanStr = times['asrAdhan'] ?? 'Asr';
-      iqamahStr = times['asrJamaah'] ?? 'Asr';
-    } else if (now.isBefore(maghribAdhan)) {
-      nextAdhanTarget = maghribAdhan;
-      nextIqamahTarget = maghribIqamah;
-      name = 'Maghrib';
-      adhanStr = times['maghribAdhan'] ?? 'Maghrib';
-      iqamahStr = times['maghribJamaah'] ?? 'Maghrib';
-    } else if (now.isBefore(ishaAdhan)) {
-      nextAdhanTarget = ishaAdhan;
-      nextIqamahTarget = ishaIqamah;
-      name = 'Isha';
-      adhanStr = times['ishaAdhan'] ?? 'Isha';
-      iqamahStr = times['ishaJamaah'] ?? 'Isha';
-    } else {
-      nextAdhanTarget = fajrAdhan.add(const Duration(days: 1));
-      nextIqamahTarget = fajrIqamah.add(const Duration(days: 1));
-      name = 'Fajr';
-      adhanStr = times['fajrAdhan'] ?? 'Fajr';
-      iqamahStr = times['fajrJamaah'] ?? 'Fajr';
+    final prayers = <({String name, String adhanKey, String jamaahKey})>[
+      (name: 'Fajr', adhanKey: 'fajrAdhan', jamaahKey: 'fajrJamaah'),
+      (
+        name: now.weekday == DateTime.friday ? "Jumu'ah" : 'Dhuhr',
+        adhanKey: 'dhuhrAdhan',
+        jamaahKey: 'dhuhrJamaah'
+      ),
+      (name: 'Asr', adhanKey: 'asrAdhan', jamaahKey: 'asrJamaah'),
+      (name: 'Maghrib', adhanKey: 'maghribAdhan', jamaahKey: 'maghribJamaah'),
+      (name: 'Isha', adhanKey: 'ishaAdhan', jamaahKey: 'ishaJamaah'),
+    ];
+    final upcoming = prayers
+        .map((p) => (prayer: p, time: parseTime(times[p.adhanKey]?.toString())))
+        .where((p) => p.time != null)
+        .map((p) => (prayer: p.prayer, time: p.time!))
+        .where((p) => p.time.isAfter(now))
+        .toList();
+    if (upcoming.isEmpty) {
+      final firstPrayer = prayers.first;
+      final tomorrowFajr = parseTime(times[firstPrayer.adhanKey]?.toString());
+      if (tomorrowFajr == null) {
+        state = state.copyWith(clearNextPrayer: true);
+        return;
+      }
+      final tomorrowIqamah = parseTime(times[firstPrayer.jamaahKey]?.toString());
+      final nextDayAdhan = tomorrowFajr.add(const Duration(days: 1));
+      final nextDayIqamah = tomorrowIqamah?.add(const Duration(days: 1));
+      state = state.copyWith(
+        nextPrayer: NextPrayerInfo(
+          name: firstPrayer.name,
+          adhan: times[firstPrayer.adhanKey]?.toString() ?? '',
+          iqamah: times[firstPrayer.jamaahKey]?.toString() ?? '',
+          timeUntilAdhan: nextDayAdhan.difference(now),
+          timeUntilIqamah: nextDayIqamah != null && nextDayIqamah.isAfter(now)
+              ? nextDayIqamah.difference(now)
+              : Duration.zero,
+        ),
+      );
+      return;
     }
-
-    final diffAdhan = nextAdhanTarget.difference(now);
-    final diffIqamah = nextIqamahTarget.difference(now);
+    final next = upcoming.first;
+    final iqamah = parseTime(times[next.prayer.jamaahKey]?.toString());
 
     state = state.copyWith(
       nextPrayer: NextPrayerInfo(
-        name: name,
-        adhan: adhanStr,
-        iqamah: iqamahStr,
-        timeUntilAdhan: diffAdhan.isNegative ? Duration.zero : diffAdhan,
-        timeUntilIqamah: diffIqamah.isNegative ? Duration.zero : diffIqamah,
+        name: next.prayer.name,
+        adhan: times[next.prayer.adhanKey]?.toString() ?? '',
+        iqamah: times[next.prayer.jamaahKey]?.toString() ?? '',
+        timeUntilAdhan: next.time.difference(now),
+        timeUntilIqamah: iqamah?.isAfter(now) == true
+            ? iqamah!.difference(now)
+            : Duration.zero,
       ),
     );
   }

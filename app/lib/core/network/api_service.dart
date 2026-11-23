@@ -244,6 +244,33 @@ class ApiService {
     return [];
   }
 
+  Future<Map<String, dynamic>?> getAdminMasjids({
+    String? search,
+    String? status,
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      await ensureSuperAdminAuth();
+      final res = await _dio.get('/masjids/admin/directory', queryParameters: {
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+        if (status != null && status != 'ALL') 'status': status,
+        'page': page,
+        'limit': limit,
+      });
+      if (res.data['success'] == true && res.data['data'] != null) {
+        return res.data['data'] as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<Map<String, dynamic>> setMasjidActive(String masjidId, bool isActive) async {
+    await ensureSuperAdminAuth();
+    final res = await _dio.put('/masjids/admin/$masjidId/status', data: {'isActive': isActive});
+    return res.data;
+  }
+
   Future<Map<String, dynamic>?> getTodayPrayerTimes(String masjidId) async {
     try {
       final res = await _dio.get('/masjids/$masjidId/prayer-times/today');
@@ -268,9 +295,7 @@ class ApiService {
 
   Future<void> ensureSuperAdminAuth() async {
     if (authToken == null) {
-      try {
-        await verifyOtp('1234567890', '123456');
-      } catch (_) {}
+      throw StateError('Sign in with a Super Admin account to continue.');
     }
   }
 
@@ -480,6 +505,12 @@ class ApiService {
   Future<Map<String, dynamic>> deleteUser(String userId) async {
     await ensureSuperAdminAuth();
     final res = await _dio.delete('/users/$userId');
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>> setUserActive(String userId, bool isActive) async {
+    await ensureSuperAdminAuth();
+    final res = await _dio.patch('/users/$userId/status', data: {'isActive': isActive});
     return res.data;
   }
 

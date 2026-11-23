@@ -44,11 +44,16 @@ export class MasjidRoleGuard implements CanActivate {
       },
       include: {
         role: true,
+          masjid: { select: { isActive: true, approvalStatus: true } },
       },
     });
 
     if (!adminRecord) {
       throw new ForbiddenException('You do not have administrative access to this masjid');
+    }
+
+    if (!adminRecord.masjid.isActive || adminRecord.masjid.approvalStatus !== 'APPROVED') {
+      throw new ForbiddenException('This masjid is currently inactive');
     }
 
     // ADMIN role for a masjid inherits all permissions (Finance, Announcement)

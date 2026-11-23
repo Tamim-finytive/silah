@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Post, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Put, Post, Delete, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { UpdateProfileDto, CreateUserDto } from './dto/users.dto';
@@ -47,6 +47,18 @@ export class UsersController {
     @Query('limit') limit?: number,
   ) {
     return this.usersService.listAllUsers({ search, page: Number(page), limit: Number(limit) });
+  }
+
+  @Patch(':id/status')
+  @UseGuards(RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Super Admin: Activate or deactivate a user account' })
+  async setUserStatus(
+    @CurrentUser('id') adminUserId: string,
+    @Param('id') id: string,
+    @Body('isActive') isActive: boolean,
+  ) {
+    return this.usersService.setUserActive(id, isActive, adminUserId);
   }
 
   @Delete(':id')

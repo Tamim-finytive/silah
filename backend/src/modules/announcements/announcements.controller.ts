@@ -3,9 +3,10 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AnnouncementsService } from './announcements.service';
 import { CreateAnnouncementDto, BroadcastAnnouncementDto } from './dto/announcement.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { MasjidRoleGuard } from '../../common/guards/masjid-role.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { MasjidRoles } from '../../common/decorators/roles.decorator';
+import { MasjidRoles, Roles } from '../../common/decorators/roles.decorator';
 import { RoleType } from '@prisma/client';
 
 @ApiTags('Announcements')
@@ -20,7 +21,8 @@ export class BroadcastAnnouncementsController {
   }
 
   @Post('broadcasts')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Super Admin: Send system-wide broadcast announcement' })
   async createBroadcast(
@@ -31,7 +33,8 @@ export class BroadcastAnnouncementsController {
   }
 
   @Delete('broadcasts/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Super Admin: Delete broadcast announcement' })
   async deleteBroadcast(@Param('id') id: string) {

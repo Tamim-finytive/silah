@@ -18,7 +18,6 @@ export class AuthService {
   async checkUser(dto: CheckUserDto) {
     const raw10 = dto.phone.trim().replace(/\D/g, '').slice(-10);
     const normalized = raw10.length === 10 ? `+91${raw10}` : this.otpService.normalizePhone(dto.phone);
-    const isMasterSuperAdmin = raw10.includes('1234567890');
 
     const user = await this.prisma.user.findFirst({
       where: {
@@ -38,7 +37,7 @@ export class AuthService {
       return {
         exists: true,
         isOnboarded: user.isOnboarded,
-        isSuperAdmin: user.isSuperAdmin || isMasterSuperAdmin,
+        isSuperAdmin: user.isSuperAdmin,
         isMasjidAdmin: (user.masjidAdmins?.length ?? 0) > 0,
         name: user.name,
         hasMasjid: user.memberships.length > 0,
@@ -48,7 +47,7 @@ export class AuthService {
     return {
       exists: false,
       isOnboarded: false,
-      isSuperAdmin: isMasterSuperAdmin,
+      isSuperAdmin: false,
       isMasjidAdmin: false,
     };
   }
@@ -57,7 +56,6 @@ export class AuthService {
     const raw10 = dto.phone.trim().replace(/\D/g, '').slice(-10);
     const normalized = raw10.length === 10 ? `+91${raw10}` : this.otpService.normalizePhone(dto.phone);
     const phone = normalized;
-    const isMasterSuperAdmin = raw10.includes('1234567890');
 
     let user = await this.prisma.user.findFirst({
       where: {
@@ -73,26 +71,15 @@ export class AuthService {
       },
     });
 
-    if (isMasterSuperAdmin && !user) {
-      user = await this.prisma.user.create({
-        data: {
-          phone,
-          name: 'Super Admin',
-          isSuperAdmin: true,
-          isActive: true,
-        },
-        include: {
-          memberships: true,
-          masjidAdmins: { include: { role: true, masjid: true } },
-        },
-      });
-    }
-
     if (!user) {
       return {
         exists: false,
         message: 'User does not exist. Please register.',
       };
+    }
+
+    if (!user.isActive) {
+      throw new UnauthorizedException('This account has been disabled');
     }
 
     const tokens = await this.generateTokens(user.id, user.phone, user.isSuperAdmin);
@@ -123,7 +110,6 @@ export class AuthService {
 
   async register(dto: RegisterUserDto) {
     const phone = this.otpService.normalizePhone(dto.phone);
-    const isMasterSuperAdmin = phone.includes('1234567890');
 
     const user = await this.prisma.user.upsert({
       where: { phone },
@@ -140,7 +126,7 @@ export class AuthService {
         age: dto.age,
         address: dto.address,
         isOnboarded: true,
-        isSuperAdmin: isMasterSuperAdmin,
+        isSuperAdmin: false,
         isActive: true,
       },
       include: {
@@ -201,7 +187,6 @@ export class AuthService {
     const phone = this.otpService.normalizePhone(dto.phone);
     await this.otpService.verifyOtp(dto.phone, dto.otp);
 
-    const isMasterSuperAdmin = phone.includes('1234567890');
 
     // Find or create user by mobile number
     let user = await this.prisma.user.findUnique({
@@ -214,14 +199,18 @@ export class AuthService {
       },
     });
 
+    if (user && !user.isActive) {
+      throw new UnauthorizedException('This account has been disabled');
+    }
+
     let isNewUser = false;
     if (!user) {
       isNewUser = true;
       user = await this.prisma.user.create({
         data: {
           phone,
-          name: isMasterSuperAdmin ? 'Super Admin' : 'User',
-          isSuperAdmin: isMasterSuperAdmin,
+          name: 'User',
+          isSuperAdmin: false,
           isActive: true,
         },
         include: {
@@ -232,17 +221,6 @@ export class AuthService {
         },
       });
       this.logger.log(`Created new user with mobile: ${phone}`);
-    } else if (isMasterSuperAdmin && !user.isSuperAdmin) {
-      user = await this.prisma.user.update({
-        where: { id: user.id },
-        data: { isSuperAdmin: true, name: 'Super Admin' },
-        include: {
-          memberships: true,
-          masjidAdmins: {
-            include: { role: true, masjid: true },
-          },
-        },
-      });
     }
 
     // Auto-link Sandha records by phone number

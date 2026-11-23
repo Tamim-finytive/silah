@@ -28,6 +28,44 @@ export class MasjidsService {
     });
   }
 
+  async listAdminDirectory(query: { search?: string; status?: string; page?: number; limit?: number }) {
+    const page = Math.max(1, query.page || 1);
+    const limit = Math.min(100, Math.max(1, query.limit || 20));
+    const where: Prisma.MasjidWhereInput = {};
+    if (query.status === 'ACTIVE') where.isActive = true;
+    if (query.status === 'INACTIVE') where.isActive = false;
+    if (query.status === 'PENDING') where.approvalStatus = MasjidApprovalStatus.PENDING;
+    if (query.search?.trim()) {
+      const term = query.search.trim();
+      where.OR = [
+        { name: { contains: term, mode: 'insensitive' } },
+        { nameTa: { contains: term, mode: 'insensitive' } },
+        { city: { contains: term, mode: 'insensitive' } },
+        { address: { contains: term, mode: 'insensitive' } },
+      ];
+    }
+    const [total, items] = await Promise.all([
+      this.prisma.masjid.count({ where }),
+      this.prisma.masjid.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: { _count: { select: { memberships: true, admins: true } } },
+      }),
+    ]);
+    return { total, page, limit, items };
+  }
+
+  async setMasjidActive(masjidId: string, isActive: boolean) {
+    const masjid = await this.prisma.masjid.findUnique({ where: { id: masjidId } });
+    if (!masjid) throw new NotFoundException('Masjid not found');
+    if (isActive && masjid.approvalStatus !== MasjidApprovalStatus.APPROVED) {
+      throw new BadRequestException('Only approved masjids can be activated');
+    }
+    return this.prisma.masjid.update({ where: { id: masjidId }, data: { isActive } });
+  }
+
   async findById(id: string) {
     let masjid = await this.prisma.masjid.findUnique({
       where: { id },
@@ -122,11 +160,25 @@ export class MasjidsService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     const isSuperAdmin = user?.isSuperAdmin === true;
 
+    if (isSuperAdmin && dto.adminPhone?.trim()) {
+      const cleanPhone = dto.adminPhone.trim().replace(/\D/g, '').slice(-10);
+      if (cleanPhone.length !== 10) {
+        throw new BadRequestException('Enter a valid 10-digit administrator mobile number');
+      }
+      const normalizedPhone = `+91${cleanPhone}`;
+      const existingAdmin = await this.prisma.user.findFirst({
+        where: { OR: [{ phone: normalizedPhone }, { phone: cleanPhone }] },
+        select: { id: true },
+      });
+      if (!existingAdmin && !dto.adminName?.trim()) {
+        throw new BadRequestException('Enter the administrator name when adding a new mobile number');
+      }
+    }
+
     const qrToken = randomBytes(16).toString('hex'); // 32-character permanent token
 
-    // When an admin or user creates a masjid, set it to APPROVED so it is immediately active and not empty
-    const approvalStatus = MasjidApprovalStatus.APPROVED;
-    const isActive = true;
+    const approvalStatus = isSuperAdmin ? MasjidApprovalStatus.APPROVED : MasjidApprovalStatus.PENDING;
+    const isActive = isSuperAdmin;
 
     const { adminName, adminPhone, ...masjidPayload } = dto;
 
@@ -158,6 +210,14 @@ export class MasjidsService {
       data: masjidData,
     });
 
+    if (!isSuperAdmin) {
+      return {
+        ...masjid,
+        isPendingApproval: true,
+        message: 'Masjid request submitted. A Super Admin must approve it before it becomes searchable.',
+      };
+    }
+
     const adminRole = await this.prisma.role.findUniqueOrThrow({
       where: { name: RoleType.ADMIN },
     });
@@ -177,8 +237,7 @@ export class MasjidsService {
         adminUser = await this.prisma.user.create({
           data: {
             phone: normalizedPhone,
-            name: adminName?.trim() || 'Masjid Admin',
-            age: 30,
+            name: adminName!.trim(),
             isOnboarded: true,
             isActive: true,
           } as any,
@@ -248,38 +307,6 @@ export class MasjidsService {
       },
     });
 
-    // Seed default prayer times for today so dashboard is not empty
-    try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      await this.prisma.prayerTime.upsert({
-        where: {
-          idx_prayer_times_unique: {
-            masjidId: masjid.id,
-            date: today,
-          },
-        },
-        update: {},
-        create: {
-          masjidId: masjid.id,
-          date: today,
-          fajrAdhan: '05:00',
-          fajrJamaah: '05:30',
-          dhuhrAdhan: '12:45',
-          dhuhrJamaah: '13:15',
-          asrAdhan: '16:15',
-          asrJamaah: '16:45',
-          maghribAdhan: '18:15',
-          maghribJamaah: '18:20',
-          ishaAdhan: '19:45',
-          ishaJamaah: '20:15',
-          jummahKhutbah: '12:45',
-          jummahJamaah: '13:15',
-          updatedBy: userId,
-        },
-      });
-    } catch (_) {}
-
     return {
       ...masjid,
       isPendingApproval: false,
@@ -315,6 +342,9 @@ export class MasjidsService {
 
     if (!masjid) {
       throw new NotFoundException('Masjid request not found');
+    }
+    if (masjid.approvalStatus !== MasjidApprovalStatus.PENDING) {
+      throw new BadRequestException('Only pending masjid requests can be approved');
     }
 
     const updated = await this.prisma.masjid.update({
@@ -376,6 +406,9 @@ export class MasjidsService {
 
     if (!masjid) {
       throw new NotFoundException('Masjid request not found');
+    }
+    if (masjid.approvalStatus !== MasjidApprovalStatus.PENDING) {
+      throw new BadRequestException('Only pending masjid requests can be rejected');
     }
 
     const updated = await this.prisma.masjid.update({

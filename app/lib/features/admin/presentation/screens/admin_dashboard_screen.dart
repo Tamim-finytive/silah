@@ -130,16 +130,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         }
       }
 
-      // 4. Fallback to all masjids
-      if (mId == null) {
-        final allMasjids = await ApiService.instance.getMasjids();
-        if (allMasjids.isNotEmpty) {
-          final first = allMasjids.first as Map<String, dynamic>;
-          mId = first['id']?.toString();
-          mName = first['name']?.toString();
-        }
-      }
-
       if (mId != null) {
         _masjidId = mId;
         _masjidName = mName ?? _masjidName ?? 'Masjid Admin';
@@ -224,6 +214,36 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
                 const SizedBox(height: 20),
 
+                if (_todayPrayerTimes == null) ...[
+                  Card(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.schedule, color: Color(0xFF0F432B), size: 30),
+                          const SizedBox(height: 10),
+                          const Text('Create Your Prayer Schedule', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 6),
+                          const Text('Add this masjid’s prayer and jamaah times to make them available to connected members.'),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0F432B)),
+                              onPressed: _openCreatePrayerSchedule,
+                              icon: const Icon(Icons.add),
+                              label: const Text('Create Schedule'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
                 // Today Prayer Times Card
                 const Text("Today's Prayer Schedule", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 10),
@@ -256,6 +276,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ],
             ),
     );
+  }
+
+  void _openCreatePrayerSchedule() {
+    setState(() => _currentIndex = 1);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _masjidId != null) _showFullPrayerTimesDialog();
+    });
   }
 
   Widget _buildNoMasjidAdminCard() {
@@ -370,7 +397,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               }
               Navigator.pop(ctx);
               try {
-                await ApiService.instance.createMasjid(
+                final response = await ApiService.instance.createMasjid(
                   name: nameCtrl.text.trim(),
                   city: cityCtrl.text.trim(),
                   address: addrCtrl.text.trim(),
@@ -379,12 +406,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   longitude: double.tryParse(lngCtrl.text),
                   mapUrl: mapUrlCtrl.text.trim().isEmpty ? null : mapUrlCtrl.text.trim(),
                 );
-                // Refresh profile to immediately obtain admin roles and masjid assignment
-                try {
-                  await ApiService.instance.getProfile();
-                } catch (_) {}
+                final data = response['data'] as Map<String, dynamic>? ?? response;
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Masjid created successfully!')));
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(data['message']?.toString() ?? 'Masjid request submitted for review.'),
+                  ));
                 }
                 await _loadMasjidData();
               } catch (e) {
@@ -640,7 +666,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9F7),
       appBar: AppBar(
-        title: const Text('Manage Prayer & Events', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Prayer Events & Schedule', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF0F432B),
         foregroundColor: Colors.white,
         actions: [
@@ -1158,11 +1184,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   void _showDateRangePrayerDialog() {
     final startCtrl = TextEditingController(text: DateTime.now().toIso8601String().split('T')[0]);
     final endCtrl = TextEditingController(text: DateTime.now().add(const Duration(days: 30)).toIso8601String().split('T')[0]);
-    final fajrJCtrl = TextEditingController(text: '05:30');
-    final dhuhrJCtrl = TextEditingController(text: '13:15');
-    final asrJCtrl = TextEditingController(text: '16:45');
-    final maghribJCtrl = TextEditingController(text: '18:20');
-    final ishaJCtrl = TextEditingController(text: '20:15');
+    final fajrJCtrl = TextEditingController();
+    final dhuhrJCtrl = TextEditingController();
+    final asrJCtrl = TextEditingController();
+    final maghribJCtrl = TextEditingController();
+    final ishaJCtrl = TextEditingController();
 
     showDialog(
       context: context,

@@ -18,11 +18,7 @@ export class OtpService {
   async generateAndSendOtp(rawPhone: string): Promise<{ success: boolean; message: string; debugOtp?: string }> {
     const phone = this.normalizePhone(rawPhone);
 
-    // Super Admin master phone or custom OTP
-    let otp = Math.floor(100000 + Math.random() * 900000).toString();
-    if (phone.includes('1234567890')) {
-      otp = '123456';
-    }
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins validity
 
@@ -39,27 +35,19 @@ export class OtpService {
       },
     });
 
-    this.logger.log(`\n========================================\n[OTP DISPATCH] Mobile: ${phone} -> OTP: ${otp}\n========================================`);
+    if (process.env.NODE_ENV !== 'production') {
+      this.logger.debug('OTP code generated.');
+    }
 
     return {
       success: true,
       message: 'OTP sent successfully',
-      debugOtp: otp,
+      ...(process.env.NODE_ENV !== 'production' ? { debugOtp: otp } : {}),
     };
   }
 
   async verifyOtp(rawPhone: string, otp: string): Promise<boolean> {
     const phone = this.normalizePhone(rawPhone);
-
-    // Super admin 1234567890 master OTP bypass
-    if (phone.includes('1234567890') && otp === '123456') {
-      return true;
-    }
-
-    // In dev mode, allow master OTP 123456 for any test phone
-    if (process.env.NODE_ENV !== 'production' && otp === '123456') {
-      return true;
-    }
 
     const record = await this.prisma.otpVerification.findFirst({
       where: {
@@ -72,7 +60,7 @@ export class OtpService {
     });
 
     if (!record) {
-      throw new BadRequestException('Invalid or expired OTP. Please use OTP 123456 or request a new one.');
+      throw new BadRequestException('Invalid or expired OTP. Request a new code and try again.');
     }
 
     await this.prisma.otpVerification.update({

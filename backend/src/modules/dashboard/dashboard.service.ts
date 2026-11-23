@@ -6,6 +6,10 @@ export class DashboardService {
   constructor(private prisma: PrismaService) {}
 
   async getSuperAdminOverview() {
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const activeSince = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const [
       totalMasjids,
       totalUsers,
@@ -15,12 +19,16 @@ export class DashboardService {
       recentMasjids,
       pendingRequestsCount,
       pendingRequests,
+      activeDeviceUsers,
+      activePlans,
+      currentMonthPayments,
     ] = await Promise.all([
       this.prisma.masjid.count({ where: { isActive: true } }),
-      this.prisma.user.count({ where: { isActive: true } }),
+      this.prisma.user.count(),
       this.prisma.membership.count(),
       this.prisma.sandhaPlan.count({ where: { isActive: true } }),
       this.prisma.sandhaPayment.aggregate({
+        where: { status: { in: ['PAID', 'PARTIAL'] } },
         _sum: { amount: true },
         _count: { id: true },
       }),
@@ -40,7 +48,35 @@ export class DashboardService {
         },
         orderBy: { createdAt: 'desc' },
       }),
+      this.prisma.device.findMany({
+        where: {
+          isActive: true,
+          lastActiveAt: { gte: activeSince },
+          user: { isActive: true },
+        },
+        select: { userId: true },
+        distinct: ['userId'],
+      }),
+      this.prisma.sandhaPlan.findMany({
+        where: { isActive: true },
+        select: { amount: true, frequency: true, _count: { select: { members: true } } },
+      }),
+      this.prisma.sandhaPayment.aggregate({
+        where: { paidAt: { gte: monthStart }, status: { in: ['PAID', 'PARTIAL'] } },
+        _sum: { amount: true },
+      }),
     ]);
+
+    const monthlyDivisors: Record<string, number> = {
+      MONTHLY: 1,
+      QUARTERLY: 3,
+      HALF_YEARLY: 6,
+      YEARLY: 12,
+    };
+    const monthlySandhaExpected = activePlans.reduce((total, plan) => {
+      const divisor = monthlyDivisors[plan.frequency] || 1;
+      return total + (Number(plan.amount) * plan._count.members) / divisor;
+    }, 0);
 
     return {
       metrics: {
@@ -49,6 +85,9 @@ export class DashboardService {
         totalFollowers: totalMemberships,
         totalSandhaPlans,
         totalSandhaCollected: paymentsSummary._sum.amount || 0,
+        currentMonthSandhaCollected: currentMonthPayments._sum.amount || 0,
+        monthlySandhaExpected,
+        activeUsersLast30Days: activeDeviceUsers.length,
         totalTransactions: paymentsSummary._count.id,
         pendingRequestsCount,
       },
@@ -60,6 +99,7 @@ export class DashboardService {
   async getMasjidAdminOverview(masjidId: string) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
 
     const [
       masjid,
@@ -68,6 +108,7 @@ export class DashboardService {
       activeAnnouncements,
       sandhaPlans,
       recentPayments,
+      paymentsSummary,
     ] = await Promise.all([
       this.prisma.masjid.findUnique({ where: { id: masjidId } }),
       this.prisma.membership.count({ where: { masjidId } }),
@@ -100,7 +141,16 @@ export class DashboardService {
           planMember: { select: { name: true, phone: true } },
         },
       }),
+      this.prisma.sandhaPayment.aggregate({
+        where: { plan: { masjidId }, paidAt: { gte: monthStart }, status: { in: ['PAID', 'PARTIAL'] } },
+        _sum: { amount: true },
+      }),
     ]);
+
+    const monthlyDivisors: Record<string, number> = { MONTHLY: 1, QUARTERLY: 3, HALF_YEARLY: 6, YEARLY: 12 };
+    const monthlySandhaExpected = sandhaPlans.reduce((total, plan) => {
+      return total + (Number(plan.amount) * plan._count.members) / (monthlyDivisors[plan.frequency] || 1);
+    }, 0);
 
     return {
       masjid,
@@ -109,6 +159,8 @@ export class DashboardService {
         hasConfiguredTodayTimes: !!todayPrayerTimes,
         activeAnnouncementsCount: activeAnnouncements,
         activePlansCount: sandhaPlans.length,
+        monthlySandhaExpected,
+        currentMonthSandhaCollected: paymentsSummary._sum.amount || 0,
       },
       todayPrayerTimes,
       sandhaPlans,
