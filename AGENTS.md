@@ -71,6 +71,36 @@ This file is the durable handoff for anyone working on this repository. Keep it 
 - Still outstanding from the requested roadmap: targeted broadcast audiences (including selected member/masjid and Super Admin groups), an admin-to-Super-Admin request inbox, persistent month-wide Ramadan timetable, special event schedule improvements, and admin Sandha household/address/collection management.
 - Validation on 2026-11-23: Nest backend build passed. Direct Dart analysis found no compile errors; info-level lint notices remain. Tests were not run.
 
+## User display preferences (2026-11-23)
+
+- Member-facing prayer, sunrise, Ishraq, sunset, and fasting times display in 12-hour `h:mm AM/PM` format. Backend prayer-time values remain in their existing API/database format; admin schedule entry labels remain 24-hour because they configure backend values.
+- Removed the separate language switch controls from login, onboarding, and Qibla. Language is selected from the member Profile settings and persisted locally in secure storage. Existing English/Tamil translated strings read this shared setting.
+- Shared display formatter: `app/lib/core/utils/prayer_time_format.dart`; global language setting: `app/lib/core/l10n/language_provider.dart`.
+- Validation on 2026-11-23: Dart analysis of the touched Flutter files found no compile errors; info-level lint notices remain. `git diff --check` passed. Tests were not run.
+
+## Flutter API debugging (2026-11-23)
+
+- All Silah backend requests use `ApiService`'s shared Dio client and now print copyable cURL requests, success responses, and error responses in Flutter debug builds via `ApiDebugInterceptor`.
+- The same debug interceptor is attached to the separate AlAdhan local prayer-times and AlQuran clients, so current external API calls are visible too. Release builds do not print API diagnostics.
+- Authorization, OTP, access/refresh/device tokens, secret/password/API-key/cookie fields, and QR token URL segments are redacted from cURL and response logs. Keep new Dio clients attached to `ApiDebugInterceptor` to preserve coverage.
+- Validation on 2026-11-23: Dart analysis of touched networking files found no compile errors; info-level lint notices remain. `git diff --check` passed. Tests were not run.
+
+## Qibla compass behavior (2026-11-23)
+
+- Qibla dial and needle now render directly from the same live heading and bearing; avoid resetting a 0-to-heading animation on every compass event, which made the arrow appear to jump/rotate inaccurately.
+- Refresh Qibla reuses the current location and reads the current compass value; it does not force location recalibration when a location is already available or ask the user to rotate the phone to calibrate.
+
+## Member discovery and admin operations (2026-11-23)
+
+- Public member search lists only active, approved masjids and searches name, Tamil name, city, state, and address. QR lookup and join also reject inactive or unapproved masjids.
+- The QR scan flow had a busy-state re-entry bug: it marked itself processing before calling a handler that immediately returned. QR lookup now proceeds to the shared join operation without that second guard blocking it.
+- Super Admin masjid and user directories now load additional backend pages on scroll; page-number controls were removed. A full-screen, read-only masjid detail view loads live dashboard metrics, saved prayer times, assigned admins, connected members, and map location.
+- Masjid discovery waits for at least three characters and one second of typing idle before issuing a server search; stale search responses are ignored.
+- Age was removed from onboarding, user create/register APIs, response DTOs, Prisma model, and member/admin views. The age column was dropped from `public.users` in Supabase using the requested SQL and verified absent through `information_schema` on 2026-11-23. The repeatable SQL is `backend/prisma/manual-schema-updates/2026-11-23-remove-user-age.sql`.
+- A live read-only Supabase inspection found 8 masjids: 7 approved and active, 1 approved but inactive (`chennai mas`). All 8 have QR tokens. The inactive record is intentionally omitted by public discovery/join routes. `uniq` exists as an approved, active masjid in the database.
+- Supabase health advisors report RLS is disabled on all 14 public application tables, which means the Data API roles can access rows without row-level policies. Do not enable RLS without designing policies for the NestJS/Postgres access model; this finding must be raised for owner review.
+- Special schedule records now support edit through a masjid-scoped backend `PUT` endpoint, and the admin Prayer & Events screen exposes create/edit actions and a responsive empty state. Month-by-month daily Ramadan Sehri/Iftar schedules remain a separate required database-backed feature and are not complete yet.
+
 ## Working conventions
 
 - Preserve unrelated user edits already present in the working tree.

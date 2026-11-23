@@ -1,12 +1,14 @@
 import 'package:dio/dio.dart';
 import 'package:intl/intl.dart';
+import '../../../core/network/api_debug_interceptor.dart';
 
 class LocalPrayerTimesService {
   static final Dio _dio = Dio(BaseOptions(
     baseUrl: 'https://api.aladhan.com/v1',
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 10),
-  ));
+  ))
+    ..interceptors.add(ApiDebugInterceptor());
 
   static Future<Map<String, dynamic>> fetchDaily({
     required double latitude,

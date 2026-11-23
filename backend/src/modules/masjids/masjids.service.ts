@@ -9,8 +9,9 @@ export class MasjidsService {
   constructor(private prisma: PrismaService) {}
 
   async findAll(query?: { city?: string; search?: string }) {
-    const where: any = {
+    const where: Prisma.MasjidWhereInput = {
       isActive: true,
+      approvalStatus: MasjidApprovalStatus.APPROVED,
     };
     if (query?.city) {
       where.city = { contains: query.city, mode: 'insensitive' };
@@ -20,6 +21,8 @@ export class MasjidsService {
         { name: { contains: query.search, mode: 'insensitive' } },
         { nameTa: { contains: query.search, mode: 'insensitive' } },
         { city: { contains: query.search, mode: 'insensitive' } },
+        { address: { contains: query.search, mode: 'insensitive' } },
+        { state: { contains: query.search, mode: 'insensitive' } },
       ];
     }
     return this.prisma.masjid.findMany({
@@ -103,9 +106,11 @@ export class MasjidsService {
   async findByQrToken(qrToken: string) {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(qrToken);
     const masjid = await this.prisma.masjid.findFirst({
-      where: isUuid
-        ? { OR: [{ qrToken }, { id: qrToken }] }
-        : { qrToken },
+      where: {
+        isActive: true,
+        approvalStatus: MasjidApprovalStatus.APPROVED,
+        ...(isUuid ? { OR: [{ qrToken }, { id: qrToken }] } : { qrToken }),
+      },
     });
     if (!masjid) {
       throw new NotFoundException('Invalid or expired Masjid QR code');
@@ -325,7 +330,6 @@ export class MasjidsService {
             id: true,
             name: true,
             phone: true,
-            age: true,
             address: true,
             createdAt: true,
           },
@@ -428,6 +432,14 @@ export class MasjidsService {
   }
 
   async joinMasjid(userId: string, masjidId: string, isPrimary = false) {
+    const masjid = await this.prisma.masjid.findUnique({
+      where: { id: masjidId },
+      select: { id: true, isActive: true, approvalStatus: true },
+    });
+    if (!masjid || !masjid.isActive || masjid.approvalStatus !== MasjidApprovalStatus.APPROVED) {
+      throw new NotFoundException('This masjid is not available to join');
+    }
+
     if (isPrimary) {
       // Clear previous primary
       await this.prisma.membership.updateMany({
@@ -542,7 +554,7 @@ export class MasjidsService {
         where: { masjidId },
         include: {
           user: {
-            select: { id: true, name: true, phone: true, age: true, address: true, createdAt: true },
+            select: { id: true, name: true, phone: true, address: true, createdAt: true },
           },
         },
         orderBy: { joinedAt: 'desc' },
@@ -562,7 +574,6 @@ export class MasjidsService {
         userId: m.userId,
         name: m.user.name,
         phone: m.user.phone,
-        age: m.user.age,
         address: m.user.address,
         isPrimary: m.isPrimary,
         joinedAt: m.joinedAt,

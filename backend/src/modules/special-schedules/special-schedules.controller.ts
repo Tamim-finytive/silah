@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { SpecialSchedulesService } from './special-schedules.service';
 import { CreateSpecialScheduleDto } from './dto/special-schedule.dto';
@@ -30,6 +30,19 @@ export class SpecialSchedulesController {
     @Body() dto: CreateSpecialScheduleDto,
   ) {
     return this.service.create(masjidId, userId, dto);
+  }
+
+  @Put(':id')
+  @UseGuards(JwtAuthGuard, MasjidRoleGuard)
+  @MasjidRoles(RoleType.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update a masjid special schedule/event (Admin only)' })
+  async updateSpecialSchedule(
+    @Param('masjidId') masjidId: string,
+    @Param('id') id: string,
+    @Body() dto: CreateSpecialScheduleDto,
+  ) {
+    return this.service.update(masjidId, id, dto);
   }
 
   @Delete(':id')

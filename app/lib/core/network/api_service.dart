@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'api_debug_interceptor.dart';
 
 class ApiService {
   static final ApiService instance = ApiService._internal();
@@ -53,6 +54,7 @@ class ApiService {
         },
       ),
     );
+    _dio.interceptors.add(ApiDebugInterceptor());
   }
 
   Future<Map<String, dynamic>> checkUser(String phone) async {
@@ -100,7 +102,8 @@ class ApiService {
             currentUser = {
               ...?currentUser,
               ...profile,
-              'isOnboarded': profile['isOnboarded'] ?? currentUser?['isOnboarded'] ?? true,
+              'isOnboarded':
+                  profile['isOnboarded'] ?? currentUser?['isOnboarded'] ?? true,
             };
             await _storage.write(key: _userKey, value: jsonEncode(currentUser));
           }
@@ -130,13 +133,11 @@ class ApiService {
   Future<Map<String, dynamic>> register({
     required String phone,
     required String name,
-    required int age,
     String? address,
   }) async {
     final res = await _dio.post('/auth/register', data: {
       'phone': phone,
       'name': name,
-      'age': age,
       if (address != null && address.isNotEmpty) 'address': address,
     });
     if (res.data['success'] == true && res.data['data'] != null) {
@@ -145,7 +146,8 @@ class ApiService {
     return res.data;
   }
 
-  Future<bool> updateDeviceToken(String fcmToken, {String platform = 'ANDROID'}) async {
+  Future<bool> updateDeviceToken(String fcmToken,
+      {String platform = 'ANDROID'}) async {
     try {
       final res = await _dio.post('/auth/device-token', data: {
         'fcmToken': fcmToken,
@@ -185,9 +187,11 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>?> joinMasjid(String masjidId, {bool isPrimary = true}) async {
+  Future<Map<String, dynamic>?> joinMasjid(String masjidId,
+      {bool isPrimary = true}) async {
     try {
-      final res = await _dio.post('/masjids/$masjidId/join', data: {'isPrimary': isPrimary});
+      final res = await _dio
+          .post('/masjids/$masjidId/join', data: {'isPrimary': isPrimary});
       if (res.data['success'] == true) {
         return res.data['data'] as Map<String, dynamic>;
       }
@@ -211,7 +215,8 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> verifyOtp(String phone, String otp) async {
-    final res = await _dio.post('/auth/otp/verify', data: {'phone': phone, 'otp': otp});
+    final res =
+        await _dio.post('/auth/otp/verify', data: {'phone': phone, 'otp': otp});
     if (res.data['success'] == true && res.data['data'] != null) {
       await _saveSession(res.data['data']);
     }
@@ -233,7 +238,9 @@ class ApiService {
     try {
       final res = await _dio.get(
         '/masjids',
-        queryParameters: search != null && search.trim().isNotEmpty ? {'search': search.trim()} : null,
+        queryParameters: search != null && search.trim().isNotEmpty
+            ? {'search': search.trim()}
+            : null,
       );
       if (res.data['success'] == true) {
         return res.data['data'] as List<dynamic>;
@@ -265,9 +272,11 @@ class ApiService {
     return null;
   }
 
-  Future<Map<String, dynamic>> setMasjidActive(String masjidId, bool isActive) async {
+  Future<Map<String, dynamic>> setMasjidActive(
+      String masjidId, bool isActive) async {
     await ensureSuperAdminAuth();
-    final res = await _dio.put('/masjids/admin/$masjidId/status', data: {'isActive': isActive});
+    final res = await _dio
+        .put('/masjids/admin/$masjidId/status', data: {'isActive': isActive});
     return res.data;
   }
 
@@ -341,7 +350,8 @@ class ApiService {
     return res.data;
   }
 
-  Future<Map<String, dynamic>> rejectMasjidRequest(String masjidId, [String? reason]) async {
+  Future<Map<String, dynamic>> rejectMasjidRequest(String masjidId,
+      [String? reason]) async {
     await ensureSuperAdminAuth();
     final res = await _dio.post('/masjids/requests/$masjidId/reject', data: {
       if (reason != null && reason.isNotEmpty) 'reason': reason,
@@ -404,17 +414,22 @@ class ApiService {
     return null;
   }
 
-  Future<Map<String, dynamic>> updatePrayerTimes(String masjidId, Map<String, dynamic> dto) async {
+  Future<Map<String, dynamic>> updatePrayerTimes(
+      String masjidId, Map<String, dynamic> dto) async {
     final res = await _dio.put('/masjids/$masjidId/prayer-times', data: dto);
     return res.data;
   }
 
-  Future<Map<String, dynamic>> createAnnouncement(String masjidId, Map<String, dynamic> dto) async {
+  Future<Map<String, dynamic>> createAnnouncement(
+      String masjidId, Map<String, dynamic> dto) async {
     final res = await _dio.post('/masjids/$masjidId/announcements', data: dto);
     return res.data;
   }
 
-  Future<Map<String, dynamic>> assignRole(String masjidId, {required String phone, required String name, required String role}) async {
+  Future<Map<String, dynamic>> assignRole(String masjidId,
+      {required String phone,
+      required String name,
+      required String role}) async {
     final res = await _dio.post('/masjids/$masjidId/roles', data: {
       'phone': phone,
       'name': name,
@@ -443,7 +458,8 @@ class ApiService {
     return [];
   }
 
-  Future<Map<String, dynamic>> updateMasjid(String masjidId, Map<String, dynamic> dto) async {
+  Future<Map<String, dynamic>> updateMasjid(
+      String masjidId, Map<String, dynamic> dto) async {
     final res = await _dio.put('/masjids/$masjidId', data: dto);
     return res.data;
   }
@@ -458,7 +474,8 @@ class ApiService {
     return null;
   }
 
-  Future<Map<String, dynamic>> addMasjidMember(String masjidId, {required String phone, String? name}) async {
+  Future<Map<String, dynamic>> addMasjidMember(String masjidId,
+      {required String phone, String? name}) async {
     final res = await _dio.post('/masjids/$masjidId/members', data: {
       'phone': phone,
       if (name != null && name.isNotEmpty) 'name': name,
@@ -466,8 +483,10 @@ class ApiService {
     return res.data;
   }
 
-  Future<Map<String, dynamic>> updatePrayerTimeRange(String masjidId, Map<String, dynamic> dto) async {
-    final res = await _dio.post('/masjids/$masjidId/prayer-times/range', data: dto);
+  Future<Map<String, dynamic>> updatePrayerTimeRange(
+      String masjidId, Map<String, dynamic> dto) async {
+    final res =
+        await _dio.post('/masjids/$masjidId/prayer-times/range', data: dto);
     return res.data;
   }
 
@@ -481,18 +500,33 @@ class ApiService {
     return [];
   }
 
-  Future<Map<String, dynamic>> createSpecialSchedule(String masjidId, Map<String, dynamic> dto) async {
-    final res = await _dio.post('/masjids/$masjidId/special-schedules', data: dto);
+  Future<Map<String, dynamic>> createSpecialSchedule(
+      String masjidId, Map<String, dynamic> dto) async {
+    final res =
+        await _dio.post('/masjids/$masjidId/special-schedules', data: dto);
     return res.data;
   }
 
-  Future<Map<String, dynamic>> deleteSpecialSchedule(String masjidId, String scheduleId) async {
-    final res = await _dio.delete('/masjids/$masjidId/special-schedules/$scheduleId');
+  Future<Map<String, dynamic>> updateSpecialSchedule(
+      String masjidId, String scheduleId, Map<String, dynamic> dto) async {
+    final res = await _dio.put(
+      '/masjids/$masjidId/special-schedules/$scheduleId',
+      data: dto,
+    );
     return res.data;
   }
 
-  Future<Map<String, dynamic>> deleteAnnouncement(String masjidId, String announcementId) async {
-    final res = await _dio.delete('/masjids/$masjidId/announcements/$announcementId');
+  Future<Map<String, dynamic>> deleteSpecialSchedule(
+      String masjidId, String scheduleId) async {
+    final res =
+        await _dio.delete('/masjids/$masjidId/special-schedules/$scheduleId');
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>> deleteAnnouncement(
+      String masjidId, String announcementId) async {
+    final res =
+        await _dio.delete('/masjids/$masjidId/announcements/$announcementId');
     return res.data;
   }
 
@@ -508,9 +542,11 @@ class ApiService {
     return res.data;
   }
 
-  Future<Map<String, dynamic>> setUserActive(String userId, bool isActive) async {
+  Future<Map<String, dynamic>> setUserActive(
+      String userId, bool isActive) async {
     await ensureSuperAdminAuth();
-    final res = await _dio.patch('/users/$userId/status', data: {'isActive': isActive});
+    final res =
+        await _dio.patch('/users/$userId/status', data: {'isActive': isActive});
     return res.data;
   }
 
@@ -520,7 +556,8 @@ class ApiService {
     return res.data;
   }
 
-  Future<Map<String, dynamic>?> getUsers({String? search, int page = 1, int limit = 20}) async {
+  Future<Map<String, dynamic>?> getUsers(
+      {String? search, int page = 1, int limit = 20}) async {
     try {
       await ensureSuperAdminAuth();
       final res = await _dio.get('/users', queryParameters: {

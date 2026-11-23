@@ -33,7 +33,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   // Step 1: User Profile Form
   final _nameController = TextEditingController();
-  final _ageController = TextEditingController();
   final _addressController = TextEditingController();
 
   // Step 2: Role
@@ -70,7 +69,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _ageController.dispose();
     _addressController.dispose();
     _masjidNameController.dispose();
     _masjidNameTaController.dispose();
@@ -84,30 +82,22 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   Future<void> _handleStep1Next() async {
     final name = _nameController.text.trim();
-    final ageStr = _ageController.text.trim();
     final address = _addressController.text.trim();
 
     if (name.isEmpty) {
       setState(() => _errorMessage = 'Please enter your full name');
       return;
     }
-    if (ageStr.isEmpty) {
-      setState(() => _errorMessage = 'Please enter your age');
-      return;
-    }
-
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      final age = int.tryParse(ageStr) ?? 25;
       // Persist to backend database directly on Step 1
       await ApiService.instance.register(
         phone: widget.phone,
         name: name,
-        age: age,
         address: address.isEmpty ? null : address,
       );
 
@@ -170,13 +160,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     try {
       // 1. Register user profile
       final name = _nameController.text.trim();
-      final age = int.tryParse(_ageController.text.trim()) ?? 30;
       final address = _addressController.text.trim();
 
       await ApiService.instance.register(
         phone: widget.phone,
         name: name,
-        age: age,
         address: address.isEmpty ? null : address,
       );
 
@@ -274,29 +262,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isEn = ref.watch(languageProvider);
+    ref.watch(languageProvider);
     final lang = ref.read(languageProvider.notifier);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7FAF8),
       appBar: AppBar(
         title: Text(lang.tr(en: 'Getting Started', ta: 'தொடங்குதல்')),
-        actions: [
-          TextButton(
-            onPressed: () => lang.toggleLanguage(),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                isEn ? 'தமிழ்' : 'English',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -425,19 +397,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               labelText: lang.tr(en: 'Your Full Name *', ta: 'உங்கள் முழு பெயர் *'),
               hintText: 'e.g. Mohamed Riyaz',
               prefixIcon: const Icon(Icons.badge_outlined),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Age
-          TextField(
-            controller: _ageController,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              labelText: lang.tr(en: 'Your Age *', ta: 'வயது *'),
-              hintText: 'e.g. 28',
-              prefixIcon: const Icon(Icons.cake_outlined),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),

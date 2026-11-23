@@ -90,7 +90,6 @@ export class AuthService {
         id: user.id,
         phone: user.phone,
         name: user.name,
-        age: user.age,
         address: user.address,
         isOnboarded: user.isOnboarded,
         isSuperAdmin: user.isSuperAdmin,
@@ -115,7 +114,6 @@ export class AuthService {
       where: { phone },
       update: {
         name: dto.name,
-        age: dto.age,
         address: dto.address,
         isOnboarded: true,
         isActive: true,
@@ -123,7 +121,6 @@ export class AuthService {
       create: {
         phone,
         name: dto.name,
-        age: dto.age,
         address: dto.address,
         isOnboarded: true,
         isSuperAdmin: false,
@@ -143,7 +140,6 @@ export class AuthService {
         id: user.id,
         phone: user.phone,
         name: user.name,
-        age: user.age,
         address: user.address,
         isOnboarded: user.isOnboarded,
         isSuperAdmin: user.isSuperAdmin,

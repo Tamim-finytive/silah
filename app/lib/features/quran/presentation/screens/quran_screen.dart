@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/network/api_debug_interceptor.dart';
 
 class QuranScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -17,7 +18,8 @@ class _QuranScreenState extends State<QuranScreen> {
     baseUrl: 'https://api.alquran.cloud/v1',
     connectTimeout: const Duration(seconds: 12),
     receiveTimeout: const Duration(seconds: 20),
-  ));
+  ))
+    ..interceptors.add(ApiDebugInterceptor());
 
   List<Map<String, dynamic>> _surahs = [];
   bool _loading = true;
@@ -225,7 +227,8 @@ class _SurahReaderScreenState extends State<_SurahReaderScreen> {
   static const _storage = FlutterSecureStorage();
   static final _dio = Dio(BaseOptions(
       baseUrl: 'https://api.alquran.cloud/v1',
-      receiveTimeout: const Duration(seconds: 30)));
+      receiveTimeout: const Duration(seconds: 30)))
+    ..interceptors.add(ApiDebugInterceptor());
   bool _loading = true;
   String? _error;
   Map<String, dynamic>? _arabic;

@@ -41,7 +41,6 @@ export class UsersService {
     const userData: any = {
       phone: dto.phone,
       name: dto.name,
-      age: dto.age,
       address: dto.address,
       isSuperAdmin: dto.isSuperAdmin || false,
       isOnboarded: true,

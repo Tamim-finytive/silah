@@ -104,7 +104,7 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isEn = ref.watch(languageProvider);
+    ref.watch(languageProvider);
     final lang = ref.read(languageProvider.notifier);
 
     return Scaffold(
@@ -124,23 +124,7 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
           },
         ),
         title: Text(lang.tr(en: 'Sign In', ta: 'உள்நுழைவு')),
-        actions: [
-          TextButton(
-            onPressed: () => lang.toggleLanguage(),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                isEn ? 'தமிழ்' : 'English',
-                style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-        ],
+        actions: const [],
       ),
       body: SafeArea(
         child: SingleChildScrollView(

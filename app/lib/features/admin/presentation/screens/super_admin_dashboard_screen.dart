@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:masjid_namaz_app/core/network/api_service.dart';
 import 'package:masjid_namaz_app/core/services/notification_service.dart';
 import 'package:masjid_namaz_app/features/prayer_times/presentation/screens/home_screen.dart';
+import 'package:masjid_namaz_app/features/admin/presentation/screens/super_admin_masjid_details_screen.dart';
 import 'package:masjid_namaz_app/features/auth/presentation/screens/otp_login_screen.dart';
 import 'package:masjid_namaz_app/features/masjid/presentation/widgets/location_input_widget.dart';
 
@@ -32,12 +32,22 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   int _masjidTotal = 0;
   int _usersPage = 1;
   int _usersTotal = 0;
+  final ScrollController _masjidScrollController = ScrollController();
+  final ScrollController _usersScrollController = ScrollController();
+  bool _loadingMoreMasjids = false;
+  bool _loadingMoreUsers = false;
+  bool _hasMoreMasjids = true;
+  bool _hasMoreUsers = true;
+  String? _masjidLoadError;
+  String? _usersLoadError;
   Timer? _searchDebounce;
   StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
 
   @override
   void initState() {
     super.initState();
+    _masjidScrollController.addListener(_onMasjidScroll);
+    _usersScrollController.addListener(_onUsersScroll);
     _loadAllData();
     _notificationSubscription =
         NotificationService.instance.notificationEvents.listen((event) {
@@ -63,7 +73,29 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   void dispose() {
     _searchDebounce?.cancel();
     _notificationSubscription?.cancel();
+    _masjidScrollController.dispose();
+    _usersScrollController.dispose();
     super.dispose();
+  }
+
+  void _onMasjidScroll() {
+    if (_currentIndex != 1 ||
+        !_masjidScrollController.hasClients ||
+        _loadingMoreMasjids ||
+        !_hasMoreMasjids) return;
+    if (_masjidScrollController.position.extentAfter < 320) {
+      _loadMasjidPage();
+    }
+  }
+
+  void _onUsersScroll() {
+    if (_currentIndex != 4 ||
+        !_usersScrollController.hasClients ||
+        _loadingMoreUsers ||
+        !_hasMoreUsers) return;
+    if (_usersScrollController.position.extentAfter < 320) {
+      _loadUsersPage();
+    }
   }
 
   Future<void> _loadAllData() async {
@@ -73,11 +105,11 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
       final masjidPage = await ApiService.instance.getAdminMasjids(
         search: _masjidSearchQuery,
         status: _masjidStatus,
-        page: _masjidPage,
+        page: 1,
       );
       final pending = await ApiService.instance.getPendingMasjidRequests();
-      final usersRes = await ApiService.instance
-          .getUsers(search: _userSearchQuery, page: _usersPage);
+      final usersRes =
+          await ApiService.instance.getUsers(search: _userSearchQuery, page: 1);
       final broadcasts = await ApiService.instance.getBroadcastAnnouncements();
 
       if (mounted) {
@@ -85,15 +117,97 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
           _stats = stats;
           _allMasjids = masjidPage?['items'] ?? [];
           _masjidTotal = masjidPage?['total'] ?? 0;
+          _masjidPage = 1;
+          _hasMoreMasjids = _allMasjids.length < _masjidTotal;
+          _masjidLoadError = masjidPage == null
+              ? 'Masjids could not be loaded. Pull down or tap refresh to try again.'
+              : null;
           _pendingRequests = pending;
           _users = usersRes?['items'] ?? [];
           _usersTotal = usersRes?['total'] ?? 0;
+          _usersPage = 1;
+          _hasMoreUsers = _users.length < _usersTotal;
+          _usersLoadError = usersRes == null
+              ? 'Users could not be loaded from the backend. Tap refresh to retry.'
+              : null;
           _broadcasts = broadcasts;
           _isLoading = false;
         });
       }
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadMasjidPage({bool reset = false}) async {
+    if (_loadingMoreMasjids || (!reset && !_hasMoreMasjids)) return;
+    final page = reset ? 1 : _masjidPage + 1;
+    setState(() {
+      _loadingMoreMasjids = true;
+      _masjidLoadError = null;
+      if (reset) {
+        _allMasjids = [];
+        _masjidPage = 0;
+        _masjidTotal = 0;
+        _hasMoreMasjids = true;
+      }
+    });
+    try {
+      final result = await ApiService.instance.getAdminMasjids(
+        search: _masjidSearchQuery,
+        status: _masjidStatus,
+        page: page,
+      );
+      if (result == null) throw StateError('Masjid directory request failed');
+      if (!mounted) return;
+      final items = (result['items'] as List<dynamic>? ?? []);
+      setState(() {
+        _allMasjids = reset ? items : [..._allMasjids, ...items];
+        _masjidPage = page;
+        _masjidTotal = (result['total'] as num?)?.toInt() ?? _allMasjids.length;
+        _hasMoreMasjids = _allMasjids.length < _masjidTotal;
+      });
+    } catch (error) {
+      if (mounted)
+        setState(
+            () => _masjidLoadError = 'Could not load more masjids: $error');
+    } finally {
+      if (mounted) setState(() => _loadingMoreMasjids = false);
+    }
+  }
+
+  Future<void> _loadUsersPage({bool reset = false}) async {
+    if (_loadingMoreUsers || (!reset && !_hasMoreUsers)) return;
+    final page = reset ? 1 : _usersPage + 1;
+    setState(() {
+      _loadingMoreUsers = true;
+      _usersLoadError = null;
+      if (reset) {
+        _users = [];
+        _usersPage = 0;
+        _usersTotal = 0;
+        _hasMoreUsers = true;
+      }
+    });
+    try {
+      final result = await ApiService.instance.getUsers(
+        search: _userSearchQuery,
+        page: page,
+      );
+      if (result == null) throw StateError('Users list request failed');
+      if (!mounted) return;
+      final items = (result['items'] as List<dynamic>? ?? []);
+      setState(() {
+        _users = reset ? items : [..._users, ...items];
+        _usersPage = page;
+        _usersTotal = (result['total'] as num?)?.toInt() ?? _users.length;
+        _hasMoreUsers = _users.length < _usersTotal;
+      });
+    } catch (error) {
+      if (mounted)
+        setState(() => _usersLoadError = 'Could not load users: $error');
+    } finally {
+      if (mounted) setState(() => _loadingMoreUsers = false);
     }
   }
 
@@ -236,10 +350,9 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                   ),
                   onChanged: (value) {
                     _masjidSearchQuery = value;
-                    _masjidPage = 1;
                     _searchDebounce?.cancel();
-                    _searchDebounce =
-                        Timer(const Duration(milliseconds: 350), _loadAllData);
+                    _searchDebounce = Timer(const Duration(milliseconds: 350),
+                        () => _loadMasjidPage(reset: true));
                   },
                 ),
               ),
@@ -254,11 +367,8 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                 ],
                 onChanged: (value) {
                   if (value == null) return;
-                  setState(() {
-                    _masjidStatus = value;
-                    _masjidPage = 1;
-                  });
-                  _loadAllData();
+                  setState(() => _masjidStatus = value);
+                  _loadMasjidPage(reset: true);
                 },
               ),
             ]),
@@ -266,140 +376,143 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _allMasjids.isEmpty
-                    ? _buildEmptyState('No Masjids Found', Icons.mosque)
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _allMasjids.length,
-                        itemBuilder: (ctx, i) {
-                          final m = _allMasjids[i] as Map<String, dynamic>;
-                          final active = m['isActive'] == true;
-                          final approval =
-                              m['approvalStatus']?.toString() ?? 'UNKNOWN';
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
-                            elevation: 1,
-                            child: ListTile(
-                              onTap: () => _showMasjidDetails(m),
-                              leading: CircleAvatar(
-                                backgroundColor: const Color(0xFF0F432B)
-                                    .withValues(alpha: 0.1),
-                                child: const Icon(Icons.mosque,
-                                    color: Color(0xFF0F432B)),
-                              ),
-                              title: Text(
-                                m['name'] ?? 'Unnamed Masjid',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold),
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (m['nameTa'] != null)
-                                    Text(m['nameTa'],
-                                        style: const TextStyle(
-                                            fontSize: 12, color: Colors.grey)),
-                                  const SizedBox(height: 4),
-                                  Row(
+                : _allMasjids.isEmpty && _loadingMoreMasjids
+                    ? const Center(child: CircularProgressIndicator())
+                    : _allMasjids.isEmpty
+                        ? _buildRetryState(
+                            _masjidLoadError ?? 'No Masjids Found',
+                            () => _loadMasjidPage(reset: true),
+                            Icons.mosque)
+                        : ListView.builder(
+                            controller: _masjidScrollController,
+                            padding: const EdgeInsets.all(16),
+                            itemCount: _allMasjids.length +
+                                (_loadingMoreMasjids || _masjidLoadError != null
+                                    ? 1
+                                    : 0),
+                            itemBuilder: (ctx, i) {
+                              if (i == _allMasjids.length) {
+                                return _masjidLoadError != null
+                                    ? TextButton(
+                                        onPressed: _loadMasjidPage,
+                                        child: Text(_masjidLoadError!))
+                                    : const Padding(
+                                        padding: EdgeInsets.all(16),
+                                        child: Center(
+                                            child:
+                                                CircularProgressIndicator()));
+                              }
+                              final m = _allMasjids[i] as Map<String, dynamic>;
+                              final active = m['isActive'] == true;
+                              final approval =
+                                  m['approvalStatus']?.toString() ?? 'UNKNOWN';
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                                elevation: 1,
+                                child: ListTile(
+                                  onTap: () => _showMasjidDetails(m),
+                                  leading: CircleAvatar(
+                                    backgroundColor: const Color(0xFF0F432B)
+                                        .withValues(alpha: 0.1),
+                                    child: const Icon(Icons.mosque,
+                                        color: Color(0xFF0F432B)),
+                                  ),
+                                  title: Text(
+                                    m['name'] ?? 'Unnamed Masjid',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                  subtitle: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      const Icon(Icons.location_on,
-                                          size: 14, color: Colors.grey),
-                                      const SizedBox(width: 4),
-                                      Expanded(
-                                        child: Text(
-                                          '${m['city'] ?? ''}, ${m['address'] ?? ''}',
-                                          style: const TextStyle(fontSize: 12),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
+                                      if (m['nameTa'] != null)
+                                        Text(m['nameTa'],
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey)),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.location_on,
+                                              size: 14, color: Colors.grey),
+                                          const SizedBox(width: 4),
+                                          Expanded(
+                                            child: Text(
+                                              '${m['city'] ?? ''}, ${m['address'] ?? ''}',
+                                              style:
+                                                  const TextStyle(fontSize: 12),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
-                                ],
-                              ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: active
-                                          ? Colors.green.shade50
-                                          : Colors.grey.shade200,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
                                           color: active
-                                              ? Colors.green.shade300
-                                              : Colors.grey.shade400),
-                                    ),
-                                    child: Text(
-                                        active
-                                            ? approval
-                                            : (approval == 'PENDING'
-                                                ? 'PENDING'
-                                                : 'STOPPED'),
-                                        style: TextStyle(
-                                            color: active
-                                                ? Colors.green.shade800
-                                                : Colors.grey.shade800,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold)),
+                                              ? Colors.green.shade50
+                                              : Colors.grey.shade200,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          border: Border.all(
+                                              color: active
+                                                  ? Colors.green.shade300
+                                                  : Colors.grey.shade400),
+                                        ),
+                                        child: Text(
+                                            active
+                                                ? approval
+                                                : (approval == 'PENDING'
+                                                    ? 'PENDING'
+                                                    : 'STOPPED'),
+                                            style: TextStyle(
+                                                color: active
+                                                    ? Colors.green.shade800
+                                                    : Colors.grey.shade800,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold)),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      if (approval == 'APPROVED')
+                                        IconButton(
+                                          icon: Icon(
+                                              active
+                                                  ? Icons.pause_circle_outline
+                                                  : Icons.play_circle_outline,
+                                              color: const Color(0xFF0F432B),
+                                              size: 21),
+                                          tooltip: active
+                                              ? 'Stop Masjid'
+                                              : 'Activate Masjid',
+                                          onPressed: () =>
+                                              _setMasjidStatus(m, !active),
+                                        ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline,
+                                            color: Colors.red, size: 20),
+                                        tooltip: 'Delete Masjid',
+                                        onPressed: () =>
+                                            _confirmDeleteMasjid(m),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 4),
-                                  if (approval == 'APPROVED')
-                                    IconButton(
-                                      icon: Icon(
-                                          active
-                                              ? Icons.pause_circle_outline
-                                              : Icons.play_circle_outline,
-                                          color: const Color(0xFF0F432B),
-                                          size: 21),
-                                      tooltip: active
-                                          ? 'Stop Masjid'
-                                          : 'Activate Masjid',
-                                      onPressed: () =>
-                                          _setMasjidStatus(m, !active),
-                                    ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline,
-                                        color: Colors.red, size: 20),
-                                    tooltip: 'Delete Masjid',
-                                    onPressed: () => _confirmDeleteMasjid(m),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                                ),
+                              );
+                            },
+                          ),
           ),
-          _buildPagination(_masjidPage, _masjidTotal, (page) {
-            setState(() => _masjidPage = page);
-            _loadAllData();
-          }),
         ],
       ),
-    );
-  }
-
-  Widget _buildPagination(
-      int page, int total, ValueChanged<int> onPageChanged) {
-    const pageSize = 20;
-    final pages = total == 0 ? 1 : (total / pageSize).ceil();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        IconButton(
-            onPressed: page > 1 ? () => onPageChanged(page - 1) : null,
-            icon: const Icon(Icons.chevron_left)),
-        Text('Page $page of $pages  •  $total records'),
-        IconButton(
-            onPressed: page < pages ? () => onPageChanged(page + 1) : null,
-            icon: const Icon(Icons.chevron_right)),
-      ]),
     );
   }
 
@@ -419,92 +532,12 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   Future<void> _showMasjidDetails(Map<String, dynamic> masjid) async {
     final id = masjid['id']?.toString();
     if (id == null) return;
-    final results = await Future.wait([
-      ApiService.instance.getTodayPrayerTimes(id),
-      ApiService.instance.getMasjidAdminOverview(id),
-    ]);
-    final schedule = results[0];
-    final analytics = results[1];
-    final metrics = analytics?['metrics'] as Map<String, dynamic>? ?? {};
-    final hasLocation = (masjid['mapUrl']?.toString() ?? '').isNotEmpty ||
-        (masjid['latitude'] != null && masjid['longitude'] != null);
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(masjid['name']?.toString() ?? 'Masjid details'),
-        content: SingleChildScrollView(
-            child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-              Text('${masjid['address'] ?? ''}, ${masjid['city'] ?? ''}'),
-              const SizedBox(height: 8),
-              Text(
-                  'Members: ${masjid['_count']?['memberships'] ?? 0}   Admins: ${masjid['_count']?['admins'] ?? 0}'),
-              const SizedBox(height: 6),
-              Text(
-                  'Monthly Sandha expected: ₹${metrics['monthlySandhaExpected'] ?? '—'}'),
-              Text(
-                  'Collected this month: ₹${metrics['currentMonthSandhaCollected'] ?? '—'}'),
-              const Divider(),
-              const Text("Today's prayer times",
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              if (schedule == null)
-                const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: Text('No schedule has been saved for today.'))
-              else ...[
-                _detailPrayer(
-                    'Fajr', schedule['fajrAdhan'], schedule['fajrJamaah']),
-                _detailPrayer(
-                    'Dhuhr', schedule['dhuhrAdhan'], schedule['dhuhrJamaah']),
-                _detailPrayer(
-                    'Asr', schedule['asrAdhan'], schedule['asrJamaah']),
-                _detailPrayer('Maghrib', schedule['maghribAdhan'],
-                    schedule['maghribJamaah']),
-                _detailPrayer(
-                    'Isha', schedule['ishaAdhan'], schedule['ishaJamaah']),
-                _detailPrayer('Jummah', schedule['jummahKhutbah'],
-                    schedule['jummahJamaah']),
-              ],
-              if ((masjid['mapUrl']?.toString() ?? '').isNotEmpty) ...[
-                const SizedBox(height: 8),
-                SelectableText('Location link: ${masjid['mapUrl']}'),
-              ],
-            ])),
-        actions: [
-          if (hasLocation)
-            TextButton.icon(
-                onPressed: () => _openMasjidMap(masjid),
-                icon: const Icon(Icons.directions),
-                label: const Text('Open map')),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
-        ],
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SuperAdminMasjidDetailsScreen(masjid: masjid),
       ),
     );
-  }
-
-  Widget _detailPrayer(String name, dynamic adhan, dynamic jamaah) => Padding(
-        padding: const EdgeInsets.only(top: 6),
-        child: Row(children: [
-          Expanded(child: Text(name)),
-          Text('${adhan ?? '—'}  /  ${jamaah ?? '—'}')
-        ]),
-      );
-
-  Future<void> _openMasjidMap(Map<String, dynamic> masjid) async {
-    final mapLink = masjid['mapUrl']?.toString();
-    final latitude = masjid['latitude']?.toString();
-    final longitude = masjid['longitude']?.toString();
-    final uri = mapLink != null && mapLink.startsWith('http')
-        ? Uri.tryParse(mapLink)
-        : Uri.parse(
-            'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(latitude != null && longitude != null ? '$latitude,$longitude' : '${masjid['name'] ?? ''}, ${masjid['city'] ?? ''}')}');
-    if (uri != null && await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
   }
 
   void _showCreateMasjidDialog() {
@@ -981,102 +1014,117 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
               ),
               onChanged: (val) {
                 _userSearchQuery = val;
-                _usersPage = 1;
                 _searchDebounce?.cancel();
-                _searchDebounce =
-                    Timer(const Duration(milliseconds: 350), _loadAllData);
+                _searchDebounce = Timer(const Duration(milliseconds: 350),
+                    () => _loadUsersPage(reset: true));
               },
             ),
           ),
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _users.isEmpty
-                    ? _buildEmptyState(
-                        'No Users Found in Database', Icons.people_outline)
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: _users.length,
-                        itemBuilder: (ctx, i) {
-                          final u = _users[i];
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10)),
-                            child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: const Color(0xFF0F432B)
-                                    .withValues(alpha: 0.1),
-                                child: Text(
-                                  (u['name'] ?? 'U')
-                                      .toString()
-                                      .substring(0, 1)
-                                      .toUpperCase(),
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF0F432B)),
-                                ),
-                              ),
-                              title: Text(u['name'] ?? 'No Name',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold)),
-                              onTap: () =>
-                                  _showUserDetails(u as Map<String, dynamic>),
-                              subtitle: Text(
-                                  '${u['phone'] ?? ''} ${u['address'] != null ? '• ${u['address']}' : ''} · ${u['isActive'] == true ? 'Active' : 'Disabled'}'),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (u['isSuperAdmin'] == true) ...[
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                          color: Colors.purple.shade50,
-                                          borderRadius:
-                                              BorderRadius.circular(6)),
-                                      child: const Text('SUPER ADMIN',
-                                          style: TextStyle(
-                                              color: Colors.purple,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold)),
+                : _users.isEmpty && _loadingMoreUsers
+                    ? const Center(child: CircularProgressIndicator())
+                    : _users.isEmpty
+                        ? _buildRetryState(
+                            _usersLoadError ?? 'No Users Found in Database',
+                            () => _loadUsersPage(reset: true),
+                            Icons.people_outline)
+                        : ListView.builder(
+                            controller: _usersScrollController,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            itemCount: _users.length +
+                                (_loadingMoreUsers || _usersLoadError != null
+                                    ? 1
+                                    : 0),
+                            itemBuilder: (ctx, i) {
+                              if (i == _users.length) {
+                                return _usersLoadError != null
+                                    ? TextButton(
+                                        onPressed: _loadUsersPage,
+                                        child: Text(_usersLoadError!))
+                                    : const Padding(
+                                        padding: EdgeInsets.all(16),
+                                        child: Center(
+                                            child:
+                                                CircularProgressIndicator()));
+                              }
+                              final u = _users[i];
+                              final userName =
+                                  u['name']?.toString().trim() ?? '';
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10)),
+                                child: ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: const Color(0xFF0F432B)
+                                        .withValues(alpha: 0.1),
+                                    child: Text(
+                                      (userName.isEmpty ? 'U' : userName[0])
+                                          .toUpperCase(),
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF0F432B)),
                                     ),
-                                    const SizedBox(width: 4),
-                                  ],
-                                  IconButton(
-                                    icon: Icon(
-                                        u['isActive'] == true
-                                            ? Icons.block
-                                            : Icons.check_circle_outline,
-                                        color: u['isActive'] == true
-                                            ? Colors.orange
-                                            : Colors.green,
-                                        size: 20),
-                                    tooltip: u['isActive'] == true
-                                        ? 'Deactivate User'
-                                        : 'Reactivate User',
-                                    onPressed: () => _setUserStatus(
-                                        u as Map<String, dynamic>,
-                                        u['isActive'] != true),
                                   ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline,
-                                        color: Colors.red, size: 20),
-                                    tooltip: 'Delete User',
-                                    onPressed: () => _confirmDeleteUser(
-                                        u as Map<String, dynamic>),
+                                  title: Text(
+                                      userName.isEmpty ? 'No Name' : userName,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold)),
+                                  onTap: () => _showUserDetails(
+                                      u as Map<String, dynamic>),
+                                  subtitle: Text(
+                                      '${u['phone'] ?? ''} ${u['address'] != null ? '• ${u['address']}' : ''} · ${u['isActive'] == true ? 'Active' : 'Disabled'}'),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (u['isSuperAdmin'] == true) ...[
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                              color: Colors.purple.shade50,
+                                              borderRadius:
+                                                  BorderRadius.circular(6)),
+                                          child: const Text('SUPER ADMIN',
+                                              style: TextStyle(
+                                                  color: Colors.purple,
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold)),
+                                        ),
+                                        const SizedBox(width: 4),
+                                      ],
+                                      IconButton(
+                                        icon: Icon(
+                                            u['isActive'] == true
+                                                ? Icons.block
+                                                : Icons.check_circle_outline,
+                                            color: u['isActive'] == true
+                                                ? Colors.orange
+                                                : Colors.green,
+                                            size: 20),
+                                        tooltip: u['isActive'] == true
+                                            ? 'Deactivate User'
+                                            : 'Reactivate User',
+                                        onPressed: () => _setUserStatus(
+                                            u as Map<String, dynamic>,
+                                            u['isActive'] != true),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline,
+                                            color: Colors.red, size: 20),
+                                        tooltip: 'Delete User',
+                                        onPressed: () => _confirmDeleteUser(
+                                            u as Map<String, dynamic>),
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                                ),
+                              );
+                            },
+                          ),
           ),
-          _buildPagination(_usersPage, _usersTotal, (page) {
-            setState(() => _usersPage = page);
-            _loadAllData();
-          }),
         ],
       ),
     );
@@ -1120,7 +1168,6 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   void _showAddUserDialog() {
     final nameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
-    final ageCtrl = TextEditingController();
     final addrCtrl = TextEditingController();
     bool isSuper = false;
 
@@ -1141,10 +1188,6 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                     controller: phoneCtrl,
                     decoration: const InputDecoration(
                         labelText: 'Mobile Number (+91...) *')),
-                TextField(
-                    controller: ageCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Age')),
                 TextField(
                     controller: addrCtrl,
                     decoration: const InputDecoration(labelText: 'Address')),
@@ -1171,7 +1214,6 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                   await ApiService.instance.createUser({
                     'name': nameCtrl.text.trim(),
                     'phone': phoneCtrl.text.trim(),
-                    'age': int.tryParse(ageCtrl.text),
                     'address': addrCtrl.text.trim().isEmpty
                         ? null
                         : addrCtrl.text.trim(),
@@ -1354,6 +1396,28 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     );
   }
 
+  Widget _buildRetryState(String message, VoidCallback onRetry, IconData icon) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 44, color: Colors.grey.shade500),
+            const SizedBox(height: 12),
+            Text(message, textAlign: TextAlign.center),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try again'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _confirmDeleteMasjid(Map<String, dynamic> masjid) {
     final name = masjid['name'] ?? 'this Masjid';
     final id = masjid['id']?.toString() ?? '';
@@ -1468,7 +1532,13 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (i) => setState(() => _currentIndex = i),
+        onTap: (i) {
+          setState(() => _currentIndex = i);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (i == 1) _onMasjidScroll();
+            if (i == 4) _onUsersScroll();
+          });
+        },
         type: BottomNavigationBarType.fixed,
         selectedItemColor: const Color(0xFF0F432B),
         unselectedItemColor: Colors.grey,

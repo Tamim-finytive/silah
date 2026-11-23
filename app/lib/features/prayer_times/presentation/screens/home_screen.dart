@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:masjid_namaz_app/core/network/api_service.dart';
+import 'package:masjid_namaz_app/core/l10n/language_provider.dart';
 import 'package:masjid_namaz_app/core/services/notification_service.dart';
+import 'package:masjid_namaz_app/core/utils/prayer_time_format.dart';
 import 'package:masjid_namaz_app/features/prayer_times/data/prayer_times_provider.dart';
 import 'package:masjid_namaz_app/features/qibla/presentation/screens/qibla_screen.dart';
 import 'package:masjid_namaz_app/features/quran/presentation/screens/quran_screen.dart';
@@ -791,7 +793,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                     ),
                     Text(
-                      next.adhan,
+                      formatPrayerTime(next.adhan),
                       style: const TextStyle(
                         fontSize: 15,
                         color: Colors.white,
@@ -819,7 +821,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                     ),
                     Text(
-                      next.iqamah,
+                      formatPrayerTime(next.iqamah),
                       style: const TextStyle(
                         fontSize: 15,
                         color: Color(0xFF4ADE80),
@@ -1253,7 +1255,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Expanded(
             flex: 3,
             child: Text(
-              adhan,
+              formatPrayerTime(adhan),
               style: TextStyle(
                 fontSize: 13,
                 color: isNext ? Colors.black87 : Colors.grey.shade700,
@@ -1264,7 +1266,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Expanded(
             flex: 3,
             child: Text(
-              iqamah,
+              formatPrayerTime(iqamah),
               textAlign: TextAlign.end,
               style: TextStyle(
                 fontSize: 13,
@@ -1338,12 +1340,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        sunrise,
+                        formatPrayerTime(sunrise.toString()),
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Ishraq $ishraq',
+                        'Ishraq ${formatPrayerTime(ishraq.toString())}',
                         style: const TextStyle(fontSize: 10, color: Colors.grey),
                       ),
                     ],
@@ -1371,12 +1373,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        sunset,
+                        formatPrayerTime(sunset.toString()),
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Fast $sehri',
+                        'Fast ${formatPrayerTime(sehri.toString())}',
                         style: const TextStyle(fontSize: 10, color: Color(0xFF1E824C), fontWeight: FontWeight.w600),
                       ),
                     ],
@@ -1531,6 +1533,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   // Profile Tab (Tab 4)
   Widget _buildProfileTab() {
+    final isEnglish = ref.watch(languageProvider);
     final user = ApiService.instance.currentUser;
     final userName = user?['name'] ?? 'User';
     final userPhone = user?['phone'] ?? '';
@@ -1629,6 +1632,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const Divider(),
             ListTile(
+              leading: const Icon(Icons.language),
+              title: const Text('Language'),
+              subtitle: Text(isEnglish ? 'English' : 'தமிழ்'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _showLanguageDialog(isEnglish),
+            ),
+            const Divider(),
+            ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
               title: const Text('Sign Out / Switch Account', style: TextStyle(color: Colors.red)),
               onTap: () async {
@@ -1638,6 +1649,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   context,
                   MaterialPageRoute(builder: (_) => const OtpLoginScreen()),
                 );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showLanguageDialog(bool isEnglish) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('App language'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RadioListTile<bool>(
+              value: true,
+              groupValue: isEnglish,
+              title: const Text('English'),
+              onChanged: (_) {
+                ref.read(languageProvider.notifier).setEnglish(true);
+                Navigator.pop(dialogContext);
+              },
+            ),
+            RadioListTile<bool>(
+              value: false,
+              groupValue: isEnglish,
+              title: const Text('தமிழ்'),
+              onChanged: (_) {
+                ref.read(languageProvider.notifier).setEnglish(false);
+                Navigator.pop(dialogContext);
               },
             ),
           ],

@@ -26,7 +26,7 @@ export class AuthController {
 
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Register new user profile (Name, Age, optional Address)' })
+  @ApiOperation({ summary: 'Register new user profile (Name and optional Address)' })
   async register(@Body() dto: RegisterUserDto) {
     return this.authService.register(dto);
   }
@@ -73,7 +73,6 @@ export class AuthController {
       id: user.id,
       phone: user.phone,
       name: user.name,
-      age: user.age,
       address: user.address,
       isOnboarded: user.isOnboarded ?? true,
       language: user.language,

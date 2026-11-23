@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -25,6 +27,10 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
   List<dynamic> _filteredMasjids = [];
   bool _isLoading = true;
   bool _isProcessing = false;
+  bool _isSearching = false;
+  bool _searchTooShort = false;
+  int _searchRequestId = 0;
+  Timer? _searchDebounce;
   MobileScannerController? _scannerController;
 
   @override
@@ -39,6 +45,7 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
   void dispose() {
     _tabController.dispose();
     _scannerController?.dispose();
+    _searchDebounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -54,35 +61,68 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
     }
   }
 
-  Future<void> _onSearchChanged(String query) async {
+  void _onSearchChanged(String query) {
     final q = query.trim().toLowerCase();
-    if (q.isEmpty) {
-      setState(() => _filteredMasjids = _allMasjids);
-      return;
-    }
+    _searchDebounce?.cancel();
+    final requestId = ++_searchRequestId;
+
     final localMatches = _allMasjids.where((m) {
       final name = (m['name'] ?? '').toString().toLowerCase();
       final nameTa = (m['nameTa'] ?? '').toString().toLowerCase();
       final city = (m['city'] ?? '').toString().toLowerCase();
-      return name.contains(q) || nameTa.contains(q) || city.contains(q);
+      final address = (m['address'] ?? '').toString().toLowerCase();
+      return name.contains(q) ||
+          nameTa.contains(q) ||
+          city.contains(q) ||
+          address.contains(q);
     }).toList();
 
-    setState(() => _filteredMasjids = localMatches);
+    if (q.isEmpty) {
+      setState(() {
+        _filteredMasjids = _allMasjids;
+        _isSearching = false;
+        _searchTooShort = false;
+      });
+      return;
+    }
 
-    // Query backend if local is empty or to get fresh results
-    try {
-      final serverMatches = await ApiService.instance.getMasjids(search: q);
-      if (mounted && _searchCtrl.text.trim().toLowerCase() == q) {
-        setState(() => _filteredMasjids =
-            serverMatches.isNotEmpty ? serverMatches : localMatches);
+    if (q.length < 3) {
+      setState(() {
+        _filteredMasjids = localMatches;
+        _isSearching = false;
+        _searchTooShort = true;
+      });
+      return;
+    }
+
+    setState(() {
+      _filteredMasjids = localMatches;
+      _isSearching = true;
+      _searchTooShort = false;
+    });
+    _searchDebounce = Timer(const Duration(seconds: 1), () async {
+      try {
+        final serverMatches = await ApiService.instance.getMasjids(search: q);
+        if (!mounted || requestId != _searchRequestId) return;
+        setState(() {
+          _filteredMasjids = serverMatches;
+          _isSearching = false;
+        });
+      } catch (_) {
+        if (!mounted || requestId != _searchRequestId) return;
+        setState(() => _isSearching = false);
       }
-    } catch (_) {}
+    });
   }
 
   Future<void> _handleJoinMasjid(String masjidId, String masjidName) async {
     if (_isProcessing) return;
     setState(() => _isProcessing = true);
 
+    await _completeMasjidJoin(masjidId, masjidName);
+  }
+
+  Future<void> _completeMasjidJoin(String masjidId, String masjidName) async {
     try {
       final membership =
           await ApiService.instance.joinMasjid(masjidId, isPrimary: true);
@@ -165,7 +205,10 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
     try {
       final masjid = await ApiService.instance.getMasjidByQr(token);
       if (masjid != null && mounted) {
-        await _handleJoinMasjid(masjid['id'], masjid['name'] ?? 'Masjid');
+        await _completeMasjidJoin(
+          masjid['id'].toString(),
+          masjid['name']?.toString() ?? 'Masjid',
+        );
       } else if (mounted) {
         setState(() => _isProcessing = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -178,6 +221,9 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
     } catch (e) {
       if (mounted) {
         setState(() => _isProcessing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not connect from this QR code: $e')),
+        );
       }
     }
   }
@@ -259,6 +305,17 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
             ),
           ),
         ),
+
+        if (_isSearching) const LinearProgressIndicator(minHeight: 2),
+        if (_searchTooShort)
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Type at least 3 characters to search the database.',
+                  style: TextStyle(color: Colors.grey, fontSize: 12)),
+            ),
+          ),
 
         // Results List
         Expanded(

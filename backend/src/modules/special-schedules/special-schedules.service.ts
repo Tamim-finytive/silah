@@ -34,6 +34,29 @@ export class SpecialSchedulesService {
     });
   }
 
+  async update(masjidId: string, id: string, dto: CreateSpecialScheduleDto) {
+    const existing = await this.prisma.specialSchedule.findFirst({
+      where: { id, masjidId },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException('Special schedule not found');
+
+    return this.prisma.specialSchedule.update({
+      where: { id },
+      data: {
+        type: dto.type,
+        title: dto.title,
+        titleTa: dto.titleTa,
+        startDate: new Date(dto.startDate),
+        endDate: dto.endDate ? new Date(dto.endDate) : null,
+        startTime: dto.startTime,
+        endTime: dto.endTime,
+        notes: dto.notes,
+        notesTa: dto.notesTa,
+      },
+    });
+  }
+
   async delete(masjidId: string, id: string) {
     const existing = await this.prisma.specialSchedule.findFirst({
       where: { id, masjidId },

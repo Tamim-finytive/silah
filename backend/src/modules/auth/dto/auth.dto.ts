@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, Matches, IsOptional, IsInt, Min, Max } from 'class-validator';
+import { IsNotEmpty, IsString, Matches, IsOptional } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class SendOtpDto {
@@ -42,13 +42,6 @@ export class RegisterUserDto {
   @IsNotEmpty()
   @IsString()
   name: string;
-
-  @ApiPropertyOptional({ example: 32 })
-  @IsOptional()
-  @IsInt()
-  @Min(5)
-  @Max(120)
-  age?: number;
 
   @ApiPropertyOptional({ example: 'No 12, Main Road, Chennai' })
   @IsOptional()
