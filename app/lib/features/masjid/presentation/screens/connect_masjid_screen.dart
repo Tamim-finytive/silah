@@ -26,6 +26,8 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
   final ScrollController _resultsScrollController = ScrollController();
   List<dynamic> _allMasjids = [];
   List<dynamic> _filteredMasjids = [];
+  final Set<String> _connectedMasjidIds = <String>{};
+  bool _isLoadingConnectedMasjids = true;
   bool _isLoading = true;
   bool _isLoadingMore = false;
   bool _isProcessing = false;
@@ -48,8 +50,10 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
     _tabController = TabController(length: 2, vsync: this);
     _scannerController = MobileScannerController();
     _resultsScrollController.addListener(_onResultsScroll);
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => _loadMasjids(reset: true));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadMasjids(reset: true);
+      _loadConnectedMasjids();
+    });
   }
 
   @override
@@ -72,6 +76,20 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
         !_isLoading) {
       _loadMasjids();
     }
+  }
+
+  Future<void> _loadConnectedMasjids() async {
+    final masjids = await ApiService.instance.getMyMasjids();
+    if (!mounted) return;
+    setState(() {
+      _connectedMasjidIds
+        ..clear()
+        ..addAll(masjids
+            .whereType<Map<String, dynamic>>()
+            .map((masjid) => masjid['id']?.toString())
+            .whereType<String>());
+      _isLoadingConnectedMasjids = false;
+    });
   }
 
   Future<void> _loadMasjids({bool reset = false}) async {
@@ -236,6 +254,9 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
   Future<void> _completeMasjidJoin(String masjidId, String masjidName) async {
     try {
       await ApiService.instance.joinMasjid(masjidId, isPrimary: true);
+      if (mounted) {
+        setState(() => _connectedMasjidIds.add(masjidId));
+      }
       final masjid = _allMasjids.cast<Map<String, dynamic>?>().firstWhere(
             (item) => item?['id']?.toString() == masjidId,
             orElse: () => null,
@@ -679,6 +700,9 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
       if (city.isNotEmpty && city.toLowerCase() != address.toLowerCase()) city,
     ].join(' • ');
     final distanceKm = (map['distanceKm'] as num?)?.toDouble();
+    final masjidId = map['id']?.toString();
+    final isConnected =
+        masjidId != null && _connectedMasjidIds.contains(masjidId);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -760,10 +784,13 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
                 ),
                 const Spacer(),
                 FilledButton.icon(
-                  onPressed: _isProcessing || map['id'] == null
+                  onPressed: _isProcessing ||
+                          _isLoadingConnectedMasjids ||
+                          map['id'] == null ||
+                          isConnected
                       ? null
                       : () => _handleJoinMasjid(map['id'].toString(), name),
-                  icon: _isProcessing
+                  icon: _isLoadingConnectedMasjids
                       ? const SizedBox(
                           width: 16,
                           height: 16,
@@ -772,8 +799,25 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
                             color: Colors.white,
                           ),
                         )
-                      : const Icon(Icons.add_link, size: 18),
-                  label: Text(lang.tr(en: 'Connect', ta: 'இணை')),
+                      : _isProcessing && !isConnected
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Icon(
+                              isConnected
+                                  ? Icons.check_circle_outline
+                                  : Icons.add_link,
+                              size: 18),
+                  label: Text(_isLoadingConnectedMasjids
+                      ? lang.tr(en: 'Checking…', ta: 'சரிபார்க்கிறது…')
+                      : isConnected
+                          ? lang.tr(en: 'Connected', ta: 'இணைக்கப்பட்டது')
+                          : lang.tr(en: 'Connect', ta: 'இணை')),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,

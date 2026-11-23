@@ -416,6 +416,56 @@ class ApiService {
     return [];
   }
 
+  Future<List<dynamic>> getAdminAnnouncements(String masjidId) async {
+    final res = await _dio.get('/masjids/$masjidId/announcements/admin');
+    if (res.data['success'] == true && res.data['data'] is List) {
+      return res.data['data'] as List<dynamic>;
+    }
+    throw const FormatException('Masjid notices response is invalid');
+  }
+
+  Future<List<dynamic>> getMyAnnouncements({
+    String status = 'ALL',
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final res = await _dio.get('/announcements/my', queryParameters: {
+      'status': status,
+      if (from != null) 'from': _dateFilterValue(from, endOfDay: false),
+      if (to != null) 'to': _dateFilterValue(to, endOfDay: true),
+    });
+    if (res.data['success'] == true && res.data['data'] is List) {
+      return res.data['data'] as List<dynamic>;
+    }
+    throw const FormatException('Notices response is invalid');
+  }
+
+  String _dateFilterValue(DateTime date, {required bool endOfDay}) {
+    final localDate = DateTime(date.year, date.month, date.day);
+    return '${localDate.year.toString().padLeft(4, '0')}-'
+        '${localDate.month.toString().padLeft(2, '0')}-'
+        '${localDate.day.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> setAnnouncementReadState(
+      String announcementId, bool isRead) async {
+    await _dio.put('/announcements/$announcementId/read-state',
+        data: {'isRead': isRead});
+  }
+
+  Future<void> hideAnnouncementForUser(String announcementId) async {
+    await _dio.delete('/announcements/$announcementId/hide');
+  }
+
+  Future<Map<String, dynamic>> updateAnnouncement(
+      String masjidId, String announcementId, Map<String, dynamic> dto) async {
+    final res = await _dio.put(
+      '/masjids/$masjidId/announcements/$announcementId',
+      data: dto,
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<void> ensureSuperAdminAuth() async {
     if (authToken == null) {
       throw StateError('Sign in with a Super Admin account to continue.');
@@ -494,6 +544,14 @@ class ApiService {
     return [];
   }
 
+  Future<List<dynamic>> getAdminBroadcastAnnouncements() async {
+    final res = await _dio.get('/announcements/broadcasts/admin');
+    if (res.data['success'] == true && res.data['data'] is List) {
+      return res.data['data'] as List<dynamic>;
+    }
+    throw const FormatException('Broadcast notices response is invalid');
+  }
+
   Future<Map<String, dynamic>> sendBroadcastAnnouncement({
     required String title,
     required String body,
@@ -516,6 +574,13 @@ class ApiService {
   Future<void> deleteBroadcastAnnouncement(String id) async {
     await ensureSuperAdminAuth();
     await _dio.delete('/announcements/broadcasts/$id');
+  }
+
+  Future<Map<String, dynamic>> updateBroadcastAnnouncement(
+      String id, Map<String, dynamic> dto) async {
+    await ensureSuperAdminAuth();
+    final res = await _dio.put('/announcements/broadcasts/$id', data: dto);
+    return Map<String, dynamic>.from(res.data as Map);
   }
 
   Future<Map<String, dynamic>?> getMasjidAdminOverview(String masjidId) async {

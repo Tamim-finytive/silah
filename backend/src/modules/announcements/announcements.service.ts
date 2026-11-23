@@ -1,7 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { FirebaseService } from '../../common/firebase/firebase.service';
-import { CreateAnnouncementDto, BroadcastAnnouncementDto } from './dto/announcement.dto';
+import { CreateAnnouncementDto, BroadcastAnnouncementDto, UpdateAnnouncementDto } from './dto/announcement.dto';
 import { AnnouncementCategory } from '@prisma/client';
 
 @Injectable()
@@ -41,6 +41,11 @@ export class AnnouncementsService {
     });
   }
 
+  async findByMasjidWithReadCounts(masjidId: string) {
+    const announcements = await this.findByMasjid(masjidId);
+    return this.withReadCounts(announcements);
+  }
+
   async findBroadcasts() {
     return this.prisma.announcement.findMany({
       where: {
@@ -50,6 +55,188 @@ export class AnnouncementsService {
       include: {
         creator: { select: { id: true, name: true } },
       },
+    });
+  }
+
+  async findBroadcastsWithReadCounts() {
+    const announcements = await this.findBroadcasts();
+    return this.withReadCounts(announcements);
+  }
+
+  private async withReadCounts(announcements: Array<{ id: string }>) {
+    if (announcements.length === 0) return announcements;
+    const counts = await this.prisma.announcementUserState.groupBy({
+      by: ['announcementId'],
+      where: {
+        announcementId: { in: announcements.map((announcement) => announcement.id) },
+        readAt: { not: null },
+      },
+      _count: { _all: true },
+    });
+    const countByAnnouncement = new Map(
+      counts.map((entry) => [entry.announcementId, entry._count._all]),
+    );
+    return announcements.map((announcement) => ({
+      ...announcement,
+      readCount: countByAnnouncement.get(announcement.id) ?? 0,
+    }));
+  }
+
+  async findForUser(
+    userId: string,
+    query: { status?: string; from?: string; to?: string },
+  ) {
+    const status = (query.status || 'ALL').toUpperCase();
+    if (!['ALL', 'READ', 'UNREAD'].includes(status)) {
+      throw new BadRequestException('Status must be ALL, READ, or UNREAD');
+    }
+    const parseDate = (value: string | undefined, isEnd: boolean) => {
+      if (!value) return undefined;
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(value)
+        ? new Date(`${value}T${isEnd ? '23:59:59.999' : '00:00:00.000'}Z`)
+        : new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        throw new BadRequestException('Date filter is invalid');
+      }
+      return date;
+    };
+    const from = parseDate(query.from, false);
+    const to = parseDate(query.to, true);
+    if (from && to && from > to) {
+      throw new BadRequestException('Start date must be before end date');
+    }
+
+    const memberships = await this.prisma.membership.findMany({
+      where: { userId },
+      select: { masjidId: true },
+    });
+    const masjidIds = memberships.map((membership) => membership.masjidId);
+    const where: any = {
+      publishedAt: { lte: new Date() },
+      OR: [
+        { expiresAt: null },
+        { expiresAt: { gt: new Date() } },
+      ],
+      AND: [
+        { OR: masjidIds.length > 0
+          ? [{ masjidId: null }, { masjidId: { in: masjidIds } }]
+          : [{ masjidId: null }] },
+        { NOT: { userStates: { some: { userId, hiddenAt: { not: null } } } } },
+      ],
+    };
+    if (from || to) {
+      where.publishedAt = {
+        lte: to ?? new Date(),
+        ...(from ? { gte: from } : {}),
+      };
+    }
+    if (status === 'READ') {
+      where.AND.push({
+        userStates: { some: { userId, readAt: { not: null }, hiddenAt: null } },
+      });
+    } else if (status === 'UNREAD') {
+      where.AND.push({
+        userStates: { none: { userId, readAt: { not: null }, hiddenAt: null } },
+      });
+    }
+
+    const announcements = await this.prisma.announcement.findMany({
+      where,
+      orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+      include: {
+        creator: { select: { id: true, name: true } },
+        userStates: {
+          where: { userId },
+          select: { readAt: true },
+          take: 1,
+        },
+      },
+    });
+    return announcements.map(({ userStates, ...announcement }) => ({
+      ...announcement,
+      isRead: userStates[0]?.readAt != null,
+    }));
+  }
+
+  private async ensureUserCanView(userId: string, announcementId: string) {
+    const announcement = await this.prisma.announcement.findUnique({
+      where: { id: announcementId },
+      select: { id: true, masjidId: true, publishedAt: true, expiresAt: true },
+    });
+    if (!announcement ||
+        (announcement.publishedAt && announcement.publishedAt > new Date()) ||
+        (announcement.expiresAt && announcement.expiresAt <= new Date())) {
+      throw new NotFoundException('Notice not found');
+    }
+    if (announcement.masjidId) {
+      const membership = await this.prisma.membership.findUnique({
+        where: {
+          idx_memberships_unique: {
+            userId,
+            masjidId: announcement.masjidId,
+          },
+        },
+        select: { id: true },
+      });
+      if (!membership) throw new NotFoundException('Notice not found');
+    }
+    return announcement;
+  }
+
+  async setReadState(userId: string, announcementId: string, isRead: boolean) {
+    await this.ensureUserCanView(userId, announcementId);
+    const readAt = isRead ? new Date() : null;
+    return this.prisma.announcementUserState.upsert({
+      where: { userId_announcementId: { userId, announcementId } },
+      create: { userId, announcementId, readAt },
+      update: { readAt },
+      select: { announcementId: true, readAt: true, hiddenAt: true },
+    });
+  }
+
+  async hideForUser(userId: string, announcementId: string) {
+    await this.ensureUserCanView(userId, announcementId);
+    return this.prisma.announcementUserState.upsert({
+      where: { userId_announcementId: { userId, announcementId } },
+      create: { userId, announcementId, hiddenAt: new Date() },
+      update: { hiddenAt: new Date() },
+      select: { announcementId: true, hiddenAt: true },
+    });
+  }
+
+  async update(masjidId: string, announcementId: string, dto: UpdateAnnouncementDto) {
+    const existing = await this.prisma.announcement.findFirst({
+      where: { id: announcementId, masjidId },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException('Notice not found for this masjid');
+    const data: Record<string, unknown> = {};
+    if (dto.category !== undefined) data.category = dto.category;
+    if (dto.title !== undefined) data.title = dto.title;
+    if (dto.titleTa !== undefined) data.titleTa = dto.titleTa;
+    if (dto.body !== undefined) data.body = dto.body;
+    if (dto.bodyTa !== undefined) data.bodyTa = dto.bodyTa;
+    if (dto.isPinned !== undefined) data.isPinned = dto.isPinned;
+    return this.prisma.announcement.update({
+      where: { id: announcementId },
+      data: data as any,
+    });
+  }
+
+  async updateBroadcast(announcementId: string, dto: UpdateAnnouncementDto) {
+    const existing = await this.prisma.announcement.findFirst({
+      where: { id: announcementId, masjidId: null },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException('Broadcast not found');
+    const data: Record<string, unknown> = {};
+    if (dto.title !== undefined) data.title = dto.title;
+    if (dto.titleTa !== undefined) data.titleTa = dto.titleTa;
+    if (dto.body !== undefined) data.body = dto.body;
+    if (dto.bodyTa !== undefined) data.bodyTa = dto.bodyTa;
+    return this.prisma.announcement.update({
+      where: { id: announcementId },
+      data: data as any,
     });
   }
 

@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AnnouncementsService } from './announcements.service';
-import { CreateAnnouncementDto, BroadcastAnnouncementDto, UpdateAnnouncementDto } from './dto/announcement.dto';
+import { CreateAnnouncementDto, BroadcastAnnouncementDto, UpdateAnnouncementDto, AnnouncementReadStateDto } from './dto/announcement.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { MasjidRoleGuard } from '../../common/guards/masjid-role.guard';
@@ -37,9 +37,9 @@ export class BroadcastAnnouncementsController {
   async setReadState(
     @CurrentUser('id') userId: string,
     @Param('id') id: string,
-    @Body('isRead') isRead: boolean,
+    @Body() dto: AnnouncementReadStateDto,
   ) {
-    return this.announcementsService.setReadState(userId, id, isRead);
+    return this.announcementsService.setReadState(userId, id, dto.isRead);
   }
 
   @Delete(':id/hide')
