@@ -175,7 +175,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         metrics['activeAnnouncementsCount'] ?? _announcements.length;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9F7),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(_masjidName ?? 'Masjid Admin Dashboard',
             style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -830,9 +830,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             _todayPrayerTimes![key]?.toString().trim().isNotEmpty == true);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9F7),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Prayer Events & Schedule',
+        title: const Text('Manage Prayer & Events',
             style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF0F432B),
         foregroundColor: Colors.white,
@@ -852,42 +852,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   child: ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
-                      // Prayer Times Section Header
-                      const Text('Today Prayer Timings',
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF0F432B),
-                                foregroundColor: Colors.white),
-                            icon: Icon(
-                                hasPrayerTimes ? Icons.edit : Icons.add_circle,
-                                size: 16),
-                            label: Text(hasPrayerTimes
-                                ? 'Edit Schedule'
-                                : 'Create Schedule'),
-                            onPressed: _showFullPrayerTimesDialog,
-                          ),
-                          OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFF0F432B),
-                                side:
-                                    const BorderSide(color: Color(0xFF0F432B))),
-                            icon: const Icon(Icons.date_range, size: 16),
-                            label: const Text('Create or Edit Date Range'),
-                            onPressed: _showDateRangePrayerDialog,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-
                       if (!hasPrayerTimes) ...[
-                        // 1. CREATE BUTTON FIRST (When Timings are Empty)
+                        // 1. FIRST TIME / EMPTY: SHOW CREATE BUTTON FIRST (NO EDIT BUTTON)
+                        const Text('Prayer Timings',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 10),
                         Card(
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16)),
@@ -913,19 +883,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16),
                                 ),
-                                const SizedBox(height: 6),
+                                const SizedBox(height: 8),
                                 const Text(
-                                  'Create a prayer schedule for this masjid. Saved timings will appear here and can be edited any time.',
+                                  'Create a prayer schedule for this masjid. Once created, timings will appear here and can be edited anytime.',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                       color: Colors.grey,
-                                      fontSize: 12,
+                                      fontSize: 13,
                                       height: 1.4),
                                 ),
                                 const SizedBox(height: 20),
                                 SizedBox(
                                   width: double.infinity,
-                                  height: 52,
+                                  height: 50,
                                   child: ElevatedButton.icon(
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: const Color(0xFF0F432B),
@@ -933,16 +903,40 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                       shape: RoundedRectangleBorder(
                                           borderRadius:
                                               BorderRadius.circular(12)),
-                                      elevation: 3,
+                                      elevation: 2,
                                     ),
-                                    icon: const Icon(Icons.add_alarm, size: 24),
+                                    icon: const Icon(Icons.add_alarm, size: 22),
                                     label: const Text(
                                       'Create Prayer Schedule',
                                       style: TextStyle(
                                           fontWeight: FontWeight.bold,
-                                          fontSize: 14),
+                                          fontSize: 15),
                                     ),
                                     onPressed: _showFullPrayerTimesDialog,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 46,
+                                  child: OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: const Color(0xFF0F432B),
+                                      side: const BorderSide(
+                                          color: Color(0xFF0F432B), width: 1.2),
+                                      shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12)),
+                                    ),
+                                    icon:
+                                        const Icon(Icons.date_range, size: 20),
+                                    label: const Text(
+                                      'Set Date Range Schedule',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 14),
+                                    ),
+                                    onPressed: _showDateRangePrayerDialog,
                                   ),
                                 ),
                               ],
@@ -950,6 +944,41 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           ),
                         ),
                       ] else ...[
+                        // 2. TIMINGS CONFIGURED: SHOW SAVED TIMINGS WITH EDIT OPTIONS
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Today Prayer Timings',
+                                style: TextStyle(
+                                    fontSize: 16, fontWeight: FontWeight.bold)),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF0F432B),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 8)),
+                              icon: const Icon(Icons.edit, size: 16),
+                              label: const Text('Edit Schedule',
+                                  style: TextStyle(fontSize: 13)),
+                              onPressed: _showFullPrayerTimesDialog,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFF0F432B),
+                                side:
+                                    const BorderSide(color: Color(0xFF0F432B))),
+                            icon: const Icon(Icons.date_range, size: 16),
+                            label: const Text('Edit Date Range Schedule',
+                                style: TextStyle(fontSize: 12)),
+                            onPressed: _showDateRangePrayerDialog,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
                         // 2. TIMINGS CONFIGURED: Show Solar & Prayer Timings Cards with Edit Options
                         InkWell(
                           onTap: _showFullPrayerTimesDialog,
@@ -1741,7 +1770,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   // -------------------------------------------------------------
   Widget _buildAnnouncementsTab() {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9F7),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Masjid Notice Board',
             style: TextStyle(fontWeight: FontWeight.bold)),
@@ -1915,7 +1944,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final admins = (_membersData?['admins'] as List<dynamic>?) ?? [];
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9F7),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Manage Members & Roles',
             style: TextStyle(fontWeight: FontWeight.bold)),
@@ -2488,7 +2517,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         TextEditingController(text: _masjidDetails?['phone'] ?? '');
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9F7),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Masjid Settings & Profile',
             style: TextStyle(fontWeight: FontWeight.bold)),
@@ -2636,7 +2665,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7F5),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: switch (_currentIndex) {
         0 => _buildDashboardTab(),
         1 => _buildPrayerTimesTab(),
@@ -2647,10 +2676,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) => setState(() => _currentIndex = index),
-        height: 74,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        backgroundColor: Colors.white,
-        indicatorColor: const Color(0xFFE5F1E9),
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.dashboard_outlined),

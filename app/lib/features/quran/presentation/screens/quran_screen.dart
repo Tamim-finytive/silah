@@ -1,18 +1,20 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/l10n/language_provider.dart';
 import '../../../../core/network/api_debug_interceptor.dart';
 
-class QuranScreen extends StatefulWidget {
+class QuranScreen extends ConsumerStatefulWidget {
   final VoidCallback? onBack;
   const QuranScreen({super.key, this.onBack});
 
   @override
-  State<QuranScreen> createState() => _QuranScreenState();
+  ConsumerState<QuranScreen> createState() => _QuranScreenState();
 }
 
-class _QuranScreenState extends State<QuranScreen> {
+class _QuranScreenState extends ConsumerState<QuranScreen> {
   static const _storage = FlutterSecureStorage();
   static final _dio = Dio(BaseOptions(
     baseUrl: 'https://api.alquran.cloud/v1',
@@ -92,6 +94,7 @@ class _QuranScreenState extends State<QuranScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = ref.watch(languageProvider);
     final visible = _surahs.where((surah) {
       final query = _query.trim().toLowerCase();
       return query.isEmpty ||
@@ -114,7 +117,7 @@ class _QuranScreenState extends State<QuranScreen> {
                   }
                 })
             : null,
-        title: const Text('திருக்குர்ஆன் / Holy Quran'),
+        title: Text(isEnglish ? 'Holy Quran' : 'திருக்குர்ஆன்'),
       ),
       body: Column(children: [
         if (_lastSurah != null)
@@ -123,7 +126,7 @@ class _QuranScreenState extends State<QuranScreen> {
             color: AppColors.primary,
             child: ListTile(
               leading: const Icon(Icons.bookmark, color: AppColors.secondary),
-              title: const Text('Last read',
+              title: Text(isEnglish ? 'Last read' : 'கடைசியாகப் படித்தது',
                   style: TextStyle(color: Colors.white70, fontSize: 13)),
               subtitle: Text(
                   '${_lastSurahName ?? 'Surah $_lastSurah'} · Ayah $_lastAyah',
@@ -144,7 +147,9 @@ class _QuranScreenState extends State<QuranScreen> {
           child: TextField(
             onChanged: (value) => setState(() => _query = value),
             decoration: InputDecoration(
-              hintText: 'Search chapters by name or number',
+              hintText: isEnglish
+                  ? 'Search chapters by name or number'
+                  : 'அத்தியாயப் பெயர் அல்லது எண்ணைத் தேடுங்கள்',
               prefixIcon: const Icon(Icons.search),
               filled: true,
               fillColor: Colors.white,
@@ -196,7 +201,7 @@ class _QuranScreenState extends State<QuranScreen> {
                               style:
                                   const TextStyle(fontWeight: FontWeight.w600)),
                           subtitle: Text(
-                              '${surah['numberOfAyahs']} verses · ${surah['revelationType']}'),
+                              '${surah['numberOfAyahs']} ${isEnglish ? 'verses' : 'வசனங்கள்'} · ${surah['revelationType']}'),
                           trailing: Text('${surah['name']}',
                               textDirection: TextDirection.rtl,
                               style: const TextStyle(

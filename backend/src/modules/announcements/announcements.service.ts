@@ -327,7 +327,7 @@ export class AnnouncementsService {
       } as any,
     });
 
-    if (dto.notifyPush) {
+    if (dto.notifyPush ?? true) {
       try {
         // Find followers/members of this masjid
         const members = await this.prisma.membership.findMany({
@@ -335,7 +335,7 @@ export class AnnouncementsService {
           select: { userId: true },
         });
 
-        const userIds = members.map((m) => m.userId);
+        const userIds = [...new Set(members.map((m) => m.userId))];
         if (userIds.length > 0) {
           const devices = await this.prisma.device.findMany({
             where: {
@@ -358,7 +358,18 @@ export class AnnouncementsService {
               },
             );
             await this.deactivateInvalidDeviceTokens(delivery.invalidTokens);
+            this.logger.log(
+              `Masjid notice ${announcement.id}: ${delivery.successCount}/${tokens.length} device deliveries succeeded (${userIds.length} member accounts targeted)`,
+            );
+          } else {
+            this.logger.warn(
+              `Masjid notice ${announcement.id}: no active registered device tokens for ${userIds.length} member accounts`,
+            );
           }
+        } else {
+          this.logger.warn(
+            `Masjid notice ${announcement.id}: no member accounts are connected to masjid ${masjidId}`,
+          );
         }
       } catch (err) {
         this.logger.error(`Failed to dispatch masjid notice FCM: ${err}`);

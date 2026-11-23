@@ -1530,28 +1530,47 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
           _buildProfileTab(),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (i) {
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (i) {
           setState(() => _currentIndex = i);
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (i == 1) _onMasjidScroll();
             if (i == 4) _onUsersScroll();
           });
         },
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: const Color(0xFF0F432B),
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(
-              icon: Icon(Icons.dashboard), label: 'Overview'),
-          BottomNavigationBarItem(icon: Icon(Icons.mosque), label: 'Masjids'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.pending_actions), label: 'Requests'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.campaign), label: 'Broadcast'),
-          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Users'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+        labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard_rounded),
+            label: 'Overview',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.mosque_outlined),
+            selectedIcon: Icon(Icons.mosque_rounded),
+            label: 'Masjids',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.pending_actions_outlined),
+            selectedIcon: Icon(Icons.pending_actions_rounded),
+            label: 'Requests',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.campaign_outlined),
+            selectedIcon: Icon(Icons.campaign_rounded),
+            label: 'Notices',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.people_outline),
+            selectedIcon: Icon(Icons.people_rounded),
+            label: 'Users',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person_rounded),
+            label: 'Profile',
+          ),
         ],
       ),
     );

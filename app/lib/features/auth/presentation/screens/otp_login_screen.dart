@@ -127,108 +127,114 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
         actions: const [],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: AppSpacing.screenPadding,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 16),
-              // Logo
-              const Center(
-                child: CircleAvatar(
-                  radius: 36,
-                  backgroundColor: AppColors.primaryContainer,
-                  child: Icon(Icons.mosque, size: 42, color: AppColors.primary),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                lang.tr(en: 'Welcome', ta: 'வணக்கம்'),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                lang.tr(
-                  en: 'Enter your mobile number to continue',
-                  ta: 'தொடர உங்கள் மொபைல் எண்ணை உள்ளிடவும்',
-                ),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    fontSize: 14, color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 20),
-
-              const SizedBox(height: 24),
-
-              if (_errorMessage != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 14),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(
-                        color: AppColors.emergency,
-                        fontWeight: FontWeight.w600),
-                    textAlign: TextAlign.center,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: SingleChildScrollView(
+              padding: AppSpacing.screenPadding,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 16),
+                  // Logo
+                  const Center(
+                    child: CircleAvatar(
+                      radius: 36,
+                      backgroundColor: AppColors.primaryContainer,
+                      child: Icon(Icons.mosque,
+                          size: 42, color: AppColors.primary),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 18),
+                  Text(
+                    lang.tr(en: 'Welcome', ta: 'வணக்கம்'),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    lang.tr(
+                      en: 'Enter your mobile number to continue',
+                      ta: 'தொடர உங்கள் மொபைல் எண்ணை உள்ளிடவும்',
+                    ),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 14, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 20),
 
-              // Phone Input
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.outline),
-                ),
-                child: Row(
-                  children: [
-                    const Text('🇮🇳 +91',
-                        style: TextStyle(
-                            fontSize: 17, fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 8),
-                    const Text('|',
-                        style: TextStyle(color: Colors.grey, fontSize: 18)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: _phoneController,
-                        keyboardType: TextInputType.phone,
-                        style:
-                            const TextStyle(fontSize: 18, letterSpacing: 1.1),
-                        decoration: InputDecoration(
-                          border: InputBorder.none,
-                          hintText:
-                              lang.tr(en: 'Mobile number', ta: 'மொபைல் எண்'),
-                        ),
+                  const SizedBox(height: 24),
+
+                  if (_errorMessage != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: Text(
+                        _errorMessage!,
+                        style: const TextStyle(
+                            color: AppColors.emergency,
+                            fontWeight: FontWeight.w600),
+                        textAlign: TextAlign.center,
                       ),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
 
-              ElevatedButton(
-                onPressed: _isLoading ? null : _handleContinue,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                child: _isLoading
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2))
-                    : Text(lang.tr(
-                        en: 'Login / Continue', ta: 'உள்நுழைக / தொடர்க')),
+                  // Phone Input
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.outline),
+                    ),
+                    child: Row(
+                      children: [
+                        const Text('🇮🇳 +91',
+                            style: TextStyle(
+                                fontSize: 17, fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 8),
+                        const Text('|',
+                            style: TextStyle(color: Colors.grey, fontSize: 18)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: _phoneController,
+                            keyboardType: TextInputType.phone,
+                            style: const TextStyle(
+                                fontSize: 18, letterSpacing: 1.1),
+                            decoration: InputDecoration(
+                              border: InputBorder.none,
+                              hintText: lang.tr(
+                                  en: 'Mobile number', ta: 'மொபைல் எண்'),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _handleContinue,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2))
+                        : Text(lang.tr(
+                            en: 'Login / Continue', ta: 'உள்நுழைக / தொடர்க')),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

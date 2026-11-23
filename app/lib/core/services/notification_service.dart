@@ -2,15 +2,71 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../network/api_service.dart';
+import '../../firebase_options.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  debugPrint(
-      'FCM Background message: ${message.messageId} - ${message.notification?.title}');
+  // Notification payloads are displayed by Android/iOS while the app is in
+  // the background. Only data-only messages need a local notification here,
+  // otherwise users would see duplicate notifications.
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+
+    if (message.notification != null) return;
+
+    final title = message.data['title']?.toString();
+    final body = message.data['body']?.toString();
+    if ((title == null || title.isEmpty) && (body == null || body.isEmpty)) {
+      return;
+    }
+
+    final notifications = FlutterLocalNotificationsPlugin();
+    await notifications.initialize(
+      const InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        iOS: DarwinInitializationSettings(),
+      ),
+    );
+    const channel = AndroidNotificationChannel(
+      NotificationService.announcementChannelId,
+      'Masjid announcements',
+      description: 'Announcements and important masjid updates',
+      importance: Importance.high,
+    );
+    await notifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+    await notifications.show(
+      message.messageId?.hashCode ?? DateTime.now().millisecondsSinceEpoch,
+      title,
+      body,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          NotificationService.announcementChannelId,
+          'Masjid announcements',
+          channelDescription: 'Announcements and important masjid updates',
+          icon: '@mipmap/ic_launcher',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+    );
+  } catch (error) {
+    debugPrint('Unable to process background notification: $error');
+  }
 }
 
 class NotificationService {

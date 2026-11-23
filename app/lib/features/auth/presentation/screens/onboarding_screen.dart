@@ -27,7 +27,8 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 }
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
-  int _currentStep = 0; // 0: Personal Info, 1: Role Selection, 2: Masjid Details
+  int _currentStep =
+      0; // 0: Personal Info, 1: Role Selection, 2: Masjid Details
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -56,7 +57,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Future<void> _fetchExistingUser() async {
     try {
       final res = await ApiService.instance.checkUser(widget.phone);
-      if (res['exists'] == true && res['name'] != null && (res['name'] as String).isNotEmpty) {
+      if (res['exists'] == true &&
+          res['name'] != null &&
+          (res['name'] as String).isNotEmpty) {
         if (mounted) {
           setState(() {
             _nameController.text = res['name'] ?? '';
@@ -176,7 +179,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         nameTa: _masjidNameTaController.text.trim(),
         latitude: lat,
         longitude: lng,
-        mapUrl: _mapUrlController.text.trim().isEmpty ? null : _mapUrlController.text.trim(),
+        mapUrl: _mapUrlController.text.trim().isEmpty
+            ? null
+            : _mapUrlController.text.trim(),
         adminName: name,
         adminPhone: widget.phone,
       );
@@ -231,7 +236,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               decoration: BoxDecoration(
                 color: const Color(0xFF0F432B).withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFF0F432B).withValues(alpha: 0.3)),
+                border: Border.all(
+                    color: const Color(0xFF0F432B).withValues(alpha: 0.3)),
               ),
               child: const Text(
                 'You can now update prayer timings, generate member QR codes, post community announcements, and manage your congregation.',
@@ -266,49 +272,56 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     final lang = ref.read(languageProvider.notifier);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7FAF8),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(lang.tr(en: 'Getting Started', ta: 'தொடங்குதல்')),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: AppSpacing.screenPadding,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 8),
-              // Step Progress Tracker
-              _buildProgressIndicator(),
-              const SizedBox(height: 24),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: SingleChildScrollView(
+              padding: AppSpacing.screenPadding,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 8),
+                  // Step Progress Tracker
+                  _buildProgressIndicator(),
+                  const SizedBox(height: 24),
 
-              if (_errorMessage != null)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.red.shade300),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.error_outline, color: Colors.red, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _errorMessage!,
-                          style: TextStyle(color: Colors.red.shade900, fontSize: 13),
-                        ),
+                  if (_errorMessage != null)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.red.shade300),
                       ),
-                    ],
-                  ),
-                ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline,
+                              color: Colors.red, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _errorMessage!,
+                              style: TextStyle(
+                                  color: Colors.red.shade900, fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
 
-              // Content based on step
-              if (_currentStep == 0) _buildStep1PersonalInfo(lang),
-              if (_currentStep == 1) _buildStep2RoleSelection(lang),
-              if (_currentStep == 2) _buildStep3MasjidDetails(lang),
-            ],
+                  // Content based on step
+                  if (_currentStep == 0) _buildStep1PersonalInfo(lang),
+                  if (_currentStep == 1) _buildStep2RoleSelection(lang),
+                  if (_currentStep == 2) _buildStep3MasjidDetails(lang),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -320,10 +333,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     return Row(
       children: [
         _buildStepBadge(1, 'Profile', _currentStep >= 0),
-        Expanded(child: Container(height: 2, color: _currentStep >= 1 ? AppColors.primary : Colors.grey.shade300)),
+        Expanded(
+            child: Container(
+                height: 2,
+                color: _currentStep >= 1
+                    ? AppColors.primary
+                    : Colors.grey.shade300)),
         _buildStepBadge(2, 'Role', _currentStep >= 1),
         if (showMasjidStep) ...[
-          Expanded(child: Container(height: 2, color: _currentStep >= 2 ? AppColors.primary : Colors.grey.shade300)),
+          Expanded(
+              child: Container(
+                  height: 2,
+                  color: _currentStep >= 2
+                      ? AppColors.primary
+                      : Colors.grey.shade300)),
           _buildStepBadge(3, 'Masjid', _currentStep >= 2),
         ],
       ],
@@ -394,10 +417,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           TextField(
             controller: _nameController,
             decoration: InputDecoration(
-              labelText: lang.tr(en: 'Your Full Name *', ta: 'உங்கள் முழு பெயர் *'),
+              labelText:
+                  lang.tr(en: 'Your Full Name *', ta: 'உங்கள் முழு பெயர் *'),
               hintText: 'e.g. Mohamed Riyaz',
               prefixIcon: const Icon(Icons.badge_outlined),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
           const SizedBox(height: 16),
@@ -406,10 +431,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           TextField(
             controller: _addressController,
             decoration: InputDecoration(
-              labelText: lang.tr(en: 'Address / Area (Optional)', ta: 'முகவரி (விருப்பத்தேர்வு)'),
+              labelText: lang.tr(
+                  en: 'Address / Area (Optional)',
+                  ta: 'முகவரி (விருப்பத்தேர்வு)'),
               hintText: 'e.g. Anna Nagar, Chennai',
               prefixIcon: const Icon(Icons.location_on_outlined),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
           const SizedBox(height: 24),
@@ -420,14 +448,21 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
             ),
             child: _isLoading
-                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2))
                 : Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(lang.tr(en: 'Save & Continue', ta: 'சேமித்து தொடர்க'), style: const TextStyle(fontSize: 16)),
+                      Text(
+                          lang.tr(en: 'Save & Continue', ta: 'சேமித்து தொடர்க'),
+                          style: const TextStyle(fontSize: 16)),
                       const SizedBox(width: 8),
                       const Icon(Icons.arrow_forward, size: 20),
                     ],
@@ -458,7 +493,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         _buildRoleCard(
           role: UserRoleChoice.regularUser,
           icon: Icons.person_pin_circle_outlined,
-          title: lang.tr(en: 'Regular Musalli / Devotee', ta: 'தொழுகையாளி (வழக்கமான பயனர்)'),
+          title: lang.tr(
+              en: 'Regular Musalli / Devotee',
+              ta: 'தொழுகையாளி (வழக்கமான பயனர்)'),
           subtitle: lang.tr(
             en: 'Follow your local masjid, see daily Namaz times, live notifications & pay monthly sandha.',
             ta: 'பள்ளிவாசலைப் பின்தொடரவும், தொழுகை நேரங்களை அறியவும், அறிவிப்புகள் பெறவும்.',
@@ -471,7 +508,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         _buildRoleCard(
           role: UserRoleChoice.masjidAdmin,
           icon: Icons.mosque_outlined,
-          title: lang.tr(en: 'Masjid Administrator / Trustee', ta: 'பள்ளிவாசல் நிர்வாகி / டிரஸ்டி'),
+          title: lang.tr(
+              en: 'Masjid Administrator / Trustee',
+              ta: 'பள்ளிவாசல் நிர்வாகி / டிரஸ்டி'),
           subtitle: lang.tr(
             en: 'Register a new Masjid, set Adhan/Jamaah timings, pass announcements & manage members.',
             ta: 'புதிய பள்ளிவாசலை பதிவு செய்யவும், நேரங்களை அமைக்கவும், அறிவிப்புகளை வெளியிடவும்.',
@@ -486,21 +525,31 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
           child: _isLoading
-              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2))
               : Text(
                   _selectedRole == UserRoleChoice.masjidAdmin
-                      ? lang.tr(en: 'Proceed to Register Masjid', ta: 'பள்ளிவாசல் பதிவு செய்க')
-                      : lang.tr(en: 'Complete & Go to App', ta: 'பதிவை முடித்து தொடர்க'),
+                      ? lang.tr(
+                          en: 'Proceed to Register Masjid',
+                          ta: 'பள்ளிவாசல் பதிவு செய்க')
+                      : lang.tr(
+                          en: 'Complete & Go to App',
+                          ta: 'பதிவை முடித்து தொடர்க'),
                   style: const TextStyle(fontSize: 16),
                 ),
         ),
         const SizedBox(height: 12),
         TextButton(
           onPressed: () => setState(() => _currentStep = 0),
-          child: Text(lang.tr(en: '← Back to Profile', ta: '← சுயவிவரத்திற்கு திரும்பு')),
+          child: Text(lang.tr(
+              en: '← Back to Profile', ta: '← சுயவிவரத்திற்கு திரும்பு')),
         ),
       ],
     );
@@ -521,7 +570,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primaryContainer.withOpacity(0.4) : Colors.white,
+          color: isSelected
+              ? AppColors.primaryContainer.withOpacity(0.4)
+              : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isSelected ? AppColors.primary : AppColors.outline,
@@ -533,8 +584,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           children: [
             CircleAvatar(
               radius: 24,
-              backgroundColor: isSelected ? AppColors.primary : Colors.grey.shade100,
-              child: Icon(icon, color: isSelected ? Colors.white : AppColors.primary, size: 26),
+              backgroundColor:
+                  isSelected ? AppColors.primary : Colors.grey.shade100,
+              child: Icon(icon,
+                  color: isSelected ? Colors.white : AppColors.primary,
+                  size: 26),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -549,25 +603,35 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                            color: isSelected
+                                ? AppColors.primary
+                                : AppColors.textPrimary,
                           ),
                         ),
                       ),
                       if (isRecommended)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: Colors.green.shade100,
                             borderRadius: BorderRadius.circular(6),
                           ),
-                          child: const Text('DEFAULT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green)),
+                          child: const Text('DEFAULT',
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green)),
                         ),
                     ],
                   ),
                   const SizedBox(height: 6),
                   Text(
                     subtitle,
-                    style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.3),
+                    style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                        height: 1.3),
                   ),
                 ],
               ),
@@ -611,10 +675,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           TextField(
             controller: _masjidNameController,
             decoration: InputDecoration(
-              labelText: lang.tr(en: 'Masjid Name (English) *', ta: 'பள்ளிவாசல் பெயர் (English) *'),
+              labelText: lang.tr(
+                  en: 'Masjid Name (English) *',
+                  ta: 'பள்ளிவாசல் பெயர் (English) *'),
               hintText: 'e.g. City Central Masjid',
               prefixIcon: const Icon(Icons.mosque),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
           const SizedBox(height: 14),
@@ -623,10 +690,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           TextField(
             controller: _masjidNameTaController,
             decoration: InputDecoration(
-              labelText: lang.tr(en: 'Masjid Name (Tamil) - Optional', ta: 'பள்ளிவாசல் பெயர் (தமிழ்)'),
+              labelText: lang.tr(
+                  en: 'Masjid Name (Tamil) - Optional',
+                  ta: 'பள்ளிவாசல் பெயர் (தமிழ்)'),
               hintText: 'எ.கா: ஜாமியா பள்ளிவாசல்',
               prefixIcon: const Icon(Icons.translate),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
           const SizedBox(height: 14),
@@ -638,7 +708,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               labelText: lang.tr(en: 'City *', ta: 'நகரம் *'),
               hintText: 'e.g. Chennai',
               prefixIcon: const Icon(Icons.location_city),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
           const SizedBox(height: 14),
@@ -647,10 +718,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           TextField(
             controller: _masjidAddressController,
             decoration: InputDecoration(
-              labelText: lang.tr(en: 'Full Detailed Address *', ta: 'முழு முகவரி *'),
+              labelText:
+                  lang.tr(en: 'Full Detailed Address *', ta: 'முழு முகவரி *'),
               hintText: 'Door No, Street Name, Area, Pincode',
               prefixIcon: const Icon(Icons.signpost_outlined),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
           const SizedBox(height: 18),
@@ -671,11 +744,18 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
             ),
             child: _isLoading
-                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                : const Text('Submit Request to Super Admin', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2))
+                : const Text('Submit Request to Super Admin',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ),
           const SizedBox(height: 10),
           TextButton(
