@@ -13,10 +13,12 @@ class ConnectMasjidScreen extends ConsumerStatefulWidget {
   const ConnectMasjidScreen({super.key});
 
   @override
-  ConsumerState<ConnectMasjidScreen> createState() => _ConnectMasjidScreenState();
+  ConsumerState<ConnectMasjidScreen> createState() =>
+      _ConnectMasjidScreenState();
 }
 
-class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen> with SingleTickerProviderStateMixin {
+class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final TextEditingController _searchCtrl = TextEditingController();
   List<dynamic> _allMasjids = [];
@@ -71,7 +73,8 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen> with 
     try {
       final serverMatches = await ApiService.instance.getMasjids(search: q);
       if (mounted && _searchCtrl.text.trim().toLowerCase() == q) {
-        setState(() => _filteredMasjids = serverMatches.isNotEmpty ? serverMatches : localMatches);
+        setState(() => _filteredMasjids =
+            serverMatches.isNotEmpty ? serverMatches : localMatches);
       }
     } catch (_) {}
   }
@@ -81,8 +84,22 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen> with 
     setState(() => _isProcessing = true);
 
     try {
-      await ApiService.instance.joinMasjid(masjidId, isPrimary: true);
-      await ref.read(prayerTimesProvider.notifier).refreshFromBackend();
+      final membership =
+          await ApiService.instance.joinMasjid(masjidId, isPrimary: true);
+      if (membership == null) {
+        throw Exception('Could not connect to this masjid. Please try again.');
+      }
+      final masjid = _allMasjids.cast<Map<String, dynamic>?>().firstWhere(
+            (item) => item?['id']?.toString() == masjidId,
+            orElse: () => null,
+          );
+      if (masjid != null) {
+        await ref.read(prayerTimesProvider.notifier).switchMasjid(masjid);
+      } else {
+        await ref
+            .read(prayerTimesProvider.notifier)
+            .refreshFromBackend(specificMasjidId: masjidId);
+      }
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -111,7 +128,9 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen> with 
 
   Future<void> _openMasjidLocation(Map<String, dynamic> masjid) async {
     final mapUrl = masjid['mapUrl']?.toString();
-    if (mapUrl != null && mapUrl.trim().isNotEmpty && mapUrl.startsWith('http')) {
+    if (mapUrl != null &&
+        mapUrl.trim().isNotEmpty &&
+        mapUrl.startsWith('http')) {
       final uri = Uri.parse(mapUrl.trim());
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -125,9 +144,11 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen> with 
     if (lat != null && lng != null) {
       query = '$lat,$lng';
     } else {
-      query = Uri.encodeComponent('${masjid['name'] ?? ''}, ${masjid['city'] ?? ''}');
+      query = Uri.encodeComponent(
+          '${masjid['name'] ?? ''}, ${masjid['city'] ?? ''}');
     }
-    final mapsUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$query');
+    final mapsUri =
+        Uri.parse('https://www.google.com/maps/search/?api=1&query=$query');
     if (await canLaunchUrl(mapsUri)) {
       await launchUrl(mapsUri, mode: LaunchMode.externalApplication);
     }
@@ -168,7 +189,8 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen> with 
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(lang.tr(en: 'Connect with Masjid', ta: 'பள்ளிவாசலுடன் இணையவும்')),
+        title: Text(
+            lang.tr(en: 'Connect with Masjid', ta: 'பள்ளிவாசலுடன் இணையவும்')),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
@@ -228,9 +250,12 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen> with 
             onChanged: _onSearchChanged,
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.search, color: AppColors.primary),
-              hintText: lang.tr(en: 'Search masjid by name or city...', ta: 'பள்ளிவாசல் பெயர் அல்லது ஊர் தேடுக...'),
+              hintText: lang.tr(
+                  en: 'Search masjid by name or city...',
+                  ta: 'பள்ளிவாசல் பெயர் அல்லது ஊர் தேடுக...'),
               contentPadding: const EdgeInsets.symmetric(vertical: 12),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
         ),
@@ -240,7 +265,9 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen> with 
           child: _filteredMasjids.isEmpty
               ? Center(
                   child: Text(
-                    lang.tr(en: 'No masjids found', ta: 'பள்ளிவாசல்கள் ஏதும் இல்லை'),
+                    lang.tr(
+                        en: 'No masjids found',
+                        ta: 'பள்ளிவாசல்கள் ஏதும் இல்லை'),
                     style: const TextStyle(fontSize: 16, color: Colors.grey),
                   ),
                 )
@@ -270,23 +297,27 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen> with 
                             color: AppColors.primaryContainer,
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Icon(Icons.mosque, color: AppColors.primary, size: 28),
+                          child: const Icon(Icons.mosque,
+                              color: AppColors.primary, size: 28),
                         ),
                         title: Text(
                           name,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                         subtitle: Text(
                           '$city • $address',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                          style: TextStyle(
+                              fontSize: 13, color: Colors.grey.shade700),
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
-                              icon: const Icon(Icons.directions, color: AppColors.primary, size: 22),
+                              icon: const Icon(Icons.directions,
+                                  color: AppColors.primary, size: 22),
                               tooltip: 'Open in Maps',
                               onPressed: () => _openMasjidLocation(masjid),
                             ),
@@ -297,7 +328,8 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen> with 
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primary,
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 8),
                               ),
                               child: Text(lang.tr(en: 'Join', ta: 'இணை')),
                             ),
@@ -333,7 +365,8 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen> with 
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.qr_code_scanner, color: AppColors.secondary, size: 36),
+                const Icon(Icons.qr_code_scanner,
+                    color: AppColors.secondary, size: 36),
                 const SizedBox(height: 8),
                 Text(
                   lang.tr(
@@ -341,14 +374,18 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen> with 
                     ta: 'உடனடியாக இணைய பள்ளிவாசல் QR குறியீட்டை ஸ்கேன் செய்யவும்',
                   ),
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600),
                 ),
                 if (_isProcessing) ...[
                   const SizedBox(height: 12),
                   const SizedBox(
                     width: 24,
                     height: 24,
-                    child: CircularProgressIndicator(color: AppColors.secondary, strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                        color: AppColors.secondary, strokeWidth: 2),
                   ),
                 ],
               ],

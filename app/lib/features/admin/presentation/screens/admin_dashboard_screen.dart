@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:masjid_namaz_app/core/network/api_service.dart';
+import 'package:masjid_namaz_app/core/services/notification_service.dart';
+import 'package:masjid_namaz_app/features/announcements/presentation/screens/announcements_screen.dart';
 import 'package:masjid_namaz_app/features/prayer_times/presentation/screens/home_screen.dart';
 import 'package:masjid_namaz_app/features/auth/presentation/screens/otp_login_screen.dart';
 import 'package:masjid_namaz_app/features/masjid/presentation/widgets/location_input_widget.dart';
@@ -26,12 +29,31 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   List<dynamic> _specialSchedules = [];
   List<dynamic> _announcements = [];
   Map<String, dynamic>? _membersData;
+  StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
 
   @override
   void initState() {
     super.initState();
     _masjidId = widget.masjidId;
     _masjidName = widget.masjidName;
+    _notificationSubscription = NotificationService.instance.notificationEvents.listen((event) {
+      if (event['opened'] == true && event['type'] == 'BROADCAST' && mounted) {
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => AnnouncementsScreen(
+            masjidId: _masjidId,
+            focusAnnouncementId: event['id']?.toString(),
+          ),
+        ));
+        return;
+      }
+      final isMasjidNotice = event['type'] == 'MASJID_NOTICE';
+      final noticeMasjidId = event['masjidId']?.toString();
+      if (event['opened'] == true && isMasjidNotice &&
+          (_masjidId == null || noticeMasjidId == _masjidId) && mounted) {
+        setState(() => _currentIndex = 2);
+        _loadMasjidData();
+      }
+    });
 
     final cachedUser = ApiService.instance.currentUser;
     final cachedRoles = cachedUser?['adminRoles'] as List<dynamic>?;
@@ -42,7 +64,29 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         _masjidName = firstRole['masjidName'] ?? 'Masjid Admin';
       }
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadMasjidData());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadMasjidData();
+      final pending = NotificationService.instance.takePendingNotificationEvent();
+      if (pending != null && pending['opened'] == true && mounted) {
+        if (pending['type'] == 'BROADCAST') {
+          Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => AnnouncementsScreen(
+              masjidId: _masjidId,
+              focusAnnouncementId: pending['id']?.toString(),
+            ),
+          ));
+        } else if (pending['type'] == 'MASJID_NOTICE') {
+          setState(() => _currentIndex = 2);
+          _loadMasjidData();
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _notificationSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadMasjidData() async {
@@ -625,18 +669,38 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                   padding: const EdgeInsets.only(right: 8),
                                   child: ElevatedButton.icon(
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.white,
-                                      foregroundColor: const Color(0xFF0F432B),
-                                      side: const BorderSide(color: Color(0xFF0F432B)),
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      backgroundColor: const Color(0xFF0F432B),
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                     ),
-                                    icon: const Icon(Icons.edit, size: 14),
-                                    label: const Text('Edit All Today', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                    icon: const Icon(Icons.edit, size: 16),
+                                    label: const Text('Edit Schedule', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                    onPressed: _showFullPrayerTimesDialog,
+                                  ),
+                                )
+                              else
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF0F432B),
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                    icon: const Icon(Icons.add_circle, size: 16),
+                                    label: const Text('Create Schedule', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                                     onPressed: _showFullPrayerTimesDialog,
                                   ),
                                 ),
-                              ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F432B), foregroundColor: Colors.white),
+                              OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFF0F432B),
+                                  side: const BorderSide(color: Color(0xFF0F432B)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
                                 icon: const Icon(Icons.date_range, size: 15),
                                 label: const Text('Date Range', style: TextStyle(fontSize: 11)),
                                 onPressed: _showDateRangePrayerDialog,
@@ -666,19 +730,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                 ),
                                 const SizedBox(height: 16),
                                 const Text(
-                                  'No Prayer Timings Configured for Today',
+                                  'No Prayer Schedule for Today',
                                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                                 ),
                                 const SizedBox(height: 6),
                                 const Text(
-                                  'இன்றைய தொழுகை நேரங்கள் இன்னும் அமைக்கப்படவில்லை. Sunrise, Sunset, 5 நேர தொழுகை மற்றும் ஜும்ஆ நேரங்களை அமைக்கவும்.',
+                                  'இன்றைய தொழுகை அட்டவணை இன்னும் உருவாக்கப்படவில்லை. தொழுகை நேரங்களை அமைக்க கீழே உள்ள பட்டனைத் தொடவும்.',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.4),
                                 ),
                                 const SizedBox(height: 20),
                                 SizedBox(
                                   width: double.infinity,
-                                  height: 50,
+                                  height: 52,
                                   child: ElevatedButton.icon(
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: const Color(0xFF0F432B),
@@ -686,9 +750,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                       elevation: 3,
                                     ),
-                                    icon: const Icon(Icons.add_alarm, size: 22),
+                                    icon: const Icon(Icons.add_alarm, size: 24),
                                     label: const Text(
-                                      '+ Create Your Own Time (நேரங்களை அமைக்க)',
+                                      '+ Create Prayer Schedule (தொழுகை அட்டவணை அமைக்க)',
                                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                     ),
                                     onPressed: _showFullPrayerTimesDialog,
@@ -871,6 +935,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   void _showFullPrayerTimesDialog() {
+    final bool isCreating = _todayPrayerTimes == null ||
+        _todayPrayerTimes!['fajrJamaah'] == null ||
+        _todayPrayerTimes!['fajrJamaah'].toString().trim().isEmpty;
+
     final dateStr = DateTime.now().toIso8601String().split('T')[0];
     final sunriseCtrl = TextEditingController(text: _todayPrayerTimes?['sunrise'] ?? '');
     final sunsetCtrl = TextEditingController(text: _todayPrayerTimes?['sunset'] ?? '');
@@ -899,10 +967,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            const Icon(Icons.edit_calendar, color: Color(0xFF0F432B)),
+            Icon(isCreating ? Icons.add_alarm : Icons.edit_calendar, color: const Color(0xFF0F432B)),
             const SizedBox(width: 8),
-            const Expanded(
-              child: Text('Edit All Today Timings', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Expanded(
+              child: Text(
+                isCreating ? 'Create Prayer Schedule (அட்டவணை அமைக்க)' : 'Edit Prayer Schedule (அட்டவணையை மாற்ற)',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
             ),
           ],
         ),
@@ -1062,9 +1133,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 await ApiService.instance.updatePrayerTimes(_masjidId!, payload);
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('All prayer & solar timings saved to backend!'),
-                      backgroundColor: Color(0xFF0F432B),
+                    SnackBar(
+                      content: Text(isCreating
+                          ? 'Prayer schedule created successfully!'
+                          : 'Prayer schedule updated successfully!'),
+                      backgroundColor: const Color(0xFF0F432B),
                     ),
                   );
                 }
@@ -1075,7 +1148,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 }
               }
             },
-            child: const Text('Save All'),
+            child: Text(isCreating ? 'Create Schedule' : 'Save Changes'),
           ),
         ],
       ),

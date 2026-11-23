@@ -48,6 +48,7 @@ class _AppStartupGateState extends State<AppStartupGate> {
 
       // 1. Super Admin route
       if (isSuperAdmin) {
+        NotificationService.instance.configureAfterLogin();
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const SuperAdminDashboardScreen()),

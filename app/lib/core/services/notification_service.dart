@@ -1,12 +1,16 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../network/api_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  debugPrint('FCM Background message: ${message.messageId} - ${message.notification?.title}');
+  debugPrint(
+      'FCM Background message: ${message.messageId} - ${message.notification?.title}');
 }
 
 class NotificationService {
@@ -15,8 +19,74 @@ class NotificationService {
   NotificationService._internal();
 
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
-  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
+  final StreamController<Map<String, dynamic>> _notificationEvents =
+      StreamController.broadcast();
+  static const _storage = FlutterSecureStorage();
+  static const String _fcmKey = 'silah_cached_fcm_token';
+  static const String _fcmUserKey = 'silah_cached_fcm_user_id';
+  static const String announcementChannelId = 'silah_announcements';
+
+  String? _cachedToken;
+  String? _cachedUserId;
+  Map<String, dynamic>? _pendingNotificationEvent;
   bool _isInitialized = false;
+
+  Stream<Map<String, dynamic>> get notificationEvents =>
+      _notificationEvents.stream;
+
+  Map<String, dynamic>? takePendingNotificationEvent() {
+    final event = _pendingNotificationEvent;
+    _pendingNotificationEvent = null;
+    return event;
+  }
+
+  void _publishNotificationEvent(Map<String, dynamic> event) {
+    if (_notificationEvents.hasListener) {
+      _notificationEvents.add(event);
+    } else {
+      _pendingNotificationEvent = event;
+    }
+  }
+
+  Map<String, dynamic> _messageEvent(RemoteMessage message,
+          {required bool opened}) =>
+      {
+        ...message.data,
+        'title': message.notification?.title ?? message.data['title'],
+        'body': message.notification?.body ?? message.data['body'],
+        'opened': opened,
+      };
+
+  Future<void> _showForegroundNotification(RemoteMessage message) async {
+    final title =
+        message.notification?.title ?? message.data['title']?.toString();
+    final body = message.notification?.body ?? message.data['body']?.toString();
+    if (title == null && body == null) return;
+
+    await _localNotifications.show(
+      message.messageId?.hashCode ?? DateTime.now().millisecondsSinceEpoch,
+      title,
+      body,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          announcementChannelId,
+          'Masjid announcements',
+          channelDescription: 'Announcements and important masjid updates',
+          icon: '@mipmap/ic_launcher',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+      payload: jsonEncode(_messageEvent(message, opened: true)),
+    );
+  }
 
   Future<void> initialize() async {
     if (_isInitialized) return;
@@ -24,57 +94,65 @@ class NotificationService {
     try {
       // 1. Initialize local notifications
       const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-      const iosInit = DarwinInitializationSettings();
-      const initSettings = InitializationSettings(android: androidInit, iOS: iosInit);
+      const iosInit = DarwinInitializationSettings(
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
+      );
+      const initSettings =
+          InitializationSettings(android: androidInit, iOS: iosInit);
 
       await _localNotifications.initialize(
         initSettings,
         onDidReceiveNotificationResponse: (response) {
-          debugPrint('Notification clicked: ${response.payload}');
+          final payload = response.payload;
+          if (payload == null || payload.isEmpty) return;
+          try {
+            final event = jsonDecode(payload) as Map<String, dynamic>;
+            _publishNotificationEvent({...event, 'opened': true});
+          } catch (_) {
+            debugPrint('Unable to open notification payload');
+          }
         },
       );
 
-      // Create high-importance notification channel for Android
+      // Keep this ID in sync with FirebaseService so remote and local notices
+      // use the same Android notification channel.
       const channel = AndroidNotificationChannel(
-        'masjid_high_importance_channel',
-        'Masjid Prayer & Alerts',
-        description: 'Urgent announcements and prayer alerts',
+        announcementChannelId,
+        'Masjid announcements',
+        description: 'Announcements and important masjid updates',
         importance: Importance.high,
       );
 
       await _localNotifications
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
           ?.createNotificationChannel(channel);
 
       // 2. Set background handler
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
-      // 3. Listen to foreground messages
-      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        debugPrint('FCM Foreground message: ${message.notification?.title}');
-        final notification = message.notification;
-        if (notification != null) {
-          _localNotifications.show(
-            notification.hashCode,
-            notification.title,
-            notification.body,
-            NotificationDetails(
-              android: AndroidNotificationDetails(
-                channel.id,
-                channel.name,
-                channelDescription: channel.description,
-                icon: '@mipmap/ic_launcher',
-                importance: Importance.high,
-                priority: Priority.high,
-              ),
-              iOS: const DarwinNotificationDetails(
-                presentAlert: true,
-                presentBadge: true,
-                presentSound: true,
-              ),
-            ),
-          );
-        }
+      // 3. Foreground messages are surfaced locally and refresh DB-backed UI.
+      FirebaseMessaging.onMessage.listen((message) {
+        _publishNotificationEvent(_messageEvent(message, opened: false));
+        _showForegroundNotification(message);
+      });
+
+      FirebaseMessaging.onMessageOpenedApp.listen((message) {
+        _publishNotificationEvent(_messageEvent(message, opened: true));
+      });
+
+      final initialMessage = await _fcm.getInitialMessage();
+      if (initialMessage != null) {
+        _publishNotificationEvent(_messageEvent(initialMessage, opened: true));
+      }
+
+      // 4. Token refresh listener (only fires if Firebase rotates token automatically)
+      _fcm.onTokenRefresh.listen((newToken) async {
+        final currentUserId =
+            ApiService.instance.currentUser?['id']?.toString();
+        await _cacheAndRegisterToken(newToken, currentUserId);
       });
 
       _isInitialized = true;
@@ -83,12 +161,71 @@ class NotificationService {
     }
   }
 
-  /// Request permission, fetch FCM token, and register with backend
+  Future<void> _cacheAndRegisterToken(String token, String? userId) async {
+    _cachedToken = token;
+    await _storage.write(key: _fcmKey, value: token);
+    if (userId == null || userId.isEmpty) {
+      // A rotated token must be linked again after the next authenticated login.
+      _cachedUserId = null;
+      await _storage.delete(key: _fcmUserKey);
+      return;
+    }
+
+    final platform = Platform.isIOS ? 'IOS' : 'ANDROID';
+    final registered =
+        await ApiService.instance.updateDeviceToken(token, platform: platform);
+    if (registered) {
+      _cachedUserId = userId;
+      await _storage.write(key: _fcmUserKey, value: userId);
+    } else {
+      // Leave the token cached but retry backend registration on the next login.
+      _cachedUserId = null;
+      await _storage.delete(key: _fcmUserKey);
+    }
+  }
+
+  /// Reuses existing already-generated FCM token from memory or persistent storage.
+  /// Does NOT regenerate every time. Only requests fresh token from Firebase if no token exists yet.
   Future<String?> configureAfterLogin() async {
     try {
       await initialize();
 
-      // Request permission
+      final currentUserId = ApiService.instance.currentUser?['id']?.toString();
+
+      if (currentUserId == null) return _cachedToken;
+
+      // 1. Reuse the in-memory token only after backend registration succeeded.
+      if (_cachedToken != null &&
+          _cachedToken!.isNotEmpty &&
+          _cachedUserId == currentUserId) {
+        return _cachedToken;
+      }
+
+      // 2. Reuse the secure-storage token; only relink when the signed-in user changes.
+      final storedToken = await _storage.read(key: _fcmKey);
+      final storedUserId = await _storage.read(key: _fcmUserKey);
+
+      if (storedToken != null && storedToken.isNotEmpty) {
+        _cachedToken = storedToken;
+        _cachedUserId = storedUserId;
+
+        if (storedUserId == currentUserId) {
+          return storedToken;
+        }
+
+        final platform = Platform.isIOS ? 'IOS' : 'ANDROID';
+        final registered = await ApiService.instance
+            .updateDeviceToken(storedToken, platform: platform);
+        if (registered) {
+          await _storage.write(key: _fcmUserKey, value: currentUserId);
+          _cachedUserId = currentUserId;
+        }
+        return storedToken;
+      }
+
+      // 3. Ask permission and ask Firebase for its current token only when no
+      // reusable device token is stored. getToken returns Firebase's current
+      // token; it does not mint a new token on each sign-in.
       final settings = await _fcm.requestPermission(
         alert: true,
         badge: true,
@@ -98,29 +235,36 @@ class NotificationService {
 
       if (settings.authorizationStatus == AuthorizationStatus.authorized ||
           settings.authorizationStatus == AuthorizationStatus.provisional) {
-        final token = await _fcm.getToken();
-        debugPrint('FCM Token generated: $token');
-
-        if (token != null) {
-          final platform = Platform.isIOS ? 'IOS' : 'ANDROID';
-          await ApiService.instance.updateDeviceToken(token, platform: platform);
+        if (Platform.isAndroid) {
+          await _localNotifications
+              .resolvePlatformSpecificImplementation<
+                  AndroidFlutterLocalNotificationsPlugin>()
+              ?.requestNotificationsPermission();
         }
-        return token;
+        final token = await _fcm.getToken();
+
+        if (token != null && token.isNotEmpty) {
+          await _cacheAndRegisterToken(token, currentUserId);
+          return token;
+        }
       }
     } catch (e) {
       debugPrint('FCM configuration error: $e');
     }
-    return null;
+    return _cachedToken;
   }
 
   /// Trigger immediate prayer alarm and alert notification on device
-  Future<void> triggerPrayerAlarm({required String prayerName, required String time}) async {
+  Future<void> triggerPrayerAlarm(
+      {required String prayerName, required String time}) async {
     await initialize();
 
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
       'silah_adhan_alarm',
       'Prayer Alarms & Adhan Alerts',
-      channelDescription: 'Audible prayer alarms and reminders for Adhan and Jamaah',
+      channelDescription:
+          'Audible prayer alarms and reminders for Adhan and Jamaah',
       importance: Importance.max,
       priority: Priority.high,
       playSound: true,

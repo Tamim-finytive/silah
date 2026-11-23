@@ -42,13 +42,17 @@ class PrayerTimesState {
     Map<String, dynamic>? activeMasjid,
     NextPrayerInfo? nextPrayer,
     String? error,
+    bool clearTimes = false,
+    bool clearMasjid = false,
+    bool clearNextPrayer = false,
+    bool clearError = false,
   }) {
     return PrayerTimesState(
       isLoading: isLoading ?? this.isLoading,
-      times: times ?? this.times,
-      activeMasjid: activeMasjid ?? this.activeMasjid,
-      nextPrayer: nextPrayer ?? this.nextPrayer,
-      error: error ?? this.error,
+      times: clearTimes ? null : times ?? this.times,
+      activeMasjid: clearMasjid ? null : activeMasjid ?? this.activeMasjid,
+      nextPrayer: clearNextPrayer ? null : nextPrayer ?? this.nextPrayer,
+      error: clearError ? null : error ?? this.error,
     );
   }
 }
@@ -99,9 +103,16 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
 
   Future<void> refreshFromBackend({String? specificMasjidId}) async {
     try {
-      final masjids = await ApiService.instance.getMasjids();
+      // Use the authenticated user's masjids here. The public directory can be
+      // large and must never be treated as the user's selected masjid.
+      final masjids = await ApiService.instance.getMyMasjids();
       if (masjids.isEmpty) {
-        state = state.copyWith(isLoading: false, activeMasjid: null, times: null);
+        state = state.copyWith(
+          isLoading: false,
+          clearMasjid: true,
+          clearTimes: true,
+          clearNextPrayer: true,
+        );
         return;
       }
 
@@ -113,9 +124,25 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
         orElse: () => memberships.isNotEmpty ? memberships.first : null,
       );
 
+      final String? primaryId = user?['primaryMasjidId']?.toString() ??
+          primaryMembership?['masjidId']?.toString();
+      final userMasjids = masjids.whereType<Map<String, dynamic>>().toList();
+      final availableIds = userMasjids
+          .map((masjid) => masjid['id']?.toString())
+          .whereType<String>()
+          .toSet();
+      final cachedId = state.activeMasjid?['id']?.toString();
+      final cachedIsJoined =
+          cachedId != null && availableIds.contains(cachedId);
+      final primaryMasjids =
+          userMasjids.where((m) => m['isPrimary'] == true).toList();
+      final defaultMasjid = primaryMasjids.isNotEmpty
+          ? primaryMasjids.first
+          : (userMasjids.isNotEmpty ? userMasjids.first : null);
       final String? targetId = specificMasjidId ??
-          state.activeMasjid?['id'] ??
-          primaryMembership?['masjidId'];
+          (availableIds.contains(primaryId) ? primaryId : null) ??
+          (cachedIsJoined ? cachedId : null) ??
+          defaultMasjid?['id']?.toString();
 
       // Do NOT auto-link to masjids.first! User must search or scan QR code.
       if (targetId == null) {
@@ -124,33 +151,42 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
           times: null,
           nextPrayer: null,
           isLoading: false,
-          error: null,
+          clearMasjid: true,
+          clearTimes: true,
+          clearNextPrayer: true,
+          clearError: true,
         );
         return;
       }
 
-      final targetMasjid = masjids.firstWhere(
+      final targetMasjid = userMasjids.firstWhere(
         (m) => m['id'] == targetId,
-        orElse: () => null,
-      ) as Map<String, dynamic>?;
+        orElse: () => <String, dynamic>{},
+      );
 
-      if (targetMasjid == null) {
+      if (targetMasjid.isEmpty) {
         state = state.copyWith(
           activeMasjid: null,
           times: null,
           nextPrayer: null,
           isLoading: false,
+          clearMasjid: true,
+          clearTimes: true,
+          clearNextPrayer: true,
         );
         return;
       }
 
       // Fetch today's prayer times for this masjid from backend
-      final backendTimes = await ApiService.instance.getTodayPrayerTimes(targetMasjid['id']);
+      final backendTimes =
+          await ApiService.instance.getTodayPrayerTimes(targetMasjid['id']);
 
       if (backendTimes != null) {
         // Persist fresh backend data to storage
-        await _storage.write(key: _cachedTimesKey, value: jsonEncode(backendTimes));
-        await _storage.write(key: _cachedMasjidKey, value: jsonEncode(targetMasjid));
+        await _storage.write(
+            key: _cachedTimesKey, value: jsonEncode(backendTimes));
+        await _storage.write(
+            key: _cachedMasjidKey, value: jsonEncode(targetMasjid));
 
         state = state.copyWith(
           times: backendTimes,
@@ -160,7 +196,12 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
         );
         _recalculateNextPrayer();
       } else {
-        state = state.copyWith(activeMasjid: targetMasjid, isLoading: false);
+        state = state.copyWith(
+          activeMasjid: targetMasjid,
+          isLoading: false,
+          clearTimes: true,
+          clearNextPrayer: true,
+        );
       }
     } catch (e) {
       state = state.copyWith(
@@ -190,7 +231,8 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
 
     DateTime parseTime(String? timeStr, int fallbackHour, int fallbackMin) {
       if (timeStr == null || timeStr.isEmpty) {
-        return DateTime(now.year, now.month, now.day, fallbackHour, fallbackMin);
+        return DateTime(
+            now.year, now.month, now.day, fallbackHour, fallbackMin);
       }
       final clean = timeStr.replaceAll(RegExp(r'[^\d:]'), '');
       final parts = clean.split(':');
@@ -200,7 +242,8 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
         if (timeStr.toUpperCase().contains('PM') && h < 12) h += 12;
         if (timeStr.toUpperCase().contains('AM') && h == 12) h = 0;
         // 24hr format handling
-        if (!timeStr.toUpperCase().contains('AM') && !timeStr.toUpperCase().contains('PM')) {
+        if (!timeStr.toUpperCase().contains('AM') &&
+            !timeStr.toUpperCase().contains('PM')) {
           if (fallbackHour >= 12 && h < 12) h += 12;
         }
         return DateTime(now.year, now.month, now.day, h, m);

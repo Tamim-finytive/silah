@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { initializeApp, getApps, App } from 'firebase-admin/app';
+import { applicationDefault, cert, initializeApp, getApps, App } from 'firebase-admin/app';
 import { getMessaging, MulticastMessage } from 'firebase-admin/messaging';
 
 @Injectable()
@@ -16,12 +16,16 @@ export class FirebaseService implements OnModuleInit {
         return;
       }
 
-      this.app = initializeApp({
-        projectId: process.env.FIREBASE_PROJECT_ID || 'silah-2036a',
-      });
-      this.logger.log('✓ Firebase Admin SDK initialized for project silah-2036a');
+      const projectId = process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || 'silah-2036a';
+      const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+      const credential = serviceAccountJson
+        ? cert(JSON.parse(serviceAccountJson))
+        : applicationDefault();
+
+      this.app = initializeApp({ credential, projectId });
+      this.logger.log(`Firebase Admin SDK initialized for project ${projectId}`);
     } catch (error) {
-      this.logger.warn(`Firebase Admin SDK init note (non-fatal): ${error}`);
+      this.logger.warn(`Firebase Admin SDK could not initialize; push delivery is unavailable: ${error}`);
     }
   }
 
@@ -33,10 +37,10 @@ export class FirebaseService implements OnModuleInit {
     title: string,
     body: string,
     data: Record<string, string> = {},
-  ): Promise<{ successCount: number; failureCount: number }> {
+  ): Promise<{ successCount: number; failureCount: number; invalidTokens: string[] }> {
     if (!tokens || tokens.length === 0) {
       this.logger.log('[FCM] No tokens provided to send notification');
-      return { successCount: 0, failureCount: 0 };
+      return { successCount: 0, failureCount: 0, invalidTokens: [] };
     }
 
     // Deduplicate tokens
@@ -71,15 +75,23 @@ export class FirebaseService implements OnModuleInit {
       };
 
       const response = await getMessaging(this.app ?? undefined).sendEachForMulticast(message);
+      const invalidTokens = response.responses.flatMap((result, index) => {
+        const code = result.error?.code;
+        return code === 'messaging/registration-token-not-registered' ||
+            code === 'messaging/invalid-registration-token'
+            ? [uniqueTokens[index]]
+            : [];
+      });
       this.logger.log(`[FCM] Notification sent: ${response.successCount} succeeded, ${response.failureCount} failed`);
 
       return {
         successCount: response.successCount,
         failureCount: response.failureCount,
+        invalidTokens,
       };
     } catch (error) {
       this.logger.error(`[FCM] Failed to dispatch multicast notification: ${error}`);
-      return { successCount: 0, failureCount: uniqueTokens.length };
+      return { successCount: 0, failureCount: uniqueTokens.length, invalidTokens: [] };
     }
   }
 }

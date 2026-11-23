@@ -1,15 +1,18 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/network/api_service.dart';
+import '../../../../core/services/notification_service.dart';
 import '../../../prayer_times/data/prayer_times_provider.dart';
 
 class AnnouncementsScreen extends ConsumerStatefulWidget {
   final VoidCallback? onBack;
   final String? masjidId;
+  final String? focusAnnouncementId;
 
-  const AnnouncementsScreen({super.key, this.onBack, this.masjidId});
+  const AnnouncementsScreen({super.key, this.onBack, this.masjidId, this.focusAnnouncementId});
 
   @override
   ConsumerState<AnnouncementsScreen> createState() => _AnnouncementsScreenState();
@@ -18,32 +21,58 @@ class AnnouncementsScreen extends ConsumerStatefulWidget {
 class _AnnouncementsScreenState extends ConsumerState<AnnouncementsScreen> {
   List<dynamic> _notices = [];
   bool _isLoading = true;
+  StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
 
   @override
   void initState() {
     super.initState();
     _fetchAnnouncements();
+    _notificationSubscription = NotificationService.instance.notificationEvents.listen((_) {
+      _fetchAnnouncements();
+    });
+  }
+
+  @override
+  void dispose() {
+    _notificationSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant AnnouncementsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusAnnouncementId != widget.focusAnnouncementId) {
+      _fetchAnnouncements();
+    }
   }
 
   Future<void> _fetchAnnouncements() async {
     setState(() => _isLoading = true);
     final targetId = widget.masjidId ?? ref.read(prayerTimesProvider).activeMasjid?['id'];
 
-    if (targetId != null) {
-      final list = await ApiService.instance.getAnnouncements(targetId);
-      if (mounted) {
-        setState(() {
-          _notices = list;
-          _isLoading = false;
-        });
-      }
-    } else {
-      if (mounted) {
-        setState(() {
-          _notices = [];
-          _isLoading = false;
-        });
-      }
+    final results = await Future.wait<List<dynamic>>([
+      if (targetId != null) ApiService.instance.getAnnouncements(targetId),
+      ApiService.instance.getBroadcastAnnouncements(),
+    ]);
+    final notices = results.expand((items) => items).toList();
+    notices.sort((a, b) {
+      final aDate = DateTime.tryParse(a['publishedAt']?.toString() ?? a['createdAt']?.toString() ?? '');
+      final bDate = DateTime.tryParse(b['publishedAt']?.toString() ?? b['createdAt']?.toString() ?? '');
+      if (aDate == null) return 1;
+      if (bDate == null) return -1;
+      return bDate.compareTo(aDate);
+    });
+    final focusedIndex = notices.indexWhere(
+      (notice) => notice['id']?.toString() == widget.focusAnnouncementId,
+    );
+    if (focusedIndex > 0) {
+      notices.insert(0, notices.removeAt(focusedIndex));
+    }
+    if (mounted) {
+      setState(() {
+        _notices = notices;
+        _isLoading = false;
+      });
     }
   }
 

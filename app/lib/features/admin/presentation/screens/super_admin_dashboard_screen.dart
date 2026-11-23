@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:masjid_namaz_app/core/network/api_service.dart';
+import 'package:masjid_namaz_app/core/services/notification_service.dart';
 import 'package:masjid_namaz_app/features/prayer_times/presentation/screens/home_screen.dart';
 import 'package:masjid_namaz_app/features/auth/presentation/screens/otp_login_screen.dart';
 import 'package:masjid_namaz_app/features/masjid/presentation/widgets/location_input_widget.dart';
@@ -22,11 +24,32 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   List<dynamic> _users = [];
   List<dynamic> _broadcasts = [];
   String _userSearchQuery = '';
+  StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadAllData();
+    _notificationSubscription = NotificationService.instance.notificationEvents.listen((event) {
+      if (event['opened'] == true && event['type'] == 'BROADCAST' && mounted) {
+        setState(() => _currentIndex = 2);
+        _loadAllData();
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final pending = NotificationService.instance.takePendingNotificationEvent();
+      if (pending != null && pending['opened'] == true &&
+          pending['type'] == 'BROADCAST' && mounted) {
+        setState(() => _currentIndex = 2);
+        _loadAllData();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _notificationSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadAllData() async {

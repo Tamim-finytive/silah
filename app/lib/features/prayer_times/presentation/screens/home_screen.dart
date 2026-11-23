@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -6,6 +7,8 @@ import 'package:masjid_namaz_app/core/network/api_service.dart';
 import 'package:masjid_namaz_app/core/services/notification_service.dart';
 import 'package:masjid_namaz_app/features/prayer_times/data/prayer_times_provider.dart';
 import 'package:masjid_namaz_app/features/qibla/presentation/screens/qibla_screen.dart';
+import 'package:masjid_namaz_app/features/quran/presentation/screens/quran_screen.dart';
+import 'package:masjid_namaz_app/features/sandha/presentation/screens/sandha_screen.dart';
 import 'package:masjid_namaz_app/features/masjid/presentation/screens/connect_masjid_screen.dart';
 import 'package:masjid_namaz_app/features/announcements/presentation/screens/announcements_screen.dart';
 import 'package:masjid_namaz_app/features/admin/presentation/screens/admin_dashboard_screen.dart';
@@ -21,13 +24,43 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _selectedTabIndex = 0;
+  int _noticeRefreshVersion = 0;
+  String? _openedAnnouncementId;
+  String? _openedNotificationMasjidId;
   List<dynamic> _announcements = [];
   String _calcMethod = 'Hanafi';
+  StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadInitialData();
+    _notificationSubscription = NotificationService.instance.notificationEvents.listen((event) {
+      if (event['opened'] == true && mounted) {
+        _showOpenedAnnouncement(event);
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final pending = NotificationService.instance.takePendingNotificationEvent();
+      if (pending != null && mounted && pending['opened'] == true) {
+        _showOpenedAnnouncement(pending);
+      }
+    });
+  }
+
+  void _showOpenedAnnouncement(Map<String, dynamic> event) {
+    setState(() {
+      _selectedTabIndex = 3;
+      _noticeRefreshVersion++;
+      _openedAnnouncementId = event['id']?.toString();
+      _openedNotificationMasjidId = event['masjidId']?.toString();
+    });
+  }
+
+  @override
+  void dispose() {
+    _notificationSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadInitialData() async {
@@ -68,7 +101,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             _buildHomeTab(),
             const ConnectMasjidScreen(),
             QiblaScreen(onBack: () => setState(() => _selectedTabIndex = 0)),
-            AnnouncementsScreen(onBack: () => setState(() => _selectedTabIndex = 0)),
+            AnnouncementsScreen(
+              key: ValueKey('notices-$_noticeRefreshVersion'),
+              onBack: () => setState(() => _selectedTabIndex = 0),
+              masjidId: _openedNotificationMasjidId,
+              focusAnnouncementId: _openedAnnouncementId,
+            ),
             _buildProfileTab(),
           ],
         ),
@@ -1655,6 +1693,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             onTap: () {
               Navigator.pop(context);
               setState(() => _selectedTabIndex = 3);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.menu_book),
+            title: const Text('Holy Quran'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const QuranScreen()));
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.volunteer_activism),
+            title: const Text('Sandha contributions'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const SandhaScreen()));
             },
           ),
           const Divider(),

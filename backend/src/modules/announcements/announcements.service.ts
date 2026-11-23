@@ -13,6 +13,14 @@ export class AnnouncementsService {
     private firebaseService: FirebaseService,
   ) {}
 
+  private async deactivateInvalidDeviceTokens(tokens: string[]) {
+    if (tokens.length === 0) return;
+    await this.prisma.device.updateMany({
+      where: { fcmToken: { in: tokens } },
+      data: { isActive: false },
+    });
+  }
+
   async findByMasjid(masjidId: string) {
     return this.prisma.announcement.findMany({
       where: {
@@ -98,7 +106,7 @@ export class AnnouncementsService {
         recipientCount = tokens.length;
 
         if (tokens.length > 0) {
-          await this.firebaseService.sendPushNotification(
+          const delivery = await this.firebaseService.sendPushNotification(
             tokens,
             dto.title,
             dto.body,
@@ -108,6 +116,7 @@ export class AnnouncementsService {
               audience: dto.targetAudience || 'ALL',
             },
           );
+          await this.deactivateInvalidDeviceTokens(delivery.invalidTokens);
         }
       } catch (err) {
         this.logger.error(`Failed to dispatch broadcast FCM notification: ${err}`);
@@ -151,7 +160,7 @@ export class AnnouncementsService {
 
           const tokens = devices.map((d) => d.fcmToken);
           if (tokens.length > 0) {
-            await this.firebaseService.sendPushNotification(
+            const delivery = await this.firebaseService.sendPushNotification(
               tokens,
               dto.title,
               dto.body,
@@ -161,6 +170,7 @@ export class AnnouncementsService {
                 id: announcement.id,
               },
             );
+            await this.deactivateInvalidDeviceTokens(delivery.invalidTokens);
           }
         }
       } catch (err) {

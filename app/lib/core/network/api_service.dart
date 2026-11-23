@@ -145,13 +145,15 @@ class ApiService {
     return res.data;
   }
 
-  Future<void> updateDeviceToken(String fcmToken, {String platform = 'ANDROID'}) async {
+  Future<bool> updateDeviceToken(String fcmToken, {String platform = 'ANDROID'}) async {
     try {
-      await _dio.post('/auth/device-token', data: {
+      final res = await _dio.post('/auth/device-token', data: {
         'fcmToken': fcmToken,
         'platform': platform,
       });
+      return res.data is Map && res.data['success'] == true;
     } catch (_) {}
+    return false;
   }
 
   Future<Map<String, dynamic>?> getMasjidById(String masjidId) async {
