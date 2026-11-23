@@ -32,6 +32,7 @@ class NotificationService {
   String? _cachedUserId;
   Map<String, dynamic>? _pendingNotificationEvent;
   bool _isInitialized = false;
+  bool _permissionCheckedThisRun = false;
 
   Stream<Map<String, dynamic>> get notificationEvents =>
       _notificationEvents.stream;
@@ -134,9 +135,13 @@ class NotificationService {
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
       // 3. Foreground messages are surfaced locally and refresh DB-backed UI.
-      FirebaseMessaging.onMessage.listen((message) {
+      FirebaseMessaging.onMessage.listen((message) async {
         _publishNotificationEvent(_messageEvent(message, opened: false));
-        _showForegroundNotification(message);
+        try {
+          await _showForegroundNotification(message);
+        } catch (e) {
+          debugPrint('Unable to show foreground notification: $e');
+        }
       });
 
       FirebaseMessaging.onMessageOpenedApp.listen((message) {
@@ -184,6 +189,23 @@ class NotificationService {
     }
   }
 
+  Future<void> _requestNotificationPermission() async {
+    if (_permissionCheckedThisRun) return;
+    _permissionCheckedThisRun = true;
+    await _fcm.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+      provisional: false,
+    );
+    if (Platform.isAndroid) {
+      await _localNotifications
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestNotificationsPermission();
+    }
+  }
+
   /// Reuses existing already-generated FCM token from memory or persistent storage.
   /// Does NOT regenerate every time. Only requests fresh token from Firebase if no token exists yet.
   Future<String?> configureAfterLogin() async {
@@ -193,6 +215,9 @@ class NotificationService {
       final currentUserId = ApiService.instance.currentUser?['id']?.toString();
 
       if (currentUserId == null) return _cachedToken;
+      // Ask/check permission even when an existing Firebase token is reused.
+      // Cached-token users previously returned before reaching the permission flow.
+      await _requestNotificationPermission();
 
       // 1. Reuse the in-memory token only after backend registration succeeded.
       if (_cachedToken != null &&
@@ -226,27 +251,10 @@ class NotificationService {
       // 3. Ask permission and ask Firebase for its current token only when no
       // reusable device token is stored. getToken returns Firebase's current
       // token; it does not mint a new token on each sign-in.
-      final settings = await _fcm.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-        provisional: false,
-      );
-
-      if (settings.authorizationStatus == AuthorizationStatus.authorized ||
-          settings.authorizationStatus == AuthorizationStatus.provisional) {
-        if (Platform.isAndroid) {
-          await _localNotifications
-              .resolvePlatformSpecificImplementation<
-                  AndroidFlutterLocalNotificationsPlugin>()
-              ?.requestNotificationsPermission();
-        }
-        final token = await _fcm.getToken();
-
-        if (token != null && token.isNotEmpty) {
-          await _cacheAndRegisterToken(token, currentUserId);
-          return token;
-        }
+      final token = await _fcm.getToken();
+      if (token != null && token.isNotEmpty) {
+        await _cacheAndRegisterToken(token, currentUserId);
+        return token;
       }
     } catch (e) {
       debugPrint('FCM configuration error: $e');

@@ -15,6 +15,7 @@ class ApiService {
 
   String? authToken;
   Map<String, dynamic>? currentUser;
+  Future<String?>? _refreshingSession;
 
   bool get isMasjidAdmin {
     final adminRoles = currentUser?['adminRoles'] as List<dynamic>?;
@@ -49,8 +50,27 @@ class ApiService {
           }
           return handler.next(options);
         },
-        onError: (DioException error, handler) {
-          return handler.next(error);
+        onError: (DioException error, handler) async {
+          final request = error.requestOptions;
+          final canRefresh = error.response?.statusCode == 401 &&
+              request.extra['skipAuthRefresh'] != true &&
+              request.extra['authRetry'] != true &&
+              !request.path.endsWith('/auth/refresh') &&
+              (!request.path.startsWith('/auth/') ||
+                  request.path == '/auth/me');
+          if (!canRefresh) return handler.next(error);
+
+          final refreshedToken = await _refreshAccessToken();
+          if (refreshedToken == null) return handler.next(error);
+          request
+            ..headers['Authorization'] = 'Bearer $refreshedToken'
+            ..extra['authRetry'] = true;
+          try {
+            final response = await _dio.fetch<dynamic>(request);
+            return handler.resolve(response);
+          } on DioException catch (retryError) {
+            return handler.next(retryError);
+          }
         },
       ),
     );
@@ -122,6 +142,52 @@ class ApiService {
     await _storage.delete(key: _userKey);
   }
 
+  Future<String?> _refreshAccessToken() {
+    final activeRefresh = _refreshingSession;
+    if (activeRefresh != null) return activeRefresh;
+    final refreshFuture = _performSessionRefresh();
+    _refreshingSession = refreshFuture;
+    return refreshFuture.whenComplete(() {
+      if (identical(_refreshingSession, refreshFuture)) {
+        _refreshingSession = null;
+      }
+    });
+  }
+
+  Future<String?> _performSessionRefresh() async {
+    try {
+      final refreshToken = await _storage.read(key: _refreshTokenKey);
+      if (refreshToken == null || refreshToken.isEmpty) return null;
+      final response = await _dio.post(
+        '/auth/refresh',
+        data: {'refreshToken': refreshToken},
+        options: Options(extra: {'skipAuthRefresh': true}),
+      );
+      final tokenData = response.data is Map
+          ? (response.data['data'] is Map
+              ? response.data['data'] as Map
+              : response.data as Map)
+          : const <String, dynamic>{};
+      final nextAccessToken = tokenData['accessToken']?.toString();
+      final nextRefreshToken = tokenData['refreshToken']?.toString();
+      if (nextAccessToken == null || nextAccessToken.isEmpty) return null;
+      authToken = nextAccessToken;
+      await _storage.write(key: _tokenKey, value: nextAccessToken);
+      if (nextRefreshToken != null && nextRefreshToken.isNotEmpty) {
+        await _storage.write(key: _refreshTokenKey, value: nextRefreshToken);
+      }
+      return nextAccessToken;
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 401 ||
+          error.response?.statusCode == 403) {
+        await clearSession();
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>> loginDirect(String phone) async {
     final res = await _dio.post('/auth/login-direct', data: {'phone': phone});
     if (res.data['success'] == true && res.data['data'] != null) {
@@ -187,16 +253,55 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>?> joinMasjid(String masjidId,
+  Future<Map<String, dynamic>> joinMasjid(String masjidId,
       {bool isPrimary = true}) async {
+    final path = '/masjids/$masjidId/join';
     try {
-      final res = await _dio
-          .post('/masjids/$masjidId/join', data: {'isPrimary': isPrimary});
-      if (res.data['success'] == true) {
-        return res.data['data'] as Map<String, dynamic>;
+      final res = await _dio.post(
+        path,
+        data: {'isPrimary': isPrimary},
+        options: Options(extra: {'skipAuthRefresh': true}),
+      );
+      return _readJoinResponse(res.data);
+    } on DioException catch (error) {
+      if (error.response?.statusCode != 401) rethrow;
+
+      final refreshedToken = await _refreshAccessToken();
+      if (refreshedToken == null) {
+        await clearSession();
+        throw StateError(
+          'Your sign-in session expired. Please sign in again, then scan the masjid QR code.',
+        );
       }
-    } catch (_) {}
-    return null;
+
+      try {
+        final retry = await _dio.post(
+          path,
+          data: {'isPrimary': isPrimary},
+          options: Options(
+            headers: {'Authorization': 'Bearer $refreshedToken'},
+            extra: {'skipAuthRefresh': true, 'authRetry': true},
+          ),
+        );
+        return _readJoinResponse(retry.data);
+      } on DioException catch (retryError) {
+        if (retryError.response?.statusCode == 401) {
+          throw StateError(
+            'The renewed session was rejected. Please sign in again before joining a masjid.',
+          );
+        }
+        rethrow;
+      }
+    }
+  }
+
+  Map<String, dynamic> _readJoinResponse(dynamic response) {
+    if (response is Map &&
+        response['success'] == true &&
+        response['data'] is Map) {
+      return Map<String, dynamic>.from(response['data'] as Map);
+    }
+    throw const FormatException('Masjid join returned an invalid response');
   }
 
   Future<Map<String, dynamic>?> getMasjidByQr(String qrToken) async {

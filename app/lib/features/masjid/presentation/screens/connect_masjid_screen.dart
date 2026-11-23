@@ -235,11 +235,7 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
 
   Future<void> _completeMasjidJoin(String masjidId, String masjidName) async {
     try {
-      final membership =
-          await ApiService.instance.joinMasjid(masjidId, isPrimary: true);
-      if (membership == null) {
-        throw Exception('Could not connect to this masjid. Please try again.');
-      }
+      await ApiService.instance.joinMasjid(masjidId, isPrimary: true);
       final masjid = _allMasjids.cast<Map<String, dynamic>?>().firstWhere(
             (item) => item?['id']?.toString() == masjidId,
             orElse: () => null,

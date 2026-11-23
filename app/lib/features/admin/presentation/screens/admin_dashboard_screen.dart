@@ -539,6 +539,32 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return _prayerRowEditable(name.toLowerCase(), name, adhan, jamaah);
   }
 
+  Widget _solarTimeSummary(
+    IconData icon,
+    String label,
+    dynamic value,
+    Color color,
+  ) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style: const TextStyle(fontSize: 11, color: Colors.grey)),
+            Text(
+              value?.toString() ?? '--:--',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _prayerRowEditable(
       String prayerKey, String name, String? adhan, String? jamaah) {
     IconData icon;
@@ -565,12 +591,53 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         icon = Icons.access_time;
     }
 
+    Widget timingActions() => Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            if (adhan != null && adhan.isNotEmpty)
+              Text('Adhan: $adhan',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+            InkWell(
+              onTap: () => _editSinglePrayerTime(
+                  prayerKey.toLowerCase(), name, adhan, jamaah),
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F432B).withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                      color: const Color(0xFF0F432B).withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Jamaah: ${jamaah ?? '--:--'}',
+                      style: const TextStyle(
+                        color: Color(0xFF0F432B),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.edit, size: 14, color: Color(0xFF0F432B)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final prayerLabel = Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Icon(icon, size: 18, color: const Color(0xFF0F432B)),
               const SizedBox(width: 8),
@@ -578,49 +645,28 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   style: const TextStyle(
                       fontWeight: FontWeight.bold, fontSize: 14)),
             ],
-          ),
-          Row(
-            children: [
-              if (adhan != null && adhan.isNotEmpty) ...[
-                Text('Adhan: $adhan',
-                    style:
-                        TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-                const SizedBox(width: 10),
+          );
+          if (constraints.maxWidth < 410) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                prayerLabel,
+                const SizedBox(height: 8),
+                timingActions(),
               ],
-              InkWell(
-                onTap: () => _editSinglePrayerTime(
-                    prayerKey.toLowerCase(), name, adhan, jamaah),
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0F432B).withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                        color: const Color(0xFF0F432B).withValues(alpha: 0.3)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Jamaah: ${jamaah ?? '--:--'}',
-                        style: const TextStyle(
-                          color: Color(0xFF0F432B),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      const Icon(Icons.edit,
-                          size: 14, color: Color(0xFF0F432B)),
-                    ],
-                  ),
-                ),
-              ),
+            );
+          }
+          return Row(
+            children: [
+              prayerLabel,
+              const Spacer(),
+              Flexible(
+                  child: Align(
+                      alignment: Alignment.centerRight,
+                      child: timingActions())),
             ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -912,69 +958,27 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12)),
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 12),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceAround,
+                              padding: const EdgeInsets.all(14),
+                              child: Wrap(
+                                spacing: 18,
+                                runSpacing: 12,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                alignment: WrapAlignment.spaceBetween,
                                 children: [
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.wb_sunny_outlined,
-                                          color: Colors.orange, size: 20),
-                                      const SizedBox(width: 8),
-                                      Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          const Text('Sunrise (Ishraq)',
-                                              style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.grey)),
-                                          Text(
-                                              _todayPrayerTimes?['sunrise'] ??
-                                                  '--:--',
-                                              style: const TextStyle(
-                                                  fontWeight: FontWeight.bold)),
-                                        ],
-                                      ),
-                                    ],
+                                  _solarTimeSummary(
+                                    Icons.wb_sunny_outlined,
+                                    'Sunrise (Ishraq)',
+                                    _todayPrayerTimes?['sunrise'],
+                                    Colors.orange,
                                   ),
-                                  Container(
-                                      height: 24,
-                                      width: 1,
-                                      color: Colors.grey.shade300),
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.nights_stay_outlined,
-                                          color: Colors.indigo, size: 20),
-                                      const SizedBox(width: 8),
-                                      Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          const Text('Sunset (Maghrib)',
-                                              style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.grey)),
-                                          Text(
-                                              _todayPrayerTimes?['sunset'] ??
-                                                  '--:--',
-                                              style: const TextStyle(
-                                                  fontWeight: FontWeight.bold)),
-                                        ],
-                                      ),
-                                    ],
+                                  _solarTimeSummary(
+                                    Icons.nights_stay_outlined,
+                                    'Sunset (Maghrib)',
+                                    _todayPrayerTimes?['sunset'],
+                                    Colors.indigo,
                                   ),
-                                  Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                        color: const Color(0xFF0F432B)
-                                            .withValues(alpha: 0.08),
-                                        shape: BoxShape.circle),
-                                    child: const Icon(Icons.edit,
-                                        size: 14, color: Color(0xFF0F432B)),
-                                  ),
+                                  const Icon(Icons.edit_outlined,
+                                      size: 18, color: Color(0xFF0F432B)),
                                 ],
                               ),
                             ),
@@ -1053,8 +1057,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       const SizedBox(height: 24),
 
                       // Special Events Section (Ramadan, Eid, Taraweeh, Tahajjud)
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        runSpacing: 8,
                         children: [
                           const Text('Special Events (Ramadan / Eid)',
                               style: TextStyle(
@@ -1076,18 +1082,26 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         Card(
                           child: Padding(
                             padding: const EdgeInsets.all(18),
-                            child: Row(children: [
-                              const Icon(Icons.event_available,
-                                  color: Color(0xFF0F432B)),
-                              const SizedBox(width: 12),
-                              const Expanded(
-                                  child: Text(
-                                      'No special events yet. Add Ramadan, Eid, Taraweeh, Tahajjud, or another masjid event.')),
-                              TextButton.icon(
-                                  onPressed: _showAddSpecialEventDialog,
-                                  icon: const Icon(Icons.add),
-                                  label: const Text('Create')),
-                            ]),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.event_available,
+                                    color: Color(0xFF0F432B), size: 26),
+                                const SizedBox(height: 10),
+                                const Text(
+                                  'No special events yet. Add Ramadan, Eid, Taraweeh, Tahajjud, or another masjid event.',
+                                ),
+                                const SizedBox(height: 12),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: FilledButton.icon(
+                                    onPressed: _showAddSpecialEventDialog,
+                                    icon: const Icon(Icons.add),
+                                    label: const Text('Create event'),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         )
                       else
@@ -1123,22 +1137,23 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                               isThreeLine: notes != null && notes.isNotEmpty,
                               onTap: () =>
                                   _showAddSpecialEventDialog(existing: s),
-                              trailing: Wrap(
-                                spacing: 0,
-                                children: [
-                                  IconButton(
-                                    tooltip: 'Edit event',
-                                    icon: const Icon(Icons.edit_outlined,
-                                        color: Color(0xFF0F432B)),
-                                    onPressed: () =>
-                                        _showAddSpecialEventDialog(existing: s),
+                              trailing: PopupMenuButton<String>(
+                                onSelected: (action) {
+                                  if (action == 'edit') {
+                                    _showAddSpecialEventDialog(existing: s);
+                                  } else if (action == 'delete') {
+                                    _deleteSpecialSchedule(
+                                        s['id']?.toString() ?? '');
+                                  }
+                                },
+                                itemBuilder: (context) => const [
+                                  PopupMenuItem(
+                                    value: 'edit',
+                                    child: Text('Edit event'),
                                   ),
-                                  IconButton(
-                                    tooltip: 'Delete event',
-                                    icon: const Icon(Icons.delete_outline,
-                                        color: Colors.red),
-                                    onPressed: () => _deleteSpecialSchedule(
-                                        s['id']?.toString() ?? ''),
+                                  PopupMenuItem(
+                                    value: 'delete',
+                                    child: Text('Delete event'),
                                   ),
                                 ],
                               ),
@@ -2621,31 +2636,47 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          _buildDashboardTab(),
-          _buildPrayerTimesTab(),
-          _buildAnnouncementsTab(),
-          _buildMembersTab(),
-          _buildProfileTab(),
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (i) => setState(() => _currentIndex = i),
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: const Color(0xFF0F432B),
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(
-              icon: Icon(Icons.dashboard), label: 'Dashboard'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.access_time), label: 'Prayer & Events'),
-          BottomNavigationBarItem(icon: Icon(Icons.campaign), label: 'Notices'),
-          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Members'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.settings), label: 'Settings'),
+      backgroundColor: const Color(0xFFF5F7F5),
+      body: switch (_currentIndex) {
+        0 => _buildDashboardTab(),
+        1 => _buildPrayerTimesTab(),
+        2 => _buildAnnouncementsTab(),
+        3 => _buildMembersTab(),
+        _ => _buildProfileTab(),
+      },
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) => setState(() => _currentIndex = index),
+        height: 74,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        backgroundColor: Colors.white,
+        indicatorColor: const Color(0xFFE5F1E9),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard_rounded),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.schedule_outlined),
+            selectedIcon: Icon(Icons.schedule_rounded),
+            label: 'Prayer',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.campaign_outlined),
+            selectedIcon: Icon(Icons.campaign_rounded),
+            label: 'Notices',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.people_outline),
+            selectedIcon: Icon(Icons.people_rounded),
+            label: 'Members',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings_rounded),
+            label: 'Settings',
+          ),
         ],
       ),
     );

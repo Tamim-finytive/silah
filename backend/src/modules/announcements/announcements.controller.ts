@@ -1,7 +1,7 @@
-import { Controller, Get, Post, Delete, Body, Param, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AnnouncementsService } from './announcements.service';
-import { CreateAnnouncementDto, BroadcastAnnouncementDto } from './dto/announcement.dto';
+import { CreateAnnouncementDto, BroadcastAnnouncementDto, UpdateAnnouncementDto } from './dto/announcement.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { MasjidRoleGuard } from '../../common/guards/masjid-role.guard';
@@ -13,6 +13,51 @@ import { RoleType } from '@prisma/client';
 @Controller('announcements')
 export class BroadcastAnnouncementsController {
   constructor(private readonly announcementsService: AnnouncementsService) {}
+
+  @Get('my')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List visible masjid and broadcast notices for the signed-in user' })
+  @ApiQuery({ name: 'status', required: false, enum: ['ALL', 'READ', 'UNREAD'] })
+  @ApiQuery({ name: 'from', required: false })
+  @ApiQuery({ name: 'to', required: false })
+  async getMyAnnouncements(
+    @CurrentUser('id') userId: string,
+    @Query('status') status?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.announcementsService.findForUser(userId, { status, from, to });
+  }
+
+  @Put(':id/read-state')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Mark a notice read or unread for the current user' })
+  async setReadState(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Body('isRead') isRead: boolean,
+  ) {
+    return this.announcementsService.setReadState(userId, id, isRead);
+  }
+
+  @Delete(':id/hide')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Hide a notice from only the current user' })
+  async hideForUser(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.announcementsService.hideForUser(userId, id);
+  }
+
+  @Get('broadcasts/admin')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Super Admin list broadcasts with read counts' })
+  async getAdminBroadcasts() {
+    return this.announcementsService.findBroadcastsWithReadCounts();
+  }
 
   @Get('broadcasts')
   @ApiOperation({ summary: 'List all system-wide broadcast announcements' })
@@ -32,6 +77,18 @@ export class BroadcastAnnouncementsController {
     return this.announcementsService.createBroadcast(userId, dto);
   }
 
+  @Put('broadcasts/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Super Admin edit a broadcast announcement' })
+  async updateBroadcast(
+    @Param('id') id: string,
+    @Body() dto: UpdateAnnouncementDto,
+  ) {
+    return this.announcementsService.updateBroadcast(id, dto);
+  }
+
   @Delete('broadcasts/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN')
@@ -46,6 +103,15 @@ export class BroadcastAnnouncementsController {
 @Controller('masjids/:masjidId/announcements')
 export class MasjidAnnouncementsController {
   constructor(private readonly announcementsService: AnnouncementsService) {}
+
+  @Get('admin')
+  @UseGuards(JwtAuthGuard, MasjidRoleGuard)
+  @MasjidRoles(RoleType.ADMIN, RoleType.ANNOUNCEMENT)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List masjid notices with per-notice read counts' })
+  async getAdminAnnouncements(@Param('masjidId') masjidId: string) {
+    return this.announcementsService.findByMasjidWithReadCounts(masjidId);
+  }
 
   @Get()
   @ApiOperation({ summary: 'List published announcements for a masjid' })
@@ -64,6 +130,19 @@ export class MasjidAnnouncementsController {
     @Body() dto: CreateAnnouncementDto,
   ) {
     return this.announcementsService.create(masjidId, userId, dto);
+  }
+
+  @Put(':id')
+  @UseGuards(JwtAuthGuard, MasjidRoleGuard)
+  @MasjidRoles(RoleType.ADMIN, RoleType.ANNOUNCEMENT)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Edit a masjid announcement' })
+  async updateAnnouncement(
+    @Param('masjidId') masjidId: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateAnnouncementDto,
+  ) {
+    return this.announcementsService.update(masjidId, id, dto);
   }
 
   @Delete(':id')

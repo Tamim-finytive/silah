@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme/app_theme.dart';
@@ -8,6 +9,11 @@ import 'features/auth/presentation/screens/onboarding_screen.dart';
 import 'features/prayer_times/presentation/screens/home_screen.dart';
 import 'features/admin/presentation/screens/super_admin_dashboard_screen.dart';
 import 'features/admin/presentation/screens/admin_dashboard_screen.dart';
+import 'features/announcements/presentation/screens/announcements_screen.dart';
+
+final GlobalKey<ScaffoldMessengerState> appScaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 class MasjidApp extends ConsumerWidget {
   const MasjidApp({super.key});
@@ -18,9 +24,97 @@ class MasjidApp extends ConsumerWidget {
       title: 'Silah Community Adhan',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: const AppStartupGate(),
+      scaffoldMessengerKey: appScaffoldMessengerKey,
+      navigatorKey: appNavigatorKey,
+      home: const _InAppNotificationBridge(child: AppStartupGate()),
     );
   }
+}
+
+class _InAppNotificationBridge extends StatefulWidget {
+  final Widget child;
+
+  const _InAppNotificationBridge({required this.child});
+
+  @override
+  State<_InAppNotificationBridge> createState() =>
+      _InAppNotificationBridgeState();
+}
+
+class _InAppNotificationBridgeState extends State<_InAppNotificationBridge> {
+  StreamSubscription<Map<String, dynamic>>? _subscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _subscription =
+        NotificationService.instance.notificationEvents.listen((event) {
+      if (event['opened'] == true) return;
+      final title = event['title']?.toString().trim() ?? '';
+      final body = event['body']?.toString().trim() ?? '';
+      if (title.isEmpty && body.isEmpty) return;
+
+      appScaffoldMessengerKey.currentState
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 7),
+            backgroundColor: const Color(0xFF0F432B),
+            content: Row(
+              children: [
+                const Icon(Icons.notifications_active_outlined,
+                    color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (title.isNotEmpty)
+                        Text(title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white)),
+                      if (body.isNotEmpty)
+                        Text(body,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.white)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            action: SnackBarAction(
+              label: 'OPEN',
+              textColor: const Color(0xFFD4E9D9),
+              onPressed: () {
+                appNavigatorKey.currentState?.push(
+                  MaterialPageRoute(
+                    builder: (_) => AnnouncementsScreen(
+                      masjidId: event['masjidId']?.toString(),
+                      focusAnnouncementId: event['id']?.toString(),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+    });
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class AppStartupGate extends StatefulWidget {
@@ -68,12 +162,15 @@ class _AppStartupGateState extends State<AppStartupGate> {
 
       // 3. Incomplete onboarding route
       final isOnboarded = user['isOnboarded'] == true ||
-          (user['name'] != null && user['name'].toString().trim().isNotEmpty && user['name'].toString().trim() != 'User');
+          (user['name'] != null &&
+              user['name'].toString().trim().isNotEmpty &&
+              user['name'].toString().trim() != 'User');
       if (!isOnboarded) {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => OnboardingScreen(phone: user['phone']?.toString() ?? ''),
+            builder: (_) =>
+                OnboardingScreen(phone: user['phone']?.toString() ?? ''),
           ),
         );
         return;

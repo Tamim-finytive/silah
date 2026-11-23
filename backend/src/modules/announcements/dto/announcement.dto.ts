@@ -39,6 +39,44 @@ export class CreateAnnouncementDto {
   notifyPush?: boolean;
 }
 
+export class UpdateAnnouncementDto {
+  @ApiPropertyOptional({ enum: AnnouncementCategory })
+  @IsOptional()
+  @IsEnum(AnnouncementCategory)
+  category?: AnnouncementCategory;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  titleTa?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  body?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  bodyTa?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isPinned?: boolean;
+}
+
+export class AnnouncementReadStateDto {
+  @ApiProperty({ example: true })
+  @IsBoolean()
+  isRead: boolean;
+}
+
 export class BroadcastAnnouncementDto {
   @ApiProperty({ example: 'Important System Announcement' })
   @IsNotEmpty()

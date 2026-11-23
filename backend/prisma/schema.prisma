@@ -22,6 +22,7 @@ model User {
   updatedAt         DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   address           String?
   announcements     Announcement[]     @relation("AnnouncementCreator")
+  announcementStates AnnouncementUserState[]
   devices           Device[]
   masjidAdmins      MasjidAdmin[]
   createdMasjids    Masjid[]           @relation("MasjidCreator")
@@ -178,9 +179,27 @@ model Announcement {
   updatedAt   DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   creator     User                 @relation("AnnouncementCreator", fields: [createdBy], references: [id])
   masjid      Masjid?              @relation(fields: [masjidId], references: [id], onDelete: Cascade)
+  userStates  AnnouncementUserState[]
 
   @@index([masjidId, publishedAt], map: "idx_announcements_published")
   @@map("announcements")
+}
+
+model AnnouncementUserState {
+  id             String       @id @default(uuid()) @db.Uuid
+  announcementId String       @map("announcement_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  readAt         DateTime?    @map("read_at") @db.Timestamptz(6)
+  hiddenAt       DateTime?    @map("hidden_at") @db.Timestamptz(6)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, announcementId])
+  @@index([announcementId, readAt])
+  @@index([userId, hiddenAt])
+  @@map("announcement_user_states")
 }
 
 model SandhaPlan {
