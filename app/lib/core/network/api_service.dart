@@ -234,21 +234,30 @@ class ApiService {
     return null;
   }
 
-  Future<List<dynamic>> getMasjids({String? search}) async {
-    try {
-      final res = await _dio.get(
-        '/masjids',
-        queryParameters: search != null && search.trim().isNotEmpty
-            ? {'search': search.trim()}
-            : null,
-      );
-      if (res.data['success'] == true) {
-        return res.data['data'] as List<dynamic>;
-      }
-    } catch (e) {
-      // Fallback
+  Future<Map<String, dynamic>> getMasjidsPage({
+    String? search,
+    String? city,
+    int page = 1,
+    int limit = 20,
+    String sort = 'NAME_ASC',
+    double? latitude,
+    double? longitude,
+  }) async {
+    final res = await _dio.get('/masjids', queryParameters: {
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      if (city != null && city.trim().isNotEmpty) 'city': city.trim(),
+      'page': page,
+      'limit': limit,
+      'sort': sort,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
+    });
+    final data = res.data['data'];
+    if (res.data['success'] != true || data is! Map) {
+      throw const FormatException(
+          'Masjid directory returned an invalid response');
     }
-    return [];
+    return Map<String, dynamic>.from(data);
   }
 
   Future<Map<String, dynamic>?> getAdminMasjids({

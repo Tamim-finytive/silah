@@ -13,8 +13,18 @@ class LocationHelper {
       if (lat != null && lng != null) return {'lat': lat, 'lng': lng};
     }
 
+    // Google Maps place links often encode the pin as !3dLAT!4dLNG.
+    final placePinPattern = RegExp(r'!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)');
+    final placePinMatch = placePinPattern.firstMatch(str);
+    if (placePinMatch != null) {
+      final lat = double.tryParse(placePinMatch.group(1)!);
+      final lng = double.tryParse(placePinMatch.group(2)!);
+      if (lat != null && lng != null) return {'lat': lat, 'lng': lng};
+    }
+
     // Pattern 2: q=13.0827,80.2707 or query=13.0827,80.2707 or ll=13.0827,80.2707
-    final qPattern = RegExp(r'(?:q|query|ll)=(-?\d+\.\d+)(?:%2C|,)(-?\d+\.\d+)');
+    final qPattern =
+        RegExp(r'(?:q|query|ll)=(-?\d+\.\d+)(?:%2C|,)(-?\d+\.\d+)');
     final qMatch = qPattern.firstMatch(str);
     if (qMatch != null) {
       final lat = double.tryParse(qMatch.group(1)!);
@@ -32,7 +42,8 @@ class LocationHelper {
     }
 
     // Pattern 4: any two decimal coordinates in string
-    final genPattern = RegExp(r'(-?\d{1,2}\.\d{3,10})\s*,\s*(-?\d{1,3}\.\d{3,10})');
+    final genPattern =
+        RegExp(r'(-?\d{1,2}\.\d{3,10})\s*,\s*(-?\d{1,3}\.\d{3,10})');
     final genMatch = genPattern.firstMatch(str);
     if (genMatch != null) {
       final lat = double.tryParse(genMatch.group(1)!);

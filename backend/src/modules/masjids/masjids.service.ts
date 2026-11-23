@@ -8,7 +8,24 @@ import { randomBytes } from 'crypto';
 export class MasjidsService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(query?: { city?: string; search?: string }) {
+  async findAll(query?: {
+    city?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+    sort?: string;
+    latitude?: number;
+    longitude?: number;
+  }) {
+    const page = Number.isFinite(query?.page)
+      ? Math.max(1, Math.floor(query!.page!))
+      : 1;
+    const limit = Number.isFinite(query?.limit)
+      ? Math.min(50, Math.max(1, Math.floor(query!.limit!)))
+      : 20;
+    const sort = ['NAME_ASC', 'NAME_DESC', 'NEAREST'].includes(query?.sort ?? '')
+      ? query!.sort!
+      : 'NAME_ASC';
     const where: Prisma.MasjidWhereInput = {
       isActive: true,
       approvalStatus: MasjidApprovalStatus.APPROVED,
@@ -25,10 +42,88 @@ export class MasjidsService {
         { state: { contains: query.search, mode: 'insensitive' } },
       ];
     }
-    return this.prisma.masjid.findMany({
-      where,
-      orderBy: { name: 'asc' },
-    });
+    const locationFilter = sort === 'NEAREST';
+    if (locationFilter) {
+      const latitude = query?.latitude;
+      const longitude = query?.longitude;
+      if (
+        latitude == null || longitude == null ||
+        !Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+        latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180
+      ) {
+        throw new BadRequestException('Valid latitude and longitude are required for nearby search');
+      }
+      where.latitude = { not: null };
+      where.longitude = { not: null };
+      const conditions: Prisma.Sql[] = [
+        Prisma.sql`m.is_active = TRUE`,
+        Prisma.sql`m.approval_status = 'APPROVED'`,
+        Prisma.sql`m.latitude IS NOT NULL`,
+        Prisma.sql`m.longitude IS NOT NULL`,
+      ];
+      if (query?.city?.trim()) {
+        conditions.push(Prisma.sql`m.city ILIKE ${`%${query.city.trim()}%`}`);
+      }
+      if (query?.search?.trim()) {
+        const term = `%${query.search.trim()}%`;
+        conditions.push(Prisma.sql`(
+          m.name ILIKE ${term} OR m.name_ta ILIKE ${term} OR
+          m.city ILIKE ${term} OR m.address ILIKE ${term} OR m.state ILIKE ${term}
+        )`);
+      }
+      const distanceExpression = Prisma.sql`(
+        6371 * acos(least(1, greatest(-1,
+          sin(radians(m.latitude::double precision)) * sin(radians(${latitude})) +
+          cos(radians(m.latitude::double precision)) * cos(radians(${latitude})) *
+          cos(radians(m.longitude::double precision) - radians(${longitude}))
+        )))
+      )`;
+      const [total, distances] = await Promise.all([
+        this.prisma.masjid.count({ where }),
+        this.prisma.$queryRaw<Array<{ id: string; distanceKm: number }>>(Prisma.sql`
+          SELECT m.id, ${distanceExpression} AS "distanceKm"
+          FROM masjids m
+          WHERE ${Prisma.join(conditions, ' AND ')}
+          ORDER BY "distanceKm" ASC, m.id ASC
+          LIMIT ${limit} OFFSET ${(page - 1) * limit}
+        `),
+      ]);
+      const ids = distances.map((item) => item.id);
+      const records = ids.length
+        ? await this.prisma.masjid.findMany({
+            where: { id: { in: ids } },
+            select: {
+              id: true, name: true, nameTa: true, address: true,
+              latitude: true, longitude: true, city: true, state: true,
+              country: true, photoUrl: true, mapUrl: true,
+            },
+          })
+        : [];
+      const byId = new Map(records.map((record) => [record.id, record]));
+      const items = distances.flatMap((item) => {
+        const record = byId.get(item.id);
+        return record ? [{ ...record, distanceKm: Number(item.distanceKm) }] : [];
+      });
+      return { items, total, page, limit, hasMore: page * limit < total };
+    }
+
+    const [total, items] = await Promise.all([
+      this.prisma.masjid.count({ where }),
+      this.prisma.masjid.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: sort === 'NAME_DESC'
+          ? [{ name: 'desc' }, { id: 'asc' }]
+          : [{ name: 'asc' }, { id: 'asc' }],
+        select: {
+          id: true, name: true, nameTa: true, address: true,
+          latitude: true, longitude: true, city: true, state: true,
+          country: true, photoUrl: true, mapUrl: true,
+        },
+      }),
+    ]);
+    return { items, total, page, limit, hasMore: page * limit < total };
   }
 
   async listAdminDirectory(query: { search?: string; status?: string; page?: number; limit?: number }) {

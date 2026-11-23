@@ -18,8 +18,24 @@ export class MasjidsController {
   @ApiOperation({ summary: 'Search and list masjids (public)' })
   @ApiQuery({ name: 'city', required: false })
   @ApiQuery({ name: 'search', required: false })
-  async listMasjids(@Query('city') city?: string, @Query('search') search?: string) {
-    return this.masjidsService.findAll({ city, search });
+  async listMasjids(
+    @Query('city') city?: string,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('sort') sort?: string,
+    @Query('latitude') latitude?: string,
+    @Query('longitude') longitude?: string,
+  ) {
+    return this.masjidsService.findAll({
+      city,
+      search,
+      page: page == null ? 1 : Number(page),
+      limit: limit == null ? 20 : Number(limit),
+      sort,
+      latitude: latitude == null ? undefined : Number(latitude),
+      longitude: longitude == null ? undefined : Number(longitude),
+    });
   }
 
   @Get('admin/directory')
