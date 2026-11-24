@@ -1624,8 +1624,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     String selectedType = existing?['type']?.toString() ?? 'RAMZAN_TIMETABLE';
     final titleCtrl =
         TextEditingController(text: existing?['title']?.toString() ?? '');
-    final titleTaCtrl =
-        TextEditingController(text: existing?['titleTa']?.toString() ?? '');
     final startCtrl = TextEditingController(
         text: existing?['startDate']?.toString().split('T').first ??
             DateTime.now().toIso8601String().split('T')[0]);
@@ -1683,11 +1681,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         const InputDecoration(labelText: 'Event Title *')),
                 const SizedBox(height: 12),
                 TextField(
-                    controller: titleTaCtrl,
-                    decoration:
-                        const InputDecoration(labelText: 'Tamil Title')),
-                const SizedBox(height: 12),
-                TextField(
                     controller: startCtrl,
                     decoration: const InputDecoration(
                         labelText: 'Start Date (YYYY-MM-DD) *')),
@@ -1732,9 +1725,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   final payload = {
                     'type': selectedType,
                     'title': titleCtrl.text.trim(),
-                    'titleTa': titleTaCtrl.text.trim().isEmpty
-                        ? null
-                        : titleTaCtrl.text.trim(),
                     'startDate': startCtrl.text.trim(),
                     'startTime': timeCtrl.text.trim(),
                     if (endDateCtrl.text.trim().isNotEmpty)
@@ -1873,11 +1863,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         .push<bool>(
       MaterialPageRoute(
         builder: (_) => NoticeEditorScreen(
-          onSave: (title, message) async {
+          onSave: (title, message, {imageUrl, audioUrl, audioDuration}) async {
             await ApiService.instance.createAnnouncement(masjidId, {
               'category': 'GENERAL',
               'title': title,
               'body': message,
+              if (imageUrl != null) 'imageUrl': imageUrl,
+              if (audioUrl != null) 'audioUrl': audioUrl,
+              if (audioDuration != null) 'audioDuration': audioDuration,
               'notifyPush': true,
             });
           },

@@ -10,6 +10,7 @@ import { SandhaModule } from './modules/sandha/sandha.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { SpecialSchedulesModule } from './modules/special-schedules/special-schedules.module';
 import { FirebaseModule } from './common/firebase/firebase.module';
+import { UploadsModule } from './modules/uploads/uploads.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { FirebaseModule } from './common/firebase/firebase.module';
     SandhaModule,
     DashboardModule,
     SpecialSchedulesModule,
+    UploadsModule,
   ],
 })
 export class AppModule {}

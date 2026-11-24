@@ -6,6 +6,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter/services.dart';
+import 'package:timezone/data/latest.dart' as tzdata;
+import 'package:timezone/timezone.dart' as tz;
 import '../network/api_service.dart';
 import '../../firebase_options.dart';
 
@@ -83,6 +86,16 @@ class NotificationService {
   static const String _fcmKey = 'silah_cached_fcm_token';
   static const String _fcmUserKey = 'silah_cached_fcm_user_id';
   static const String announcementChannelId = 'silah_announcements';
+  static const String _prayerAlarmChannelId = 'silah_adhan_alarm_v1';
+  static const String _prayerAlarmEnabledKey = 'silah_prayer_alarms_enabled';
+  static const MethodChannel _deviceChannel = MethodChannel('silah/device');
+  static const Map<String, (int, String)> _prayers = {
+    'fajrAdhan': (2101, 'Fajr'),
+    'dhuhrAdhan': (2102, 'Dhuhr'),
+    'asrAdhan': (2103, 'Asr'),
+    'maghribAdhan': (2104, 'Maghrib'),
+    'ishaAdhan': (2105, 'Isha'),
+  };
 
   String? _cachedToken;
   String? _cachedUserId;
@@ -186,6 +199,21 @@ class NotificationService {
           .resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>()
           ?.createNotificationChannel(channel);
+
+      const prayerChannel = AndroidNotificationChannel(
+        _prayerAlarmChannelId,
+        'Prayer Adhan alarms',
+        description: 'Daily Adhan alarms for scheduled prayer times',
+        importance: Importance.max,
+        playSound: true,
+        sound: RawResourceAndroidNotificationSound('azan1'),
+        enableVibration: true,
+        audioAttributesUsage: AudioAttributesUsage.alarm,
+      );
+      await _localNotifications
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(prayerChannel);
 
       // 2. Set background handler
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
@@ -322,39 +350,120 @@ class NotificationService {
     return _cachedToken;
   }
 
-  /// Trigger immediate prayer alarm and alert notification on device
-  Future<void> triggerPrayerAlarm(
-      {required String prayerName, required String time}) async {
+  Future<void> _setLocalTimezone() async {
+    tzdata.initializeTimeZones();
+    try {
+      final name = await _deviceChannel.invokeMethod<String>('localTimeZone');
+      if (name != null && name.isNotEmpty) {
+        tz.setLocalLocation(tz.getLocation(name));
+        return;
+      }
+    } catch (_) {
+      // Use the device's current offset if the platform bridge is unavailable.
+    }
+    final offset = DateTime.now().timeZoneOffset.inMilliseconds;
+    tz.setLocalLocation(tz.Location('device-local', const [], const [], [
+      tz.TimeZone(offset, isDst: false, abbreviation: 'LOCAL'),
+    ]));
+  }
+
+  Future<bool> prayerAlarmsEnabled() async =>
+      await _storage.read(key: _prayerAlarmEnabledKey) == 'true';
+
+  Future<void> setPrayerAlarmsEnabled({
+    required bool enabled,
+    required Map<String, dynamic>? prayerTimes,
+  }) async {
     await initialize();
+    final android = _localNotifications.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (!enabled) {
+      for (final entry in _prayers.values) {
+        await _localNotifications.cancel(entry.$1);
+      }
+      await _storage.write(key: _prayerAlarmEnabledKey, value: 'false');
+      return;
+    }
 
-    const AndroidNotificationDetails androidDetails =
-        AndroidNotificationDetails(
-      'silah_adhan_alarm',
-      'Prayer Alarms & Adhan Alerts',
-      channelDescription:
-          'Audible prayer alarms and reminders for Adhan and Jamaah',
-      importance: Importance.max,
-      priority: Priority.high,
-      playSound: true,
-      enableVibration: true,
-      fullScreenIntent: true,
-    );
+    await _requestNotificationPermission();
+    if (Platform.isAndroid && android != null) {
+      var exactAllowed = await android.canScheduleExactNotifications();
+      if (exactAllowed != true) {
+        await android.requestExactAlarmsPermission();
+        exactAllowed = await android.canScheduleExactNotifications();
+      }
+      if (exactAllowed != true) {
+        throw StateError(
+            'Allow exact alarms in Android settings to schedule Adhan alerts.');
+      }
+    }
+    if (prayerTimes == null) {
+      throw StateError('Prayer times are not available yet.');
+    }
+    await _setLocalTimezone();
 
-    const NotificationDetails details = NotificationDetails(
-      android: androidDetails,
-      iOS: DarwinNotificationDetails(
-        presentAlert: true,
-        presentBadge: true,
-        presentSound: true,
-        interruptionLevel: InterruptionLevel.timeSensitive,
-      ),
-    );
+    var scheduledCount = 0;
+    for (final entry in _prayers.entries) {
+      final raw = prayerTimes[entry.key]?.toString();
+      final time = raw == null ? null : _parsePrayerTime(raw);
+      if (time == null) continue;
+      final now = tz.TZDateTime.now(tz.local);
+      var next = tz.TZDateTime(
+          tz.local, now.year, now.month, now.day, time.$1, time.$2);
+      if (!next.isAfter(now)) {
+        next = tz.TZDateTime(
+            tz.local, now.year, now.month, now.day + 1, time.$1, time.$2);
+      }
+      await _localNotifications.zonedSchedule(
+        entry.value.$1,
+        'Silah · ${entry.value.$2} Adhan',
+        'It is time for ${entry.value.$2} prayer.',
+        next,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            _prayerAlarmChannelId,
+            'Prayer Adhan alarms',
+            channelDescription: 'Daily Adhan alarms for scheduled prayer times',
+            icon: 'ic_stat_silah',
+            importance: Importance.max,
+            priority: Priority.max,
+            playSound: true,
+            sound: RawResourceAndroidNotificationSound('azan1'),
+            enableVibration: true,
+            audioAttributesUsage: AudioAttributesUsage.alarm,
+          ),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        ),
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.wallClockTime,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        matchDateTimeComponents: DateTimeComponents.time,
+      );
+      scheduledCount++;
+    }
+    if (scheduledCount == 0) {
+      throw StateError('No valid prayer times are available to schedule.');
+    }
+    await _storage.write(key: _prayerAlarmEnabledKey, value: 'true');
+  }
 
-    await _localNotifications.show(
-      DateTime.now().millisecond,
-      '🕌 $prayerName Adhan Alarm',
-      'It is time for $prayerName prayer ($time). Prepare for congregation at your Masjid!',
-      details,
-    );
+  (int, int)? _parsePrayerTime(String value) {
+    final match = RegExp(r'(\d{1,2}):(\d{2})\s*(AM|PM)?', caseSensitive: false)
+        .firstMatch(value);
+    if (match == null) return null;
+    var hour = int.parse(match.group(1)!);
+    final minute = int.parse(match.group(2)!);
+    final suffix = match.group(3)?.toUpperCase();
+    if (minute > 59 || hour > 23) return null;
+    if (suffix == 'AM') {
+      if (hour == 12) hour = 0;
+    } else if (suffix == 'PM') {
+      if (hour < 12) hour += 12;
+    }
+    return (hour, minute);
   }
 }

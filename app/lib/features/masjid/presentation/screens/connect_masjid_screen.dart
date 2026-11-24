@@ -31,6 +31,7 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
   bool _isLoading = true;
   bool _isLoadingMore = false;
   bool _isProcessing = false;
+  String? _connectingMasjidId;
   bool _isSearching = false;
   bool _searchTooShort = false;
   bool _hasMore = false;
@@ -246,7 +247,10 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
 
   Future<void> _handleJoinMasjid(String masjidId, String masjidName) async {
     if (_isProcessing) return;
-    setState(() => _isProcessing = true);
+    setState(() {
+      _isProcessing = true;
+      _connectingMasjidId = masjidId;
+    });
 
     await _completeMasjidJoin(masjidId, masjidName);
   }
@@ -283,7 +287,10 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
       );
     } catch (e) {
       if (mounted) {
-        setState(() => _isProcessing = false);
+        setState(() {
+          _isProcessing = false;
+          _connectingMasjidId = null;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.red.shade800,
@@ -703,6 +710,8 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
     final masjidId = map['id']?.toString();
     final isConnected =
         masjidId != null && _connectedMasjidIds.contains(masjidId);
+    final isThisConnecting =
+        _isProcessing && masjidId != null && _connectingMasjidId == masjidId;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -775,21 +784,25 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
               ],
             ),
             const SizedBox(height: 14),
-            Row(
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              runAlignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 TextButton.icon(
                   onPressed: () => _openMasjidLocation(map),
                   icon: const Icon(Icons.directions_outlined, size: 18),
                   label: Text(lang.tr(en: 'Location', ta: 'இடம்')),
                 ),
-                const Spacer(),
                 FilledButton.icon(
                   onPressed: _isProcessing ||
                           _isLoadingConnectedMasjids ||
-                          map['id'] == null ||
+                          masjidId == null ||
                           isConnected
                       ? null
-                      : () => _handleJoinMasjid(map['id'].toString(), name),
+                      : () => _handleJoinMasjid(masjidId, name),
                   icon: _isLoadingConnectedMasjids
                       ? const SizedBox(
                           width: 16,
@@ -799,7 +812,7 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
                             color: Colors.white,
                           ),
                         )
-                      : _isProcessing && !isConnected
+                      : isThisConnecting
                           ? const SizedBox(
                               width: 16,
                               height: 16,
@@ -817,7 +830,9 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
                       ? lang.tr(en: 'Checking…', ta: 'சரிபார்க்கிறது…')
                       : isConnected
                           ? lang.tr(en: 'Connected', ta: 'இணைக்கப்பட்டது')
-                          : lang.tr(en: 'Connect', ta: 'இணை')),
+                          : isThisConnecting
+                              ? lang.tr(en: 'Connecting…', ta: 'இணைக்கிறது…')
+                              : lang.tr(en: 'Connect', ta: 'இணை')),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,

@@ -239,6 +239,9 @@ export class AnnouncementsService {
     if (dto.titleTa !== undefined) data.titleTa = dto.titleTa;
     if (dto.body !== undefined) data.body = dto.body;
     if (dto.bodyTa !== undefined) data.bodyTa = dto.bodyTa;
+    if (dto.imageUrl !== undefined) data.imageUrl = dto.imageUrl;
+    if (dto.audioUrl !== undefined) data.audioUrl = dto.audioUrl;
+    if (dto.audioDuration !== undefined) data.audioDuration = dto.audioDuration;
     if (dto.isPinned !== undefined) data.isPinned = dto.isPinned;
     return this.prisma.announcement.update({
       where: { id: announcementId },
@@ -257,6 +260,9 @@ export class AnnouncementsService {
     if (dto.titleTa !== undefined) data.titleTa = dto.titleTa;
     if (dto.body !== undefined) data.body = dto.body;
     if (dto.bodyTa !== undefined) data.bodyTa = dto.bodyTa;
+    if (dto.imageUrl !== undefined) data.imageUrl = dto.imageUrl;
+    if (dto.audioUrl !== undefined) data.audioUrl = dto.audioUrl;
+    if (dto.audioDuration !== undefined) data.audioDuration = dto.audioDuration;
     return this.prisma.announcement.update({
       where: { id: announcementId },
       data: data as any,
@@ -270,6 +276,9 @@ export class AnnouncementsService {
         titleTa: dto.titleTa,
         body: dto.body,
         bodyTa: dto.bodyTa,
+        imageUrl: dto.imageUrl,
+        audioUrl: dto.audioUrl,
+        audioDuration: dto.audioDuration,
         category: AnnouncementCategory.GENERAL,
         createdBy: userId,
         publishedAt: new Date(),

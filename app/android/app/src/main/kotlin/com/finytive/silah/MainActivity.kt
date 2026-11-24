@@ -28,5 +28,13 @@ class MainActivity : FlutterActivity() {
                     result.notImplemented()
                 }
             }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "silah/device")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "localTimeZone") {
+                    result.success(java.util.TimeZone.getDefault().id)
+                } else {
+                    result.notImplemented()
+                }
+            }
     }
 }

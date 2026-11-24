@@ -34,11 +34,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   List<dynamic> _announcements = [];
   String _calcMethod = 'Hanafi';
   StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
+  bool _prayerAlarmsEnabled = false;
+  bool _prayerAlarmBusy = false;
+  String? _prayerAlarmTimesSignature;
 
   @override
   void initState() {
     super.initState();
     _loadInitialData();
+    _loadPrayerAlarmState();
     _notificationSubscription =
         NotificationService.instance.notificationEvents.listen((event) {
       if (event['opened'] == true && mounted) {
@@ -52,6 +56,69 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _showOpenedAnnouncement(pending);
       }
     });
+  }
+
+  Future<void> _loadPrayerAlarmState() async {
+    final enabled = await NotificationService.instance.prayerAlarmsEnabled();
+    if (!mounted) return;
+    setState(() => _prayerAlarmsEnabled = enabled);
+    if (enabled) {
+      final times = ref.read(prayerTimesProvider).times;
+      if (times != null) await _syncEnabledPrayerAlarms(times);
+    }
+  }
+
+  String _timesSignature(Map<String, dynamic>? times) => [
+        'fajrAdhan',
+        'dhuhrAdhan',
+        'asrAdhan',
+        'maghribAdhan',
+        'ishaAdhan'
+      ].map((key) => times?[key]?.toString() ?? '').join('|');
+
+  Future<void> _syncEnabledPrayerAlarms(Map<String, dynamic> times) async {
+    final signature = _timesSignature(times);
+    if (signature == _prayerAlarmTimesSignature) return;
+    try {
+      await NotificationService.instance.setPrayerAlarmsEnabled(
+        enabled: true,
+        prayerTimes: times,
+      );
+      _prayerAlarmTimesSignature = signature;
+    } catch (error) {
+      debugPrint('Unable to refresh prayer alarm schedule: $error');
+    }
+  }
+
+  Future<void> _togglePrayerAlarms() async {
+    if (_prayerAlarmBusy) return;
+    setState(() => _prayerAlarmBusy = true);
+    final enable = !_prayerAlarmsEnabled;
+    try {
+      await NotificationService.instance.setPrayerAlarmsEnabled(
+        enabled: enable,
+        prayerTimes: ref.read(prayerTimesProvider).times,
+      );
+      if (!mounted) return;
+      setState(() {
+        _prayerAlarmsEnabled = enable;
+        _prayerAlarmTimesSignature = enable
+            ? _timesSignature(ref.read(prayerTimesProvider).times)
+            : null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(enable
+            ? 'Daily Adhan alarms are on.'
+            : 'Daily Adhan alarms are off.'),
+      ));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Could not update prayer alarms: $error'),
+      ));
+    } finally {
+      if (mounted) setState(() => _prayerAlarmBusy = false);
+    }
   }
 
   void _showOpenedAnnouncement(Map<String, dynamic> event) {
@@ -91,6 +158,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(prayerTimesProvider, (previous, next) {
+      if (_prayerAlarmsEnabled &&
+          _timesSignature(previous?.times) != _timesSignature(next.times) &&
+          next.times != null) {
+        _syncEnabledPrayerAlarms(next.times!);
+      }
+    });
     return PopScope(
       canPop: _selectedTabIndex == 0,
       onPopInvokedWithResult: (didPop, result) {
@@ -126,8 +200,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final isEnglish = ref.watch(languageProvider);
     return NavigationBar(
       selectedIndex: _selectedTabIndex,
-      onDestinationSelected: (index) =>
-          setState(() => _selectedTabIndex = index),
+      onDestinationSelected: (index) {
+        if (index == 3 && _selectedTabIndex != 3) {
+          _noticeRefreshVersion++;
+        }
+        setState(() => _selectedTabIndex = index);
+      },
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
       destinations: [
         NavigationDestination(
@@ -338,78 +416,118 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ),
         ),
+        PopupMenuButton<String>(
+          tooltip: 'More options',
+          icon: const Icon(Icons.more_vert, color: AppColors.textPrimary),
+          onSelected: (value) {
+            if (value == 'quran') {
+              Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const QuranScreen()));
+            }
+          },
+          itemBuilder: (context) => const [
+            PopupMenuItem(
+              value: 'quran',
+              child: Row(children: [
+                Icon(Icons.menu_book, color: AppColors.primary),
+                SizedBox(width: 10),
+                Text('Holy Quran'),
+              ]),
+            ),
+          ],
+        ),
       ],
     );
   }
 
   // 1. Prayer Timings Header & Date Row
   Widget _buildPrayerTimingsHeader() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.end,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 390;
+        final titleAndDate = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            Text(
+              'Prayer timings',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.cormorantGaramond(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Row(
               children: [
-                Text(
-                  'Prayer timings',
-                  style: GoogleFonts.cormorantGaramond(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
+                Flexible(
+                  child: Text(
+                    DateFormat('EEEE, d MMM yyyy').format(DateTime.now()),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade700,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Text(
-                      DateFormat('EEEE, d MMM yyyy').format(DateTime.now()),
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey.shade700,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const Icon(Icons.chevron_right,
-                        size: 16, color: Colors.grey),
-                  ],
+                const Icon(Icons.chevron_right, size: 16, color: Colors.grey),
+              ],
+            ),
+          ],
+        );
+        final methodSelector = InkWell(
+          onTap: _showCalculationMethodDialog,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.tune, size: 14, color: Colors.black87),
+                const SizedBox(width: 5),
+                Text(
+                  _calcMethod,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
                 ),
               ],
             ),
-            // Hanafi Pill Selector
-            InkWell(
-              onTap: _showCalculationMethodDialog,
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.tune, size: 14, color: Colors.black87),
-                    const SizedBox(width: 5),
-                    Text(
-                      _calcMethod,
-                      style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          ),
+        );
+
+        if (compact) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              titleAndDate,
+              const SizedBox(height: 8),
+              methodSelector,
+            ],
+          );
+        }
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(child: titleAndDate),
+            const SizedBox(width: 8),
+            Flexible(child: methodSelector),
           ],
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -426,15 +544,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 4,
           children: [
             Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.mosque, size: 14, color: AppColors.success),
-                SizedBox(width: 5),
+                const Icon(Icons.mosque, size: 14, color: AppColors.success),
+                const SizedBox(width: 5),
                 Text(
                   isLocalTimes ? 'LOCAL PRAYER TIMES' : 'ACTIVE MASJID',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
@@ -447,18 +571,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             if (!isLocalTimes &&
                 activeMasjid != null &&
                 activeMasjid['city'] != null)
-              Row(
-                children: [
-                  const Icon(Icons.location_city, size: 12, color: Colors.grey),
-                  const SizedBox(width: 3),
-                  Text(
-                    activeMasjid['city'] ?? '',
-                    style: const TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey,
-                        fontWeight: FontWeight.w500),
-                  ),
-                ],
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 200),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.location_city,
+                        size: 12, color: Colors.grey),
+                    const SizedBox(width: 3),
+                    Flexible(
+                      child: Text(
+                        activeMasjid['city'] ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey,
+                            fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
               ),
           ],
         ),
@@ -692,8 +825,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       decoration: BoxDecoration(
                         color: AppColors.primaryDark,
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                            color: AppColors.primaryMid, width: 1.2),
+                        border:
+                            Border.all(color: AppColors.primaryMid, width: 1.2),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -938,7 +1071,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                         // Alert Button
                         InkWell(
-                          onTap: () => _triggerPrayerAlert(next),
+                          onTap: _prayerAlarmBusy ? null : _togglePrayerAlarms,
                           borderRadius: BorderRadius.circular(16),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
@@ -951,13 +1084,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
-                              children: const [
-                                Icon(Icons.notifications_active_outlined,
-                                    color: Color(0xFF6EE7B7), size: 15),
-                                SizedBox(width: 4),
+                              children: [
+                                Icon(
+                                    _prayerAlarmsEnabled
+                                        ? Icons.notifications_active
+                                        : Icons.notifications_active_outlined,
+                                    color: const Color(0xFF6EE7B7),
+                                    size: 15),
+                                const SizedBox(width: 4),
                                 Text(
-                                  'Alert',
-                                  style: TextStyle(
+                                  _prayerAlarmsEnabled ? 'Adhan On' : 'Alert',
+                                  style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
@@ -1008,38 +1145,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not open map: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _triggerPrayerAlert(NextPrayerInfo next) async {
-    try {
-      await NotificationService.instance.triggerPrayerAlarm(
-        prayerName: next.name,
-        time: next.adhan,
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: AppColors.primary,
-            content: Row(
-              children: [
-                const Icon(Icons.alarm_on, color: Color(0xFF48D38A)),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                      'Alarm triggered & scheduled for ${next.name} (${next.adhan})!'),
-                ),
-              ],
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to trigger alert: $e')),
         );
       }
     }
@@ -1273,9 +1378,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               children: [
                 Icon(icon,
                     size: 16,
-                    color: isNext
-                        ? AppColors.primary
-                        : Colors.grey.shade600),
+                    color: isNext ? AppColors.primary : Colors.grey.shade600),
                 const SizedBox(width: 8),
                 Text(
                   name,
@@ -1929,7 +2032,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         : Icons.circle_outlined,
                     color: AppColors.primary),
                 const SizedBox(width: 10),
-                const Text('Hanafi (Shadow length 2x)'),
+                const Expanded(
+                  child: Text(
+                    'Hanafi (Shadow length 2x)',
+                    softWrap: true,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1945,7 +2053,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         : Icons.circle_outlined,
                     color: AppColors.primary),
                 const SizedBox(width: 10),
-                const Text('Standard / Shafi / Maliki (Shadow 1x)'),
+                const Expanded(
+                  child: Text(
+                    'Standard / Shafi / Maliki (Shadow 1x)',
+                    softWrap: true,
+                  ),
+                ),
               ],
             ),
           ),
@@ -2025,15 +2138,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      const Text(
-                        'My Masjids / என் பள்ளிவாசல்கள்',
-                        style: TextStyle(
-                            fontSize: 17, fontWeight: FontWeight.bold),
+                      const Expanded(
+                        child: Text(
+                          'My Masjids / என் பள்ளிவாசல்கள்',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 17, fontWeight: FontWeight.bold),
+                        ),
                       ),
                       IconButton(
                         icon: const Icon(Icons.close, size: 20),
+                        tooltip: 'Close',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(
+                          width: 44,
+                          height: 44,
+                        ),
                         onPressed: () => Navigator.pop(ctx),
                       ),
                     ],
@@ -2123,8 +2246,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               decoration: BoxDecoration(
                                 color: isSelected
                                     ? AppColors.primary
-                                    : AppColors.primary
-                                        .withValues(alpha: 0.1),
+                                    : AppColors.primary.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Icon(
@@ -2160,8 +2282,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                       color: AppColors.primaryContainer,
                                       borderRadius: BorderRadius.circular(4),
                                       border: Border.all(
-                                          color: AppColors.primary,
-                                          width: 0.8),
+                                          color: AppColors.primary, width: 0.8),
                                     ),
                                     child: const Text('ACTIVE',
                                         style: TextStyle(

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'api_debug_interceptor.dart';
 
@@ -33,8 +34,9 @@ class ApiService {
     _dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
-        connectTimeout: const Duration(seconds: 8),
-        receiveTimeout: const Duration(seconds: 8),
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 30),
+        sendTimeout: const Duration(seconds: 30),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -601,6 +603,35 @@ class ApiService {
       String masjidId, Map<String, dynamic> dto) async {
     final res = await _dio.put('/masjids/$masjidId/prayer-times', data: dto);
     return res.data;
+  }
+
+  Future<String?> uploadFile(String filePath,
+      {String folder = 'announcements'}) async {
+    try {
+      final fileName = filePath.split('/').last;
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(filePath, filename: fileName),
+      });
+
+      final res = await _dio.post(
+        '/uploads',
+        data: formData,
+        options: Options(
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        ),
+      );
+
+      final data = res.data;
+      if (data != null && data['data'] != null && data['data']['url'] != null) {
+        return data['data']['url'].toString();
+      }
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] uploadFile error: $e');
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>> createAnnouncement(

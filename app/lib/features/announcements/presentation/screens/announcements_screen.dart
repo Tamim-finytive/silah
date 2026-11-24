@@ -7,6 +7,7 @@ import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/l10n/language_provider.dart';
 import '../../../../core/network/api_service.dart';
 import '../../../../core/services/notification_service.dart';
+import '../widgets/notice_audio_player.dart';
 
 class AnnouncementsScreen extends ConsumerStatefulWidget {
   final VoidCallback? onBack;
@@ -36,12 +37,18 @@ class _AnnouncementsScreenState extends ConsumerState<AnnouncementsScreen>
   bool _hasMore = true;
   bool _isLoading = true;
   bool _isLoadingMore = false;
+  bool _autoPlayAudio = false;
   StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging && mounted) {
+        _selectStatus(_tabController.index);
+      }
+    });
     _scrollController.addListener(_handleScroll);
     _fetchAnnouncements();
     _notificationSubscription =
@@ -189,18 +196,14 @@ class _AnnouncementsScreenState extends ConsumerState<AnnouncementsScreen>
     try {
       await ApiService.instance.setAnnouncementReadState(id, isRead);
       if (!mounted) return;
-      final belongsInCurrentTab = _status == 'READ' ? isRead : !isRead;
       setState(() {
-        if (belongsInCurrentTab) {
-          notice['isRead'] = isRead;
-        } else {
-          _notices.removeWhere((item) => item['id']?.toString() == id);
-        }
+        _notices.removeWhere((item) => item['id']?.toString() == id);
       });
-      if (!belongsInCurrentTab && _notices.isEmpty && _hasMore) {
+      if (_notices.isEmpty && _hasMore) {
         _loadNextPage();
       }
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        duration: const Duration(seconds: 2),
         content:
             Text(isRead ? 'Notice marked as read' : 'Notice marked as unread'),
       ));
@@ -266,19 +269,68 @@ class _AnnouncementsScreenState extends ConsumerState<AnnouncementsScreen>
           onTap: _selectStatus,
           indicatorColor: AppColors.secondary,
           indicatorWeight: 3,
-          labelColor: AppColors.primary,
-          unselectedLabelColor: AppColors.textSecondary,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          labelStyle:
+              const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+          unselectedLabelStyle:
+              const TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
           tabs: [
             Tab(text: lang.tr(en: 'Unread', ta: 'படிக்காதவை')),
             Tab(text: lang.tr(en: 'Read', ta: 'படித்தவை')),
           ],
         ),
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760),
-          child: _buildNoticeList(lang),
-        ),
+      body: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            color: Colors.white,
+            child: Row(
+              children: [
+                Icon(
+                  _autoPlayAudio ? Icons.volume_up : Icons.volume_off_outlined,
+                  size: 18,
+                  color: _autoPlayAudio
+                      ? const Color(0xFF0F432B)
+                      : Colors.grey.shade600,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  lang.tr(
+                    en: 'Auto-play voice messages',
+                    ta: 'குரல் செய்திகளை தானாக இயக்கு',
+                  ),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: _autoPlayAudio
+                        ? const Color(0xFF0F432B)
+                        : Colors.grey.shade700,
+                  ),
+                ),
+                const Spacer(),
+                Transform.scale(
+                  scale: 0.75,
+                  child: Switch(
+                    value: _autoPlayAudio,
+                    activeThumbColor: const Color(0xFF0F432B),
+                    onChanged: (val) => setState(() => _autoPlayAudio = val),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, thickness: 0.8),
+          Expanded(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 760),
+                child: _buildNoticeList(lang),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -388,6 +440,32 @@ class _AnnouncementsScreenState extends ConsumerState<AnnouncementsScreen>
     );
   }
 
+  void _showImageDialog(BuildContext context, String url) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.network(url, fit: BoxFit.contain),
+            ),
+            IconButton(
+              icon: const CircleAvatar(
+                backgroundColor: Colors.black54,
+                child: Icon(Icons.close, color: Colors.white, size: 20),
+              ),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildNoticeCard(
       Map<String, dynamic> item, LanguageNotifier language) {
     final isRead = item['isRead'] == true;
@@ -401,6 +479,8 @@ class _AnnouncementsScreenState extends ConsumerState<AnnouncementsScreen>
     final body = (isEnglish ? item['body'] : item['bodyTa'] ?? item['body'])
             ?.toString() ??
         '';
+    final imageUrl = item['imageUrl']?.toString();
+    final audioUrl = item['audioUrl']?.toString();
     final createdAt =
         item['publishedAt']?.toString() ?? item['createdAt']?.toString() ?? '';
     var displayTime = '';
@@ -422,102 +502,148 @@ class _AnnouncementsScreenState extends ConsumerState<AnnouncementsScreen>
           width: isEmergency ? 1.5 : .8,
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 13, 10, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 3),
-                  child: Icon(
-                    isEmergency
-                        ? Icons.warning_amber_rounded
-                        : Icons.campaign_outlined,
-                    color:
-                        isEmergency ? AppColors.emergency : AppColors.primary,
-                    size: 21,
+      child: InkWell(
+        onTap: () {
+          if (!isRead) {
+            _setReadState(item, true);
+          }
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 13, 10, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Icon(
+                      isEmergency
+                          ? Icons.warning_amber_rounded
+                          : Icons.campaign_outlined,
+                      color:
+                          isEmergency ? AppColors.emergency : AppColors.primary,
+                      size: 21,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              title,
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight:
-                                    isRead ? FontWeight.w600 : FontWeight.w800,
-                                color: isEmergency
-                                    ? AppColors.emergency
-                                    : AppColors.textPrimary,
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                title,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: isRead
+                                      ? FontWeight.w600
+                                      : FontWeight.w800,
+                                  color: isEmergency
+                                      ? AppColors.emergency
+                                      : AppColors.textPrimary,
+                                ),
                               ),
                             ),
-                          ),
-                          if (!isRead)
-                            Container(
-                              width: 9,
-                              height: 9,
-                              margin: const EdgeInsets.only(left: 8),
-                              decoration: const BoxDecoration(
-                                  color: AppColors.primaryMid,
-                                  shape: BoxShape.circle),
-                            ),
+                            if (!isRead)
+                              Container(
+                                width: 9,
+                                height: 9,
+                                margin: const EdgeInsets.only(left: 8),
+                                decoration: const BoxDecoration(
+                                    color: AppColors.primaryMid,
+                                    shape: BoxShape.circle),
+                              ),
+                          ],
+                        ),
+                        if (displayTime.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(displayTime,
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary)),
                         ],
-                      ),
-                      if (displayTime.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(displayTime,
-                            style: const TextStyle(
-                                fontSize: 11, color: AppColors.textSecondary)),
                       ],
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: 'Notice options',
+                    onSelected: (action) {
+                      if (action == 'read') _setReadState(item, true);
+                      if (action == 'unread') _setReadState(item, false);
+                      if (action == 'hide') _hideNotice(item);
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: isRead ? 'unread' : 'read',
+                        child: Text(isRead ? 'Mark as unread' : 'Mark as read'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'hide',
+                        child: Text('Remove from my notices'),
+                      ),
                     ],
                   ),
-                ),
-                PopupMenuButton<String>(
-                  tooltip: 'Notice options',
-                  onSelected: (action) {
-                    if (action == 'read') _setReadState(item, true);
-                    if (action == 'unread') _setReadState(item, false);
-                    if (action == 'hide') _hideNotice(item);
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: isRead ? 'unread' : 'read',
-                      child: Text(isRead ? 'Mark as unread' : 'Mark as read'),
+                ],
+              ),
+              const SizedBox(height: 11),
+              Text(body,
+                  style: const TextStyle(
+                      fontSize: 14,
+                      height: 1.45,
+                      color: AppColors.textPrimary)),
+              if (imageUrl != null && imageUrl.trim().isNotEmpty) ...[
+                const SizedBox(height: 10),
+                GestureDetector(
+                  onTap: () => _showImageDialog(context, imageUrl.trim()),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      imageUrl.trim(),
+                      width: double.infinity,
+                      height: 190,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, progress) =>
+                          progress == null
+                              ? child
+                              : Container(
+                                  height: 190,
+                                  color: Colors.grey.shade100,
+                                  child: const Center(
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2)),
+                                ),
+                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                     ),
-                    const PopupMenuItem(
-                      value: 'hide',
-                      child: Text('Remove from my notices'),
-                    ),
-                  ],
+                  ),
                 ),
               ],
-            ),
-            const SizedBox(height: 11),
-            Text(body,
-                style: const TextStyle(
-                    fontSize: 14, height: 1.45, color: AppColors.textPrimary)),
-            const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                isRead ? 'READ' : 'UNREAD',
-                style: TextStyle(
-                    color: isRead ? AppColors.textSecondary : AppColors.primary,
-                    fontSize: 9,
-                    letterSpacing: .7,
-                    fontWeight: FontWeight.w800),
+              if (audioUrl != null && audioUrl.trim().isNotEmpty) ...[
+                const SizedBox(height: 10),
+                NoticeAudioPlayer(
+                  audioUrl: audioUrl.trim(),
+                  autoPlay: _autoPlayAudio,
+                ),
+              ],
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  isRead ? 'READ' : 'UNREAD',
+                  style: TextStyle(
+                      color:
+                          isRead ? AppColors.textSecondary : AppColors.primary,
+                      fontSize: 9,
+                      letterSpacing: .7,
+                      fontWeight: FontWeight.w800),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

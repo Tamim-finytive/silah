@@ -171,6 +171,9 @@ model Announcement {
   titleTa     String?              @map("title_ta") @db.VarChar(300)
   body        String
   bodyTa      String?              @map("body_ta")
+  imageUrl    String?              @map("image_url")
+  audioUrl    String?              @map("audio_url")
+  audioDuration Int?               @map("audio_duration")
   isPinned    Boolean              @default(false) @map("is_pinned")
   notifyPush  Boolean              @default(true) @map("notify_push")
   publishedAt DateTime?            @map("published_at") @db.Timestamptz(6)

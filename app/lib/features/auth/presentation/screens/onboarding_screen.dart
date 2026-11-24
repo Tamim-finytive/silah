@@ -236,8 +236,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                    color: AppColors.primary.withValues(alpha: 0.3)),
+                border:
+                    Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
               ),
               child: const Text(
                 'You can now update prayer timings, generate member QR codes, post community announcements, and manage your congregation.',
@@ -397,9 +397,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             children: const [
               Icon(Icons.person, color: AppColors.primary, size: 28),
               SizedBox(width: 10),
-              Text(
-                'Tell us about yourself',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              Expanded(
+                child: Text(
+                  'Tell us about yourself',
+                  softWrap: true,
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),
@@ -658,9 +661,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             children: const [
               Icon(Icons.add_business, color: AppColors.primary, size: 26),
               SizedBox(width: 10),
-              Text(
-                'Register Masjid',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              Expanded(
+                child: Text(
+                  'Register Masjid',
+                  softWrap: true,
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),

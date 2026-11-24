@@ -42,6 +42,12 @@ class ApiDebugInterceptor extends Interceptor {
       debugPrint(
           '${err.requestOptions.method} ${_safeUri(err.requestOptions.uri)}');
       debugPrint('Type: ${err.type.name}');
+      if (err.message != null && err.message!.isNotEmpty) {
+        debugPrint('Message: ${err.message}');
+      }
+      if (err.error != null) {
+        debugPrint('Error: ${err.error}');
+      }
       if (response != null) {
         debugPrint('Status: ${response.statusCode ?? 'unknown'}');
         debugPrint(_prettySafe(response.data));

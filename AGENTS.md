@@ -7,6 +7,7 @@ This file is the durable handoff for anyone working on this repository. Keep it 
 - Do not add mock, demo, or hardcoded business data. Masjid, prayer schedule, notices, membership, finance, device, and user data must come from the backend and database.
 - When a feature changes or introduces persisted data, connect the Flutter flow to a real backend API and the backend to the database. Do not stop at a UI-only implementation.
 - FCM must reuse the device's existing token. Do not repeatedly create/request fresh tokens. Save the token on-device, register/relink it to the authenticated user in the backend, and update it only when Firebase itself rotates it.
+- Do not collect a separate Tamil title in create or edit forms anywhere in the app. Forms should ask for the primary title only; existing translated titles may remain readable when returned by the backend.
 - Keep this file updated so another agent can continue without relying on chat history.
 
 ## Repository layout
@@ -113,6 +114,7 @@ This file is the durable handoff for anyone working on this repository. Keep it 
 - Supabase health advisors report RLS is disabled on all 14 public application tables, which means the Data API roles can access rows without row-level policies. Do not enable RLS without designing policies for the NestJS/Postgres access model; this finding must be raised for owner review.
 - Special schedule records now support edit through a masjid-scoped backend `PUT` endpoint, and the admin Prayer & Events screen exposes create/edit actions and a responsive empty state. Month-by-month daily Ramadan Sehri/Iftar schedules remain a separate required database-backed feature and are not complete yet.
 - In Admin "Manage Prayer & Events" (Tab 2), when no prayer times exist in the database, only the primary "Create Prayer Schedule" and "Set Date Range Schedule" buttons are displayed (no edit buttons on empty state). Once prayer times are created, the screen switches to displaying the configured timings with the "Edit Schedule" and "Edit Date Range Schedule" actions.
+- In "Connect with Masjid" directory (`connect_masjid_screen.dart`), clicking Connect now only sets the loading state (`Connecting…` spinner) on the specifically clicked masjid card via `_connectingMasjidId`, preventing other unselected masjid cards from showing loading spinners simultaneously.
 - Android background push notifications are configured in `AndroidManifest.xml` with `com.google.firebase.messaging.default_notification_channel_id` mapped to `silah_announcements`, launcher icon metadata, and `VIBRATE`, `WAKE_LOCK`, and `RECEIVE_BOOT_COMPLETED` permissions so incoming push notifications trigger the heads-up notification channel even when the app is in background or killed.
 - The Flutter FCM background callback initializes Firebase and handles data-only pushes by showing a local notification on the shared `silah_announcements` channel. For normal notification-plus-data pushes, Android/iOS displays the remote notification itself; the callback intentionally does not create a duplicate. Admin masjid notices default to push delivery unless explicitly disabled, target active registered devices of connected masjid members, and backend logs delivery counts without logging tokens.
 - A device receives push only after its active FCM token is registered for a user who belongs to the notice audience and notification permission is allowed. A previous read-only Supabase check found only 3 active Android device registrations across 16 user accounts at that time; account rows without registered app devices cannot receive FCM.
@@ -145,3 +147,34 @@ This file is the durable handoff for anyone working on this repository. Keep it 
 - Preserve unrelated user edits already present in the working tree.
 - Do not run tests unless the user asks for testing or verification. Static analysis/build checks may be used when needed to validate code changes.
 - Update this guide after completing a feature or changing the status above.
+
+## Responsive overflow fixes (2026-11-24)
+
+- The Home Asr calculation dialog keeps its option labels inside the dialog width; the prayer header stacks the method selector on narrow content widths and truncates long dates/method labels safely.
+- The My Masjids bottom-sheet title shares available width with its close button and wraps to two lines. Active masjid city labels are constrained, and the active/local status row can wrap.
+- Masjid search result actions and Sandha summary heading/status use wrapping layouts on narrow screens rather than fixed single-line rows.
+- Onboarding section headings now share available width with their icons, allowing long labels to wrap on compact windows.
+- Check new `Row` children that contain user/backend text: use `Expanded`/`Flexible`, max lines with ellipsis, or `Wrap` where actions need to move onto a second line. Preserve system text scaling; do not fix overflow by clipping the whole screen or reducing accessibility text size.
+- `git diff --check` passed. Full app Dart analysis completed with no compile errors; existing info-level lints remain. The analyzer emitted its existing telemetry file permission warning outside the project. No tests or device preview were run.
+
+## App Icon, Media Notices & Auto-Refresh Status (2026-11-24)
+
+- App Icons & Assets: User's updated `app/asset/logo.png` (1254x1254) has been processed and deployed across Android launcher mipmaps (mdpi, hdpi, xhdpi, xxhdpi, xxxhdpi), Android notification status bar icon (`ic_stat_silah.png`), iOS AppIcon catalog (`AppIcon.appiconset` 20x20 through 1024x1024), Web favicon & PWA icons (192, 512, maskable), and `app/asset/logo.jpg`.
+- Rich Notice Creation (`NoticeEditorScreen`): Admin can provide Heading and Description, attach an image from camera or gallery (`image_picker`), and record a voice message with a live timer and playback preview (`record: ^7.2.0`, `just_audio`). Media is uploaded directly via `POST /v1/uploads` into public Supabase Storage bucket `silah-media`, and `imageUrl`, `audioUrl`, and `audioDuration` are saved to the PostgreSQL `announcements` table via `announcements.service.ts`.
+- Member Notices & Playback (`announcements_screen.dart`): Fixed contrast on tabs (white label on forest green header). Each notice card renders image thumbnails with full-screen preview on tap, and in-card audio player with seek slider, duration formatting, and an Auto-play toggle switch. Marking as read immediately updates UI, and switching back to the Notices tab in `home_screen.dart` refreshes the list to keep read/unread tabs synchronized.
+- Validation: Backend build passed (`nest build` 0 errors). Dart formatting and `git diff --check` passed.
+- Fixed Android Gradle build task dependency: replaced eager `tasks.named("assembleRelease")` with lazy `tasks.matching { it.name == "assembleRelease" }.configureEach` in `app/android/app/build.gradle.kts` so `flutter run --debug` does not fail looking for release tasks.
+- Resolved Android duplicate resource collision by removing redundant `res/drawable/ic_stat_silah.png`, retaining the vector `ic_stat_silah.xml` for status bar notifications.
+
+## App name and APK output (2026-11-24)
+
+- The Android launcher label, iOS display name, and web app title are `Silah`. Keep the Dart package name and Android application ID `com.finytive.silah` unchanged so imports, Firebase setup, and installed app identity remain stable.
+- `:app:assembleRelease` keeps Flutter's standard artifact and copies the release APK to `app/build/app/outputs/flutter-apk/Silah.apk` for sharing.
+
+## Adhan alarms, Quran menu, and notice form follow-up (2026-11-24)
+
+- The Home Alert control now enables or disables five daily device-side Adhan reminders using the currently selected live prayer-time map (masjid schedule or local prayer API). Stable notification IDs replace prior alarms, the enabled choice is saved on-device, and changed prayer times reschedule the alarms. Android exact-alarm permission, reboot rescheduling receivers, local timezone lookup, and the user's `app/asset/azan1.mp3` Android notification sound are configured. This uses the existing prayer data; no example schedule was added.
+- The Home three-dot menu opens the existing Quran reader, which fetches live surah/ayah data from AlQuran Cloud through the debug-logged Dio client.
+- Special schedule create/edit now asks for the primary event title only and omits `titleTa` from its write payload. Do not remove legacy translated columns or backend read support unless separately requested.
+- The New Notice screen must visibly collect a heading and message, with the message required, before optional image/voice attachments. The existing `POST /v1/uploads` and Supabase Storage flow saves attachment URLs to the database-backed announcement; the member notice card previews images and provides a user-controlled auto-play toggle for voice messages. Existing Prisma columns `imageUrl`, `audioUrl`, and `audioDuration` are already in place, so this work adds no schema migration.
+- Validation on 2026-11-24: targeted Dart analysis reported no compile errors; existing info-level lint notices remain. `git diff --check` passed. The Dart tool also printed its existing telemetry-file permission warning outside the workspace. Tests and Android device alarm playback were not run.

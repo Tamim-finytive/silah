@@ -28,6 +28,20 @@ export class CreateAnnouncementDto {
   @IsString()
   bodyTa?: string;
 
+  @ApiPropertyOptional({ example: 'https://.../image.jpg' })
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @ApiPropertyOptional({ example: 'https://.../voice.m4a' })
+  @IsOptional()
+  @IsString()
+  audioUrl?: string;
+
+  @ApiPropertyOptional({ example: 45 })
+  @IsOptional()
+  audioDuration?: number;
+
   @ApiPropertyOptional({ example: true, default: false })
   @IsOptional()
   @IsBoolean()
@@ -67,6 +81,20 @@ export class UpdateAnnouncementDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  audioUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  audioDuration?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsBoolean()
   isPinned?: boolean;
 }
@@ -97,6 +125,20 @@ export class BroadcastAnnouncementDto {
   @IsOptional()
   @IsString()
   bodyTa?: string;
+
+  @ApiPropertyOptional({ example: 'https://.../image.jpg' })
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @ApiPropertyOptional({ example: 'https://.../voice.m4a' })
+  @IsOptional()
+  @IsString()
+  audioUrl?: string;
+
+  @ApiPropertyOptional({ example: 45 })
+  @IsOptional()
+  audioDuration?: number;
 
   @ApiPropertyOptional({ example: 'All Users', enum: ['All Users', 'Admins Only', 'Musallis Only', 'ALL', 'ADMINS', 'MUSALLIS'] })
   @IsOptional()

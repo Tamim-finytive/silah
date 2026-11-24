@@ -180,15 +180,19 @@ class _SandhaScreenState extends ConsumerState<SandhaScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
+                                  Wrap(
+                                    alignment: WrapAlignment.spaceBetween,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    spacing: 8,
+                                    runSpacing: 6,
                                     children: [
                                       Text(
                                         lang.tr(
                                           en: 'Monthly contribution',
                                           ta: 'மாதாந்திர சந்தா',
                                         ),
+                                        softWrap: true,
                                         style: const TextStyle(
                                             fontSize: 18,
                                             fontWeight: FontWeight.bold,
