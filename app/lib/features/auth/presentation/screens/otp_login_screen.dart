@@ -96,7 +96,8 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _errorMessage = 'Connection error: $e';
+          _errorMessage = ApiService.getErrorMessage(e,
+              fallback: 'Connection error. Please try again.');
         });
       }
     }

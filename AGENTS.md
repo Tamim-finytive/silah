@@ -178,3 +178,23 @@ This file is the durable handoff for anyone working on this repository. Keep it 
 - Special schedule create/edit now asks for the primary event title only and omits `titleTa` from its write payload. Do not remove legacy translated columns or backend read support unless separately requested.
 - The New Notice screen must visibly collect a heading and message, with the message required, before optional image/voice attachments. The existing `POST /v1/uploads` and Supabase Storage flow saves attachment URLs to the database-backed announcement; the member notice card previews images and provides a user-controlled auto-play toggle for voice messages. Existing Prisma columns `imageUrl`, `audioUrl`, and `audioDuration` are already in place, so this work adds no schema migration.
 - Validation on 2026-11-24: targeted Dart analysis reported no compile errors; existing info-level lint notices remain. `git diff --check` passed. The Dart tool also printed its existing telemetry-file permission warning outside the workspace. Tests and Android device alarm playback were not run.
+
+## Self-service masjid approval handoff (2026-11-24)
+
+- Self-service masjid registration creates an inactive `PENDING` record. It must remain unavailable in public discovery and the requester must remain a normal member until a Super Admin approves it. The Super Admin request screen already provides explicit Approve and Reject actions.
+- Approval assigns the requester the masjid ADMIN role and primary membership, then attempts an FCM push to that user's active registered devices (`MASJID_ADMIN_APPROVED`, with the masjid ID). Push is best-effort; database approval stands if FCM delivery fails. Check the logged recipient/delivery counts and deployed Firebase Admin credentials when diagnosing missing pushes.
+- After an applicant submits a pending request, the app now tells them it is awaiting review and routes them to normal Home. Opening the approval push refreshes `/auth/me` and routes directly to that masjid's Admin dashboard. A fresh login or app restart also refreshes the profile and routes approved admins from the backend role. Profile settings in the member app and the Admin settings tab expose the existing switch back to the User app.
+- Validation on 2026-11-24: `npm run build` in `backend/` passed. Targeted Dart analysis of `app.dart`, `onboarding_screen.dart`, and `home_screen.dart` reported no compile errors; existing info-level lint notices remain. `git diff --check` passed. Tests were not run. Production push delivery still depends on Firebase Admin credentials and the requester having an active registered FCM device.
+
+## Multipart media upload debug fix (2026-11-24)
+
+- Dio `FormData` must bypass JSON encoding in `ApiDebugInterceptor`; multipart logs now render form fields and a filename placeholder without serializing file bytes or printing the device-local path. Do not set an explicit bare `Content-Type` header for multipart cURL output; let curl/Dio add the boundary.
+- `ApiService.uploadFile` sets `Options(contentType: Headers.multipartFormDataContentType)` and lets Dio generate the multipart boundary. Backend `POST /v1/uploads` already accepts the `file` multipart field and stores it in Supabase Storage; the reported failure occurred in Flutter request logging before reaching the backend.
+- Validation on 2026-11-24: targeted Dart analysis of networking, onboarding, and Home files reported no compile errors; `git diff --check` passed. Tests and a device upload were not run.
+
+## Centralized Frontend Error Handling (2026-11-24)
+
+- Introduced `ApiException` and `ApiService.getErrorMessage(e)` in `app/lib/core/network/api_service.dart`.
+- The helper automatically unwraps backend error structures (`error.message`, `message` array or string), network timeouts, status codes (401, 403, 404, 500), and custom exception messages.
+- Replaced raw Dio exception logging and `Failed: $e` string interpolations across `onboarding_screen.dart`, `otp_login_screen.dart`, `connect_masjid_screen.dart`, `admin_dashboard_screen.dart`, and `super_admin_dashboard_screen.dart` with `ApiService.getErrorMessage(e)`.
+- Backend validation and duplicate messages (e.g., `Duplicate Masjid Detected: "..." is already registered within ~100 meters...`) now render cleanly in frontend error banners and SnackBars without technical DioException prefixes.

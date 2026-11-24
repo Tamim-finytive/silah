@@ -36,5 +36,20 @@ class MainActivity : FlutterActivity() {
                     result.notImplemented()
                 }
             }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "silah/tts")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "speak" -> {
+                        val text = call.argument<String>("text") ?: ""
+                        TtsManager.speak(context, text)
+                        result.success(true)
+                    }
+                    "stop" -> {
+                        TtsManager.stop()
+                        result.success(true)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
     }
 }

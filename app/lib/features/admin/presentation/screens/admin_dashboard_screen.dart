@@ -498,7 +498,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context)
-                      .showSnackBar(SnackBar(content: Text('Failed: $e')));
+                      .showSnackBar(SnackBar(content: Text(ApiService.getErrorMessage(e))));
                 }
               }
             },
@@ -802,7 +802,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context)
-                      .showSnackBar(SnackBar(content: Text('Failed: $e')));
+                      .showSnackBar(SnackBar(content: Text(ApiService.getErrorMessage(e))));
                 }
               }
             },
@@ -1513,7 +1513,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context)
-                      .showSnackBar(SnackBar(content: Text('Failed: $e')));
+                      .showSnackBar(SnackBar(content: Text(ApiService.getErrorMessage(e))));
                 }
               }
             },
@@ -1609,7 +1609,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 _loadMasjidData();
               } catch (e) {
                 ScaffoldMessenger.of(context)
-                    .showSnackBar(SnackBar(content: Text('Failed: $e')));
+                    .showSnackBar(SnackBar(content: Text(ApiService.getErrorMessage(e))));
               }
             },
             child: const Text('Apply Range'),
@@ -1749,7 +1749,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   _loadMasjidData();
                 } catch (e) {
                   ScaffoldMessenger.of(context)
-                      .showSnackBar(SnackBar(content: Text('Failed: $e')));
+                      .showSnackBar(SnackBar(content: Text(ApiService.getErrorMessage(e))));
                 }
               },
               child: Text(id == null ? 'Create Event' : 'Save Changes'),
@@ -1769,7 +1769,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       _loadMasjidData();
     } catch (e) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Failed: $e')));
+          .showSnackBar(SnackBar(content: Text(ApiService.getErrorMessage(e))));
     }
   }
 
@@ -1895,7 +1895,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       _loadMasjidData();
     } catch (e) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Failed: $e')));
+          .showSnackBar(SnackBar(content: Text(ApiService.getErrorMessage(e))));
     }
   }
 
@@ -2376,7 +2376,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context)
-                      .showSnackBar(SnackBar(content: Text('Failed: $e')));
+                      .showSnackBar(SnackBar(content: Text(ApiService.getErrorMessage(e))));
                 }
               }
             },
@@ -2452,7 +2452,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   _loadMasjidData();
                 } catch (e) {
                   ScaffoldMessenger.of(context)
-                      .showSnackBar(SnackBar(content: Text('Failed: $e')));
+                      .showSnackBar(SnackBar(content: Text(ApiService.getErrorMessage(e))));
                 }
               },
               child: const Text('Assign'),
@@ -2564,7 +2564,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         _loadMasjidData();
                       } catch (e) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Failed: $e')));
+                            SnackBar(content: Text(ApiService.getErrorMessage(e))));
                       }
                     },
                     child: const Text('Save Details'),

@@ -4,6 +4,18 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'api_debug_interceptor.dart';
 
+class ApiException implements Exception {
+  final String message;
+  final int? statusCode;
+  final String? code;
+  final dynamic details;
+
+  ApiException(this.message, {this.statusCode, this.code, this.details});
+
+  @override
+  String toString() => message;
+}
+
 class ApiService {
   static final ApiService instance = ApiService._internal();
   factory ApiService() => instance;
@@ -17,6 +29,67 @@ class ApiService {
   String? authToken;
   Map<String, dynamic>? currentUser;
   Future<String?>? _refreshingSession;
+
+  static String getErrorMessage(dynamic error,
+      {String fallback = 'An unexpected error occurred'}) {
+    if (error == null) return fallback;
+    if (error is ApiException) return error.message;
+    if (error is DioException) {
+      final resData = error.response?.data;
+      if (resData is Map) {
+        final err = resData['error'];
+        if (err is Map && err['message'] != null) {
+          final msg = err['message'];
+          if (msg is List && msg.isNotEmpty) return msg.join(', ');
+          return msg.toString();
+        }
+        if (err is String && err.isNotEmpty) return err;
+        if (resData['message'] != null) {
+          final msg = resData['message'];
+          if (msg is List && msg.isNotEmpty) return msg.join(', ');
+          return msg.toString();
+        }
+      } else if (resData is String && resData.isNotEmpty) {
+        return resData;
+      }
+      if (error.error != null) {
+        final inner = error.error;
+        if (inner is ApiException) return inner.message;
+        if (inner is String && inner.isNotEmpty) return inner;
+      }
+      if (error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.sendTimeout ||
+          error.type == DioExceptionType.receiveTimeout) {
+        return 'Connection timed out. Please check your internet connection.';
+      }
+      if (error.type == DioExceptionType.connectionError) {
+        return 'Network connection error. Please check your internet connection.';
+      }
+      if (error.response?.statusCode != null) {
+        final code = error.response!.statusCode;
+        if (code == 404) return 'The requested resource was not found.';
+        if (code == 403) {
+          return 'You do not have permission to perform this action.';
+        }
+        if (code == 401) return 'Session expired. Please sign in again.';
+        if (code == 500) return 'Server error. Please try again later.';
+      }
+    }
+    final str = error.toString();
+    if (str.startsWith('Exception: ')) {
+      return str.substring('Exception: '.length);
+    }
+    return str.isNotEmpty ? str : fallback;
+  }
+
+  Future<T> _guard<T>(Future<T> Function() call) async {
+    try {
+      return await call();
+    } on DioException catch (e) {
+      throw ApiException(getErrorMessage(e),
+          statusCode: e.response?.statusCode);
+    }
+  }
 
   bool get isMasjidAdmin {
     final adminRoles = currentUser?['adminRoles'] as List<dynamic>?;
@@ -60,10 +133,20 @@ class ApiService {
               !request.path.endsWith('/auth/refresh') &&
               (!request.path.startsWith('/auth/') ||
                   request.path == '/auth/me');
-          if (!canRefresh) return handler.next(error);
+          if (!canRefresh) {
+            final cleanMessage = getErrorMessage(error);
+            final customErr = ApiException(cleanMessage,
+                statusCode: error.response?.statusCode);
+            return handler.next(error.copyWith(error: customErr));
+          }
 
           final refreshedToken = await _refreshAccessToken();
-          if (refreshedToken == null) return handler.next(error);
+          if (refreshedToken == null) {
+            final cleanMessage = getErrorMessage(error);
+            final customErr = ApiException(cleanMessage,
+                statusCode: error.response?.statusCode);
+            return handler.next(error.copyWith(error: customErr));
+          }
           request
             ..headers['Authorization'] = 'Bearer $refreshedToken'
             ..extra['authRetry'] = true;
@@ -71,7 +154,10 @@ class ApiService {
             final response = await _dio.fetch<dynamic>(request);
             return handler.resolve(response);
           } on DioException catch (retryError) {
-            return handler.next(retryError);
+            final cleanMessage = getErrorMessage(retryError);
+            final customErr = ApiException(cleanMessage,
+                statusCode: retryError.response?.statusCode);
+            return handler.next(retryError.copyWith(error: customErr));
           }
         },
       ),
@@ -489,18 +575,21 @@ class ApiService {
     String? adminName,
     String? adminPhone,
   }) async {
-    final res = await _dio.post('/masjids', data: {
-      'name': name,
-      'city': city,
-      'address': address,
-      if (nameTa != null && nameTa.isNotEmpty) 'nameTa': nameTa,
-      if (latitude != null) 'latitude': latitude,
-      if (longitude != null) 'longitude': longitude,
-      if (mapUrl != null && mapUrl.isNotEmpty) 'mapUrl': mapUrl,
-      if (adminName != null && adminName.isNotEmpty) 'adminName': adminName,
-      if (adminPhone != null && adminPhone.isNotEmpty) 'adminPhone': adminPhone,
+    return _guard(() async {
+      final res = await _dio.post('/masjids', data: {
+        'name': name,
+        'city': city,
+        'address': address,
+        if (nameTa != null && nameTa.isNotEmpty) 'nameTa': nameTa,
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
+        if (mapUrl != null && mapUrl.isNotEmpty) 'mapUrl': mapUrl,
+        if (adminName != null && adminName.isNotEmpty) 'adminName': adminName,
+        if (adminPhone != null && adminPhone.isNotEmpty)
+          'adminPhone': adminPhone,
+      });
+      return Map<String, dynamic>.from(res.data as Map);
     });
-    return res.data;
   }
 
   Future<List<dynamic>> getPendingMasjidRequests() async {
@@ -616,11 +705,7 @@ class ApiService {
       final res = await _dio.post(
         '/uploads',
         data: formData,
-        options: Options(
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        ),
+        options: Options(contentType: Headers.multipartFormDataContentType),
       );
 
       final data = res.data;

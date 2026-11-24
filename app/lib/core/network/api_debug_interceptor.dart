@@ -62,11 +62,28 @@ class ApiDebugInterceptor extends Interceptor {
     final parts = <String>[
       'curl -X ${options.method.toUpperCase()} ${_shellQuote(uri)}'
     ];
+    final isMultipart = options.data is FormData;
     options.headers.forEach((key, value) {
+      if (isMultipart && key.toLowerCase() == 'content-type') return;
       final safeValue =
           _sensitiveKey.hasMatch(key) ? '[REDACTED]' : value.toString();
       parts.add('-H ${_shellQuote('$key: $safeValue')}');
     });
+    if (isMultipart) {
+      final formData = options.data as FormData;
+      for (final field in formData.fields) {
+        final safeValue = _redact(field.value, field.key);
+        parts.add('--form ${_shellQuote('${field.key}=$safeValue')}');
+      }
+      for (final file in formData.files) {
+        final filename = file.value.filename ?? 'upload.bin';
+        parts.add(
+          '--form ${_shellQuote('${file.key}=@$filename')} # local file path omitted',
+        );
+      }
+      return parts.join(' \\\n  ');
+    }
+
     final body = _redactBody(options.data);
     if (body != null &&
         options.method.toUpperCase() != 'GET' &&

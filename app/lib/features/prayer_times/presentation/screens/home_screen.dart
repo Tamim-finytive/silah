@@ -46,14 +46,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _notificationSubscription =
         NotificationService.instance.notificationEvents.listen((event) {
       if (event['opened'] == true && mounted) {
-        _showOpenedAnnouncement(event);
+        _handleOpenedNotification(event);
       }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final pending =
           NotificationService.instance.takePendingNotificationEvent();
       if (pending != null && mounted && pending['opened'] == true) {
-        _showOpenedAnnouncement(pending);
+        _handleOpenedNotification(pending);
       }
     });
   }
@@ -128,6 +128,46 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _openedAnnouncementId = event['id']?.toString();
       _openedNotificationMasjidId = event['masjidId']?.toString();
     });
+  }
+
+  Future<void> _handleOpenedNotification(Map<String, dynamic> event) async {
+    if (event['type'] != 'MASJID_ADMIN_APPROVED') {
+      _showOpenedAnnouncement(event);
+      return;
+    }
+
+    final profile = await ApiService.instance.getProfile();
+    if (!mounted) return;
+    final roles = profile?['adminRoles'] as List<dynamic>? ??
+        ApiService.instance.currentUser?['adminRoles'] as List<dynamic>? ??
+        const [];
+    final masjidId = event['masjidId']?.toString();
+    Map<String, dynamic>? approvedRole;
+    for (final role in roles) {
+      if (role is Map<String, dynamic> &&
+          (masjidId == null || role['masjidId']?.toString() == masjidId)) {
+        approvedRole = role;
+        break;
+      }
+    }
+
+    if (approvedRole == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content:
+            Text('Approval is being updated. Please reopen Silah in a moment.'),
+      ));
+      return;
+    }
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AdminDashboardScreen(
+          masjidId: approvedRole?['masjidId']?.toString(),
+          masjidName: approvedRole?['masjidName']?.toString(),
+        ),
+      ),
+    );
   }
 
   @override

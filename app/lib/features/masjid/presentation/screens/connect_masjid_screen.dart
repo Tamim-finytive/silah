@@ -294,7 +294,8 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.red.shade800,
-            content: Text('Failed to connect: $e'),
+            content: Text(ApiService.getErrorMessage(e,
+                fallback: 'Failed to connect to masjid')),
           ),
         );
       }
@@ -357,7 +358,10 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
       if (mounted) {
         setState(() => _isProcessing = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not connect from this QR code: $e')),
+          SnackBar(
+            content: Text(ApiService.getErrorMessage(e,
+                fallback: 'Could not connect from this QR code')),
+          ),
         );
       }
     }

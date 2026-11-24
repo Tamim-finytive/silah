@@ -113,7 +113,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _errorMessage = 'Failed to save profile: $e';
+          _errorMessage = ApiService.getErrorMessage(e,
+              fallback: 'Failed to save profile. Please try again.');
         });
       }
     }
@@ -172,7 +173,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       );
 
       // 2. Submit Masjid creation request with this user as designated Admin
-      await ApiService.instance.createMasjid(
+      final createResult = await ApiService.instance.createMasjid(
         name: masjidName,
         city: city,
         address: masjidAddress,
@@ -186,24 +187,37 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         adminPhone: widget.phone,
       );
 
-      // Hydrate profile so user is immediately assigned as Masjid Admin
+      final responseData = createResult['data'] is Map
+          ? Map<String, dynamic>.from(createResult['data'] as Map)
+          : createResult;
+      final isPendingApproval = responseData['isPendingApproval'] == true;
+
+      // Refresh the normal user profile and register this device's existing
+      // FCM token so the requester can be notified after Super Admin approval.
       try {
         await ApiService.instance.getProfile();
       } catch (_) {}
+      try {
+        await NotificationService.instance.configureAfterLogin();
+      } catch (_) {}
 
       if (!mounted) return;
-      NotificationService.instance.configureAfterLogin();
       setState(() => _isLoading = false);
 
-      // Show Admin Confirmation Dialog
-      _showRequestSubmittedDialog(masjidName);
+      if (isPendingApproval) {
+        _showRequestSubmittedDialog(masjidName);
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+        );
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _errorMessage = e.toString().contains('Duplicate')
-              ? 'Duplicate Detected: A masjid is already registered near these coordinates or name.'
-              : 'Failed to submit masjid request: $e';
+          _errorMessage = ApiService.getErrorMessage(e,
+              fallback: 'Failed to submit masjid request.');
         });
       }
     }
@@ -219,7 +233,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           children: const [
             Icon(Icons.check_circle, color: Colors.green, size: 28),
             SizedBox(width: 10),
-            Text('Masjid Registered'),
+            Text('Request sent for review'),
           ],
         ),
         content: Column(
@@ -227,7 +241,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Your masjid "$masjidName" is registered and active! You are authorized as administrator.',
+              'Your request for "$masjidName" is waiting for Super Admin approval. Until it is approved, you can continue using Silah as a normal user.',
               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
             ),
             const SizedBox(height: 12),
@@ -240,7 +254,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
               ),
               child: const Text(
-                'You can now update prayer timings, generate member QR codes, post community announcements, and manage your congregation.',
+                'We will send a notification when a decision is made. After approval, open that notification to enter the Masjid Admin portal.',
                 style: TextStyle(fontSize: 12, color: Colors.black87),
               ),
             ),
@@ -252,14 +266,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               Navigator.pop(ctx);
               Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+                MaterialPageRoute(builder: (_) => const HomeScreen()),
               );
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Open Admin Dashboard'),
+            child: const Text('Continue to Silah'),
           ),
         ],
       ),

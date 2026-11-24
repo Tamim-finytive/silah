@@ -92,7 +92,42 @@ class _InAppNotificationBridgeState extends State<_InAppNotificationBridge> {
             action: SnackBarAction(
               label: 'OPEN',
               textColor: const Color(0xFFD4E9D9),
-              onPressed: () {
+              onPressed: () async {
+                if (event['type'] == 'MASJID_ADMIN_APPROVED') {
+                  final profile = await ApiService.instance.getProfile();
+                  final roles = profile?['adminRoles'] as List<dynamic>? ??
+                      ApiService.instance.currentUser?['adminRoles']
+                          as List<dynamic>? ??
+                      const [];
+                  final masjidId = event['masjidId']?.toString();
+                  Map<String, dynamic>? approvedRole;
+                  for (final role in roles) {
+                    if (role is Map<String, dynamic> &&
+                        (masjidId == null ||
+                            role['masjidId']?.toString() == masjidId)) {
+                      approvedRole = role;
+                      break;
+                    }
+                  }
+                  if (approvedRole != null) {
+                    appNavigatorKey.currentState?.pushReplacement(
+                      MaterialPageRoute(
+                        builder: (_) => AdminDashboardScreen(
+                          masjidId: approvedRole?['masjidId']?.toString(),
+                          masjidName: approvedRole?['masjidName']?.toString(),
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+                  appScaffoldMessengerKey.currentState?.showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                          'Approval is being updated. Please reopen Silah in a moment.'),
+                    ),
+                  );
+                  return;
+                }
                 appNavigatorKey.currentState?.push(
                   MaterialPageRoute(
                     builder: (_) => AnnouncementsScreen(

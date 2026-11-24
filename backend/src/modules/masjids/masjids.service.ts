@@ -1,12 +1,18 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateMasjidDto, AssignRoleDto } from './dto/masjid.dto';
 import { RoleType, MasjidApprovalStatus, Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
+import { FirebaseService } from '../../common/firebase/firebase.service';
 
 @Injectable()
 export class MasjidsService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(MasjidsService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private firebaseService: FirebaseService,
+  ) {}
 
   async findAll(query?: {
     city?: string;
@@ -490,6 +496,40 @@ export class MasjidsService {
         isPrimary: true,
       },
     });
+
+    // Notify the requester only after approval and admin mapping succeed.
+    // Push delivery is best effort and cannot undo the Super Admin's decision.
+    try {
+      const devices = await this.prisma.device.findMany({
+        where: { userId: masjid.createdBy, isActive: true },
+        select: { fcmToken: true },
+      });
+      if (devices.length > 0) {
+        const delivery = await this.firebaseService.sendPushNotification(
+          devices.map((device) => device.fcmToken),
+          'Masjid request approved',
+          `${masjid.name} is approved. You can now open the Masjid Admin portal.`,
+          { type: 'MASJID_ADMIN_APPROVED', masjidId: masjid.id },
+        );
+        if (delivery.invalidTokens.length > 0) {
+          await this.prisma.device.updateMany({
+            where: { fcmToken: { in: delivery.invalidTokens } },
+            data: { isActive: false },
+          });
+        }
+        this.logger.log(
+          `Masjid approval ${masjid.id}: push delivered to ${delivery.successCount}/${devices.length} registered devices`,
+        );
+      } else {
+        this.logger.log(
+          `Masjid approval ${masjid.id}: requester has no active registered device`,
+        );
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Masjid approval ${masjid.id} saved, but requester push failed: ${error}`,
+      );
+    }
 
     return {
       success: true,

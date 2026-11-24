@@ -672,7 +672,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                 _loadAllData();
               } catch (e) {
                 ScaffoldMessenger.of(context)
-                    .showSnackBar(SnackBar(content: Text('Failed: $e')));
+                    .showSnackBar(SnackBar(content: Text(ApiService.getErrorMessage(e))));
               }
             },
             child: const Text('Create'),
@@ -799,7 +799,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
       _loadAllData();
     } catch (e) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Failed: $e')));
+          .showSnackBar(SnackBar(content: Text(ApiService.getErrorMessage(e))));
     }
   }
 
@@ -883,7 +883,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                           _loadAllData();
                         } catch (e) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Failed: $e')));
+                              SnackBar(content: Text(ApiService.getErrorMessage(e))));
                         }
                       },
                     ),
@@ -1231,7 +1231,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                   _loadAllData();
                 } catch (e) {
                   ScaffoldMessenger.of(context)
-                      .showSnackBar(SnackBar(content: Text('Failed: $e')));
+                      .showSnackBar(SnackBar(content: Text(ApiService.getErrorMessage(e))));
                 }
               },
               child: const Text('Add User'),
@@ -1464,7 +1464,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context)
-                      .showSnackBar(SnackBar(content: Text('Failed: $e')));
+                      .showSnackBar(SnackBar(content: Text(ApiService.getErrorMessage(e))));
                 }
               }
             },
@@ -1512,7 +1512,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context)
-                      .showSnackBar(SnackBar(content: Text('Failed: $e')));
+                      .showSnackBar(SnackBar(content: Text(ApiService.getErrorMessage(e))));
                 }
               }
             },
