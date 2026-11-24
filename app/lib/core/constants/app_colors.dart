@@ -12,6 +12,7 @@ class AppColors {
   static const Color error = Color.fromARGB(255, 115, 11, 11);
   // Secondary & Accents
   static const Color secondary = Color(0xFFD5AD35);
+  static const Color gold = Color(0xFFD5AD35);
   static const Color onSecondary = Color(0xFF292411);
   static const Color secondaryContainer = Color(0xFFF8EFCB);
   static const Color onSecondaryContainer = Color(0xFF514313);

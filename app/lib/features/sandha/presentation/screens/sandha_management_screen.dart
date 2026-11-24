@@ -252,7 +252,7 @@ class _SandhaManagementScreenState extends State<SandhaManagementScreen>
                   {'name': name.trim(), 'phone': cleanPhone},
                 );
                 if (ctx.mounted) Navigator.pop(ctx);
-                _showToast('Member assigned to Sandha successfully!');
+                _showToast('Alhamdulillah! Member assigned to Sandha successfully.');
                 _loadAllData();
               } catch (e) {
                 setModalState(() => isSubmitting = false);
@@ -530,7 +530,7 @@ class _SandhaManagementScreenState extends State<SandhaManagementScreen>
                             'periodEnd': endText,
                           });
                           if (ctx.mounted) Navigator.pop(ctx);
-                          _showToast('Payment recorded successfully!');
+                          _showToast('Alhamdulillah! Payment recorded successfully.');
                           _loadAllData();
                         } catch (e) {
                           setDialogState(() => isSaving = false);
@@ -589,7 +589,7 @@ class _SandhaManagementScreenState extends State<SandhaManagementScreen>
     if (paymentId == null) return;
     try {
       await ApiService.instance.reviewSandhaPayment(widget.masjidId, paymentId, approve: approve);
-      _showToast(approve ? 'Payment approved and verified!' : 'Payment receipt rejected.');
+      _showToast(approve ? 'Alhamdulillah! Payment approved and verified.' : 'Payment receipt rejected.');
       _loadAllData();
     } catch (e) {
       _showToast(ApiService.getErrorMessage(e));

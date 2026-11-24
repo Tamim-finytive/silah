@@ -18,6 +18,7 @@ import 'package:masjid_namaz_app/features/announcements/presentation/screens/ann
 import 'package:masjid_namaz_app/features/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:masjid_namaz_app/features/admin/presentation/screens/super_admin_dashboard_screen.dart';
 import 'package:masjid_namaz_app/features/auth/presentation/screens/otp_login_screen.dart';
+import 'package:masjid_namaz_app/features/events/presentation/screens/member_events_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -33,6 +34,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   String? _openedAnnouncementId;
   String? _openedNotificationMasjidId;
   List<dynamic> _announcements = [];
+  List<dynamic> _masjidEvents = [];
+  String? _eventsMasjidId;
+  String _eventsMasjidName = 'Masjid';
+  bool _eventsLoading = false;
   String _calcMethod = 'Hanafi';
   StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
   bool _prayerAlarmsEnabled = false;
@@ -187,12 +192,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
       if (primary != null) {
         final activeId = primary['masjidId'];
+        final primaryName = primary['masjid']?['name']?.toString() ?? 'Masjid';
+        _loadEvents(activeId.toString(), primaryName);
         final notices = await ApiService.instance.getAnnouncements(activeId);
         if (mounted) {
           setState(() => _announcements = notices);
         }
       } else {
         setState(() => _announcements = []);
+      }
+    }
+  }
+
+  Future<void> _loadEvents(String masjidId,
+      [String masjidName = 'Masjid']) async {
+    if (_eventsMasjidId == masjidId || _eventsLoading) return;
+    setState(() {
+      _eventsMasjidId = masjidId;
+      _eventsMasjidName = masjidName;
+      _eventsLoading = true;
+      _masjidEvents = [];
+    });
+    try {
+      final events = await ApiService.instance.getSpecialSchedules(masjidId);
+      if (mounted && _eventsMasjidId == masjidId) {
+        setState(() => _masjidEvents = events);
+      }
+    } finally {
+      if (mounted && _eventsMasjidId == masjidId) {
+        setState(() => _eventsLoading = false);
       }
     }
   }
@@ -309,6 +337,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final activeMasjid = prayerState.activeMasjid;
     final nextPrayer = prayerState.nextPrayer;
     final isLocalTimes = prayerState.isLocalTimes;
+    final activeMasjidId = activeMasjid?['id']?.toString();
+    if (activeMasjidId != null && activeMasjidId != _eventsMasjidId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _loadEvents(
+              activeMasjidId, activeMasjid?['name']?.toString() ?? 'Masjid');
+        }
+      });
+    }
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -382,6 +419,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     const SizedBox(height: 20),
                   ],
 
+                  _buildEventsCard(
+                    activeMasjidId ?? _eventsMasjidId,
+                    activeMasjidId == null
+                        ? _eventsMasjidName
+                        : activeMasjid?['name']?.toString() ?? 'Masjid',
+                  ),
+                  const SizedBox(height: 20),
+
                   // Announcements Card
                   _buildAnnouncementsCard(),
                   const SizedBox(height: 24),
@@ -389,6 +434,63 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEventsCard(String? masjidId, String masjidName) {
+    final events = _masjidEvents.take(3).whereType<Map>().toList();
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(children: [
+              const Icon(Icons.event_available, color: AppColors.primary),
+              const SizedBox(width: 8),
+              const Expanded(
+                  child: Text('Events',
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold))),
+              if (masjidId != null)
+                TextButton(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MemberEventsScreen(
+                          masjidId: masjidId, masjidName: masjidName),
+                    ),
+                  ),
+                  child: const Text('View all'),
+                ),
+            ]),
+            if (_eventsLoading)
+              const LinearProgressIndicator(minHeight: 2)
+            else if (masjidId == null)
+              const Text('Connect to a masjid to see its events.')
+            else if (events.isEmpty)
+              const Text('No events have been scheduled by this masjid.')
+            else
+              ...events.map((event) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.event, color: AppColors.primary),
+                    title: Text(event['title']?.toString() ?? 'Event',
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(
+                        '${event['startDate']?.toString().split('T').first ?? ''} · ${event['startTime'] ?? ''}'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => MemberEventsScreen(
+                            masjidId: masjidId, masjidName: masjidName),
+                      ),
+                    ),
+                  )),
+          ],
         ),
       ),
     );

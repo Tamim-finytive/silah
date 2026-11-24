@@ -277,7 +277,7 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.green.shade800,
-          content: Text('Connected to "$masjidName" successfully!'),
+          content: Text('Alhamdulillah! Connected to "$masjidName" successfully.'),
         ),
       );
 

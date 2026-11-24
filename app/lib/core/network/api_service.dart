@@ -947,16 +947,18 @@ class ApiService {
 
   Future<List<dynamic>> getRamadanScheduleMonth(
       String masjidId, int year, int month) async {
-    final res = await _dio.get(
-      '/masjids/$masjidId/prayer-times/ramadan',
-      queryParameters: {'year': year, 'month': month},
-    );
-    if (res.data is Map &&
-        res.data['success'] == true &&
-        res.data['data'] is List) {
-      return res.data['data'] as List<dynamic>;
-    }
-    throw ApiException('Ramadan schedule could not be loaded.');
+    try {
+      final res = await _dio.get(
+        '/masjids/$masjidId/prayer-times/ramadan',
+        queryParameters: {'year': year, 'month': month},
+      );
+      if (res.data is Map &&
+          res.data['success'] == true &&
+          res.data['data'] is List) {
+        return res.data['data'] as List<dynamic>;
+      }
+    } catch (_) {}
+    return [];
   }
 
   Future<List<dynamic>> saveRamadanSchedule(

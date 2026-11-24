@@ -237,10 +237,70 @@ class _AppStartupGateState extends State<AppStartupGate> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
       backgroundColor: AppColors.primary,
-      body: Center(
-        child: CircularProgressIndicator(color: Colors.white),
+      body: SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 96,
+                height: 96,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 18,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.all(4),
+                child: ClipOval(
+                  child: Image.asset(
+                    'asset/logo.png',
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 28),
+              // Bismillah in Arabic calligraphy
+              const Text(
+                'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppColors.gold,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Bismillahir Rahmanir Raheem',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.3,
+                ),
+              ),
+              const SizedBox(height: 36),
+              const SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(
+                  color: AppColors.gold,
+                  strokeWidth: 2.5,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

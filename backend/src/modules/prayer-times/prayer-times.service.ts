@@ -7,8 +7,9 @@ export class PrayerTimesService {
   constructor(private prisma: PrismaService) {}
 
   async getTodayTimes(masjidId: string, dateStr?: string) {
-    const targetDate = dateStr ? new Date(dateStr) : new Date();
-    targetDate.setHours(0, 0, 0, 0);
+    const targetDate = dateStr
+      ? new Date(`${dateStr}T00:00:00.000Z`)
+      : new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z');
 
     const times = await this.prisma.prayerTime.findUnique({
       where: {
@@ -19,20 +20,19 @@ export class PrayerTimesService {
       },
     });
 
-    if (!times) {
-      // A masjid schedule is date-specific. Never present another day's
-      // timings as today's schedule; an absent row means the admin must create it.
-      return null;
+    const period = await this.findApplicablePeriod(masjidId, targetDate);
+    if (!times) return period ? { ...period, date: targetDate } : null;
+    if (period && period.updatedAt > times.updatedAt) {
+      return { ...period, date: targetDate };
     }
-
     return times;
   }
 
   async getMonthSchedule(masjidId: string, year: number, month: number) {
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0);
-
-    return this.prisma.prayerTime.findMany({
+    const startDate = new Date(Date.UTC(year, month - 1, 1));
+    const endDate = new Date(Date.UTC(year, month, 0));
+    const [savedRows, periods] = await Promise.all([
+      this.prisma.prayerTime.findMany({
       where: {
         masjidId,
         date: {
@@ -41,6 +41,36 @@ export class PrayerTimesService {
         },
       },
       orderBy: { date: 'asc' },
+      }),
+      this.prisma.prayerSchedulePeriod.findMany({
+        where: {
+          masjidId,
+          startDate: { lte: endDate },
+          OR: [{ endDate: null }, { endDate: { gte: startDate } }],
+        },
+        orderBy: { startDate: 'asc' },
+      }),
+    ]);
+    const byDate = new Map(savedRows.map((row) => [this.dateKey(row.date), row]));
+    for (let date = new Date(startDate); date <= endDate; date.setUTCDate(date.getUTCDate() + 1)) {
+      const key = this.dateKey(date);
+      const period = periods
+        .filter((item) => item.startDate <= date && (!item.endDate || item.endDate >= date))
+        .at(-1);
+      const saved = byDate.get(key);
+      if (period && (!saved || period.updatedAt > saved.updatedAt)) {
+        byDate.set(key, { ...period, id: `${period.id}:${key}`, date } as any);
+      }
+    }
+    return Array.from(byDate.values()).sort((a, b) => a.date.getTime() - b.date.getTime());
+  }
+
+  private dateKey(date: Date) { return date.toISOString().slice(0, 10); }
+
+  private async findApplicablePeriod(masjidId: string, date: Date) {
+    return this.prisma.prayerSchedulePeriod.findFirst({
+      where: { masjidId, startDate: { lte: date }, OR: [{ endDate: null }, { endDate: { gte: date } }] },
+      orderBy: { startDate: 'desc' },
     });
   }
 
@@ -90,17 +120,14 @@ export class PrayerTimesService {
     dto: UpdatePrayerTimeRangeDto,
   ) {
     const start = new Date(`${dto.startDate}T00:00:00.000Z`);
-    const end = new Date(`${dto.endDate}T00:00:00.000Z`);
-    const dayCount = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
-    if (!Number.isFinite(dayCount) || dayCount < 1 || dayCount > 31) {
-      throw new BadRequestException('Choose a valid range of 1 to 31 dates.');
+    const end = dto.endDate ? new Date(`${dto.endDate}T00:00:00.000Z`) : null;
+    const dayCount = end ? Math.floor((end.getTime() - start.getTime()) / 86400000) + 1 : 1;
+    if (!Number.isFinite(dayCount) || dayCount < 1 || dayCount > 366) {
+      throw new BadRequestException('Choose a valid date range of up to 366 days.');
     }
-
-    const days: Date[] = [];
-    for (let offset = 0; offset < dayCount; offset += 1) {
-      const date = new Date(start);
-      date.setUTCDate(start.getUTCDate() + offset);
-      days.push(date);
+    const requiredTimes = [dto.fajrJamaah, dto.dhuhrJamaah, dto.asrJamaah, dto.maghribJamaah, dto.ishaJamaah];
+    if (requiredTimes.some((time) => !time)) {
+      throw new BadRequestException('Enter Jamaah times for all five daily prayers.');
     }
 
     const prayerFields = {
@@ -120,19 +147,29 @@ export class PrayerTimesService {
       jummahJamaah: dto.jummahJamaah,
     };
 
-    const operations = days.map((date) =>
-      this.prisma.prayerTime.upsert({
-        where: { idx_prayer_times_unique: { masjidId, date } },
-        update: { ...prayerFields, date, updatedBy: userId },
-        create: { ...prayerFields, masjidId, date, updatedBy: userId },
-      }),
-    );
-    const saved = await this.prisma.$transaction(operations);
+    await this.prisma.$transaction(async (tx) => {
+      // A newer open-ended timetable closes the previous open period the day
+      // before it starts, preserving a clear, queryable schedule history.
+      await tx.prayerSchedulePeriod.updateMany({
+        where: { masjidId, endDate: null, startDate: { lt: start } },
+        data: { endDate: new Date(start.getTime() - 86400000) },
+      });
+      await tx.prayerSchedulePeriod.create({
+        data: {
+          masjidId,
+          startDate: start,
+          endDate: end,
+          updatedBy: userId,
+          ...prayerFields,
+        },
+      });
+    });
     return {
       success: true,
-      count: saved.length,
+      count: end ? dayCount : 1,
       startDate: dto.startDate,
-      endDate: dto.endDate,
+      endDate: dto.endDate ?? null,
+      appliesUntilChanged: !dto.endDate,
     };
   }
 

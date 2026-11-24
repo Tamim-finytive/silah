@@ -86,11 +86,11 @@ export class UpdatePrayerTimeRangeDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   startDate: string;
 
-  @ApiProperty({ description: 'End date, YYYY-MM-DD' })
-  @IsNotEmpty()
+  @ApiPropertyOptional({ description: 'End date, YYYY-MM-DD; omit for an open-ended schedule' })
   @IsString()
+  @IsOptional()
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
-  endDate: string;
+  endDate?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

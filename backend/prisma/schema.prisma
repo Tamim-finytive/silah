@@ -29,6 +29,7 @@ model User {
   memberships            Membership[]
   notificationPrefs      NotificationPref[]
   prayerTimes            PrayerTime[]            @relation("PrayerTimeUpdater")
+  prayerSchedulePeriods  PrayerSchedulePeriod[]  @relation("PrayerPeriodUpdater")
   recordedPayments       SandhaPayment[]         @relation("PaymentRecorder")
   verifiedSandhaPayments SandhaPayment[]         @relation("PaymentVerifier")
   sandhaPayments         SandhaPayment[]         @relation("UserPayments")
@@ -42,35 +43,36 @@ model User {
 }
 
 model Masjid {
-  id                  String               @id @default(uuid()) @db.Uuid
-  name                String               @db.VarChar(200)
-  nameTa              String?              @map("name_ta") @db.VarChar(200)
-  address             String
-  latitude            Decimal?             @db.Decimal(10, 8)
-  longitude           Decimal?             @db.Decimal(11, 8)
-  city                String               @db.VarChar(100)
-  state               String?              @db.VarChar(100)
-  country             String               @default("India") @db.VarChar(100)
-  phone               String?              @db.VarChar(20)
-  photoUrl            String?              @map("photo_url") @db.VarChar(500)
-  mapUrl              String?              @map("map_url") @db.VarChar(500)
-  qrToken             String               @unique @map("qr_token") @db.VarChar(64)
-  qrTokenExpiresAt    DateTime?            @map("qr_token_expires_at") @db.Timestamptz(6)
-  approvalStatus      MasjidApprovalStatus @default(PENDING) @map("approval_status")
-  rejectionReason     String?              @map("rejection_reason")
-  isActive            Boolean              @default(true) @map("is_active")
-  createdBy           String               @map("created_by") @db.Uuid
-  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  announcements       Announcement[]
-  admins              MasjidAdmin[]
-  creator             User                 @relation("MasjidCreator", fields: [createdBy], references: [id])
-  memberships         Membership[]
-  notificationPrefs   NotificationPref[]
-  prayerTimes         PrayerTime[]
-  sandhaPlans         SandhaPlan[]
-  specialSchedules    SpecialSchedule[]
-  ramadanDaySchedules RamadanDaySchedule[]
+  id                    String                 @id @default(uuid()) @db.Uuid
+  name                  String                 @db.VarChar(200)
+  nameTa                String?                @map("name_ta") @db.VarChar(200)
+  address               String
+  latitude              Decimal?               @db.Decimal(10, 8)
+  longitude             Decimal?               @db.Decimal(11, 8)
+  city                  String                 @db.VarChar(100)
+  state                 String?                @db.VarChar(100)
+  country               String                 @default("India") @db.VarChar(100)
+  phone                 String?                @db.VarChar(20)
+  photoUrl              String?                @map("photo_url") @db.VarChar(500)
+  mapUrl                String?                @map("map_url") @db.VarChar(500)
+  qrToken               String                 @unique @map("qr_token") @db.VarChar(64)
+  qrTokenExpiresAt      DateTime?              @map("qr_token_expires_at") @db.Timestamptz(6)
+  approvalStatus        MasjidApprovalStatus   @default(PENDING) @map("approval_status")
+  rejectionReason       String?                @map("rejection_reason")
+  isActive              Boolean                @default(true) @map("is_active")
+  createdBy             String                 @map("created_by") @db.Uuid
+  createdAt             DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  announcements         Announcement[]
+  admins                MasjidAdmin[]
+  creator               User                   @relation("MasjidCreator", fields: [createdBy], references: [id])
+  memberships           Membership[]
+  notificationPrefs     NotificationPref[]
+  prayerTimes           PrayerTime[]
+  prayerSchedulePeriods PrayerSchedulePeriod[]
+  sandhaPlans           SandhaPlan[]
+  specialSchedules      SpecialSchedule[]
+  ramadanDaySchedules   RamadanDaySchedule[]
 
   @@index([city], map: "idx_masjids_city")
   @@index([qrToken], map: "idx_masjids_qr_token")
@@ -141,6 +143,35 @@ model PrayerTime {
 
   @@unique([masjidId, date], name: "idx_prayer_times_unique")
   @@map("prayer_times")
+}
+
+model PrayerSchedulePeriod {
+  id            String    @id @default(uuid()) @db.Uuid
+  masjidId      String    @map("masjid_id") @db.Uuid
+  startDate     DateTime  @map("start_date") @db.Date
+  endDate       DateTime? @map("end_date") @db.Date
+  sunrise       String?   @db.VarChar(8)
+  sunset        String?   @db.VarChar(8)
+  fajrAdhan     String?   @map("fajr_adhan") @db.VarChar(8)
+  fajrJamaah    String    @map("fajr_jamaah") @db.VarChar(8)
+  dhuhrAdhan    String?   @map("dhuhr_adhan") @db.VarChar(8)
+  dhuhrJamaah   String    @map("dhuhr_jamaah") @db.VarChar(8)
+  asrAdhan      String?   @map("asr_adhan") @db.VarChar(8)
+  asrJamaah     String    @map("asr_jamaah") @db.VarChar(8)
+  maghribAdhan  String?   @map("maghrib_adhan") @db.VarChar(8)
+  maghribJamaah String    @map("maghrib_jamaah") @db.VarChar(8)
+  ishaAdhan     String?   @map("isha_adhan") @db.VarChar(8)
+  ishaJamaah    String    @map("isha_jamaah") @db.VarChar(8)
+  jummahKhutbah String?   @map("jummah_khutbah") @db.VarChar(8)
+  jummahJamaah  String?   @map("jummah_jamaah") @db.VarChar(8)
+  updatedBy     String    @map("updated_by") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  masjid        Masjid    @relation(fields: [masjidId], references: [id], onDelete: Cascade)
+  updater       User      @relation("PrayerPeriodUpdater", fields: [updatedBy], references: [id])
+
+  @@index([masjidId, startDate, endDate], map: "idx_prayer_schedule_periods_dates")
+  @@map("prayer_schedule_periods")
 }
 
 model RamadanDaySchedule {

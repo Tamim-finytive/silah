@@ -145,6 +145,7 @@ export class SandhaService {
         status = 'PARTIAL';
       } else if (pendingSum > 0) {
         status = 'PENDING_APPROVAL';
+
       }
 
       return {

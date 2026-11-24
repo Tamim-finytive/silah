@@ -173,10 +173,13 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
                   ),
                   const SizedBox(height: 18),
                   Text(
-                    lang.tr(en: 'Welcome', ta: 'வணக்கம்'),
+                    lang.tr(
+                      en: 'Assalamu Alaikum wa Rahmatullah',
+                      ta: 'அஸ்ஸலாமு அலைக்கும் வரஹ்மத்துல்லாஹ்',
+                    ),
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                        fontSize: 24,
+                        fontSize: 22,
                         fontWeight: FontWeight.bold,
                         color: AppColors.textPrimary),
                   ),

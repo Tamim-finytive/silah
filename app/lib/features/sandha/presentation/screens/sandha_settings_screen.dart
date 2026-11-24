@@ -116,7 +116,7 @@ class _SandhaSettingsScreenState extends State<SandhaSettingsScreen> {
       setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Sandha settings saved successfully! / சந்தா அமைப்புகள் சேமிக்கப்பட்டன!')),
+            content: Text('Alhamdulillah! Sandha settings saved successfully / அல்ஹம்துலில்லாஹ்! சந்தா அமைப்புகள் சேமிக்கப்பட்டன!')),
       );
       Navigator.pop(context, true);
     } catch (e) {
