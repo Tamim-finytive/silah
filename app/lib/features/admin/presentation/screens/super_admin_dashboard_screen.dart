@@ -36,8 +36,12 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   String _userSearchQuery = '';
   String _masjidSearchQuery = '';
   String _masjidStatus = 'ALL';
+  String _masjidApprovalStatus = 'ALL';
+  String _masjidSort = 'CREATED_DESC';
+  DateTimeRange? _masjidCreatedRange;
   int _masjidPage = 1;
   int _masjidTotal = 0;
+  int _masjidGeneration = 0;
   int _usersPage = 1;
   int _usersTotal = 0;
   final ScrollController _masjidScrollController = ScrollController();
@@ -120,18 +124,23 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   }
 
   Future<void> _loadAllData() async {
+    final masjidGeneration = ++_masjidGeneration;
     setState(() => _isLoading = true);
     try {
       final stats = await ApiService.instance.getSuperAdminStats();
       final masjidPage = await ApiService.instance.getAdminMasjids(
         search: _masjidSearchQuery,
         status: _masjidStatus,
+        approvalStatus: _masjidApprovalStatus,
+        sort: _masjidSort,
+        createdFrom: _masjidCreatedRange?.start,
+        createdTo: _masjidCreatedRange?.end,
         page: 1,
       );
       final requestStatus = _requestStatus;
       final requestGeneration = ++_requestGeneration;
       final requestPage = await ApiService.instance.getAdminMasjids(
-        status: requestStatus,
+        approvalStatus: requestStatus,
         page: 1,
       );
       final usersRes =
@@ -141,13 +150,16 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
       if (mounted) {
         setState(() {
           _stats = stats;
-          _allMasjids = masjidPage?['items'] ?? [];
-          _masjidTotal = masjidPage?['total'] ?? 0;
-          _masjidPage = 1;
-          _hasMoreMasjids = _allMasjids.length < _masjidTotal;
-          _masjidLoadError = masjidPage == null
-              ? 'Masjids could not be loaded. Pull down or tap refresh to try again.'
-              : null;
+          if (masjidGeneration == _masjidGeneration) {
+            _allMasjids = masjidPage?['items'] ?? [];
+            _masjidTotal = masjidPage?['total'] ?? 0;
+            _masjidPage = 1;
+            _hasMoreMasjids = _allMasjids.length < _masjidTotal;
+            _masjidLoadError = masjidPage == null
+                ? 'Masjids could not be loaded. Pull down or tap refresh to try again.'
+                : null;
+            _loadingMoreMasjids = false;
+          }
           if (requestStatus == _requestStatus &&
               requestGeneration == _requestGeneration) {
             _requestItems = requestPage?['items'] as List<dynamic>? ?? [];
@@ -175,7 +187,8 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   }
 
   Future<void> _loadMasjidPage({bool reset = false}) async {
-    if (_loadingMoreMasjids || (!reset && !_hasMoreMasjids)) return;
+    if ((!reset && _loadingMoreMasjids) || (!reset && !_hasMoreMasjids)) return;
+    final generation = reset ? ++_masjidGeneration : _masjidGeneration;
     final page = reset ? 1 : _masjidPage + 1;
     setState(() {
       _loadingMoreMasjids = true;
@@ -191,10 +204,14 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
       final result = await ApiService.instance.getAdminMasjids(
         search: _masjidSearchQuery,
         status: _masjidStatus,
+        approvalStatus: _masjidApprovalStatus,
+        sort: _masjidSort,
+        createdFrom: _masjidCreatedRange?.start,
+        createdTo: _masjidCreatedRange?.end,
         page: page,
       );
       if (result == null) throw StateError('Masjid directory request failed');
-      if (!mounted) return;
+      if (!mounted || generation != _masjidGeneration) return;
       final items = (result['items'] as List<dynamic>? ?? []);
       setState(() {
         _allMasjids = reset ? items : [..._allMasjids, ...items];
@@ -203,11 +220,13 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
         _hasMoreMasjids = _allMasjids.length < _masjidTotal;
       });
     } catch (error) {
-      if (mounted)
+      if (mounted && generation == _masjidGeneration)
         setState(
             () => _masjidLoadError = 'Could not load more masjids: $error');
     } finally {
-      if (mounted) setState(() => _loadingMoreMasjids = false);
+      if (mounted && generation == _masjidGeneration) {
+        setState(() => _loadingMoreMasjids = false);
+      }
     }
   }
 
@@ -265,7 +284,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     });
     try {
       final result = await ApiService.instance.getAdminMasjids(
-        status: requestStatus,
+        approvalStatus: requestStatus,
         page: page,
       );
       if (result == null) throw StateError('Request list could not be loaded');
@@ -399,6 +418,49 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   // -------------------------------------------------------------
   // TAB 2: Masjids List & Create
   // -------------------------------------------------------------
+  Future<void> _chooseMasjidCreatedRange() async {
+    final now = DateTime.now();
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 10),
+      lastDate: DateTime(now.year + 1, 12, 31),
+      initialDateRange: _masjidCreatedRange,
+      helpText: 'Filter masjids by creation date',
+    );
+    if (!mounted) return;
+    setState(() => _masjidCreatedRange = range);
+    _loadMasjidPage(reset: true);
+  }
+
+  String _shortDate(DateTime date) =>
+      '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+
+  ({IconData icon, Color color, String label}) _approvalPresentation(
+      String status) {
+    switch (status) {
+      case 'APPROVED':
+        return (
+          icon: Icons.check_circle,
+          color: Colors.green,
+          label: 'Approved'
+        );
+      case 'PENDING':
+        return (
+          icon: Icons.schedule,
+          color: Colors.orange,
+          label: 'Pending approval'
+        );
+      case 'REJECTED':
+        return (icon: Icons.cancel, color: Colors.red, label: 'Rejected');
+      default:
+        return (
+          icon: Icons.help,
+          color: Colors.grey,
+          label: 'Approval status unknown'
+        );
+    }
+  }
+
   Widget _buildMasjidsTab() {
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -421,10 +483,10 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: Row(children: [
-              Expanded(
-                child: TextField(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Column(
+              children: [
+                TextField(
                   decoration: InputDecoration(
                     hintText: 'Search masjid, city, or address',
                     prefixIcon: const Icon(Icons.search),
@@ -440,23 +502,87 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                         () => _loadMasjidPage(reset: true));
                   },
                 ),
-              ),
-              const SizedBox(width: 8),
-              DropdownButton<String>(
-                value: _masjidStatus,
-                items: const [
-                  DropdownMenuItem(value: 'ALL', child: Text('All')),
-                  DropdownMenuItem(value: 'ACTIVE', child: Text('Active')),
-                  DropdownMenuItem(value: 'INACTIVE', child: Text('Stopped')),
-                  DropdownMenuItem(value: 'PENDING', child: Text('Pending')),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _masjidStatus = value);
-                  _loadMasjidPage(reset: true);
-                },
-              ),
-            ]),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    DropdownButton<String>(
+                      value: _masjidStatus,
+                      underline: const SizedBox.shrink(),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'ALL', child: Text('All activity')),
+                        DropdownMenuItem(
+                            value: 'ACTIVE', child: Text('Active')),
+                        DropdownMenuItem(
+                            value: 'STOPPED', child: Text('Stopped')),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _masjidStatus = value);
+                        _loadMasjidPage(reset: true);
+                      },
+                    ),
+                    DropdownButton<String>(
+                      value: _masjidApprovalStatus,
+                      underline: const SizedBox.shrink(),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'ALL', child: Text('Any approval')),
+                        DropdownMenuItem(
+                            value: 'APPROVED', child: Text('Approved')),
+                        DropdownMenuItem(
+                            value: 'PENDING', child: Text('Pending')),
+                        DropdownMenuItem(
+                            value: 'REJECTED', child: Text('Rejected')),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _masjidApprovalStatus = value);
+                        _loadMasjidPage(reset: true);
+                      },
+                    ),
+                    DropdownButton<String>(
+                      value: _masjidSort,
+                      underline: const SizedBox.shrink(),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'CREATED_DESC', child: Text('Newest')),
+                        DropdownMenuItem(
+                            value: 'CREATED_ASC', child: Text('Oldest')),
+                        DropdownMenuItem(
+                            value: 'NAME_ASC', child: Text('Name A–Z')),
+                        DropdownMenuItem(
+                            value: 'NAME_DESC', child: Text('Name Z–A')),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _masjidSort = value);
+                        _loadMasjidPage(reset: true);
+                      },
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _chooseMasjidCreatedRange,
+                      icon: const Icon(Icons.date_range, size: 17),
+                      label: Text(_masjidCreatedRange == null
+                          ? 'Date range'
+                          : '${_shortDate(_masjidCreatedRange!.start)} – ${_shortDate(_masjidCreatedRange!.end)}'),
+                    ),
+                    if (_masjidCreatedRange != null)
+                      IconButton(
+                        tooltip: 'Clear date range',
+                        onPressed: () {
+                          setState(() => _masjidCreatedRange = null);
+                          _loadMasjidPage(reset: true);
+                        },
+                        icon: const Icon(Icons.close),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
           Expanded(
             child: _isLoading
@@ -491,6 +617,10 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                               final active = m['isActive'] == true;
                               final approval =
                                   m['approvalStatus']?.toString() ?? 'UNKNOWN';
+                              final approvalView =
+                                  _approvalPresentation(approval);
+                              final createdAt = DateTime.tryParse(
+                                  m['createdAt']?.toString() ?? '');
                               return Card(
                                 margin: const EdgeInsets.only(bottom: 12),
                                 shape: RoundedRectangleBorder(
@@ -508,6 +638,8 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                     m['name'] ?? 'Unnamed Masjid',
                                     style: const TextStyle(
                                         fontWeight: FontWeight.bold),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                   subtitle: Column(
                                     crossAxisAlignment:
@@ -535,53 +667,49 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                           ),
                                         ],
                                       ),
+                                      if (createdAt != null) ...[
+                                        const SizedBox(height: 3),
+                                        Text(
+                                            'Created ${_shortDate(createdAt.toLocal())}',
+                                            style: const TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.grey)),
+                                      ],
                                     ],
                                   ),
                                   trailing: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 8, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: active
-                                              ? Colors.green.shade50
-                                              : Colors.grey.shade200,
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                          border: Border.all(
-                                              color: active
-                                                  ? Colors.green.shade300
-                                                  : Colors.grey.shade400),
+                                      Tooltip(
+                                        message: approvalView.label,
+                                        child: IconButton(
+                                          constraints:
+                                              const BoxConstraints.tightFor(
+                                                  width: 38, height: 40),
+                                          padding: EdgeInsets.zero,
+                                          icon: Icon(approvalView.icon,
+                                              color: approvalView.color,
+                                              size: 22),
+                                          onPressed: () => ScaffoldMessenger.of(
+                                              context)
+                                            ..hideCurrentSnackBar()
+                                            ..showSnackBar(SnackBar(
+                                                content:
+                                                    Text(approvalView.label),
+                                                duration: const Duration(
+                                                    seconds: 2))),
                                         ),
-                                        child: Text(
-                                            active
-                                                ? approval
-                                                : (approval == 'PENDING'
-                                                    ? 'PENDING'
-                                                    : 'STOPPED'),
-                                            style: TextStyle(
-                                                color: active
-                                                    ? Colors.green.shade800
-                                                    : Colors.grey.shade800,
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.bold)),
                                       ),
-                                      const SizedBox(width: 4),
-                                      if (approval == 'APPROVED')
-                                        IconButton(
-                                          icon: Icon(
-                                              active
-                                                  ? Icons.pause_circle_outline
-                                                  : Icons.play_circle_outline,
-                                              color: AppColors.primary,
-                                              size: 21),
-                                          tooltip: active
-                                              ? 'Stop Masjid'
-                                              : 'Activate Masjid',
-                                          onPressed: () =>
-                                              _setMasjidStatus(m, !active),
+                                      Tooltip(
+                                        message: active ? 'Active' : 'Stopped',
+                                        child: Icon(
+                                          Icons.circle,
+                                          size: 12,
+                                          color: active
+                                              ? Colors.green
+                                              : Colors.grey,
                                         ),
+                                      ),
                                       IconButton(
                                         icon: const Icon(Icons.delete_outline,
                                             color: Colors.red, size: 20),
@@ -601,19 +729,6 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     );
   }
 
-  Future<void> _setMasjidStatus(
-      Map<String, dynamic> masjid, bool active) async {
-    try {
-      await ApiService.instance
-          .setMasjidActive(masjid['id'].toString(), active);
-      await _loadAllData();
-    } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not update masjid: $e')));
-    }
-  }
-
   Future<void> _showMasjidDetails(Map<String, dynamic> masjid) async {
     final id = masjid['id']?.toString();
     if (id == null) return;
@@ -627,7 +742,6 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
 
   void _showCreateMasjidDialog() {
     final nameCtrl = TextEditingController();
-    final nameTaCtrl = TextEditingController();
     final cityCtrl = TextEditingController();
     final addrCtrl = TextEditingController();
     final latCtrl = TextEditingController();
@@ -651,11 +765,6 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                   controller: nameCtrl,
                   decoration:
                       const InputDecoration(labelText: 'Masjid Name *')),
-              const SizedBox(height: 12),
-              TextField(
-                  controller: nameTaCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Tamil Name (Optional)')),
               const SizedBox(height: 12),
               TextField(
                   controller: cityCtrl,
@@ -736,9 +845,6 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                   name: nameCtrl.text.trim(),
                   city: cityCtrl.text.trim(),
                   address: addrCtrl.text.trim(),
-                  nameTa: nameTaCtrl.text.trim().isEmpty
-                      ? null
-                      : nameTaCtrl.text.trim(),
                   latitude: double.tryParse(latCtrl.text),
                   longitude: double.tryParse(lngCtrl.text),
                   mapUrl: mapUrlCtrl.text.trim().isEmpty
@@ -1018,8 +1124,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                                         VisualDensity.compact,
                                                   ),
                                                   onPressed: () =>
-                                                      _handleReject(
-                                                          req['id'],
+                                                      _handleReject(req['id'],
                                                           req['name'] ?? ''),
                                                   child: const Text('Reject',
                                                       style: TextStyle(
@@ -1032,8 +1137,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                               SizedBox(
                                                 height: 32,
                                                 child: FilledButton(
-                                                  style:
-                                                      FilledButton.styleFrom(
+                                                  style: FilledButton.styleFrom(
                                                     backgroundColor:
                                                         AppColors.primary,
                                                     foregroundColor:
@@ -1045,8 +1149,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                                         VisualDensity.compact,
                                                   ),
                                                   onPressed: () =>
-                                                      _handleApprove(
-                                                          req['id'],
+                                                      _handleApprove(req['id'],
                                                           req['name'] ?? ''),
                                                   child: const Text('Approve',
                                                       style: TextStyle(
@@ -1827,7 +1930,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
             if (i == 4) _onUsersScroll();
           });
         },
-        labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.dashboard_outlined),

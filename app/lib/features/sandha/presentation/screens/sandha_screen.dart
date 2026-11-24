@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/l10n/language_provider.dart';
@@ -19,11 +21,124 @@ class _SandhaScreenState extends ConsumerState<SandhaScreen> {
   bool _isLoading = true;
   List<dynamic> _enrollments = [];
   List<dynamic> _plans = [];
+  bool _paymentBusy = false;
 
   @override
   void initState() {
     super.initState();
     _fetchSandhaData();
+  }
+
+  String _periodStart() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-01';
+  }
+
+  String _periodEnd() {
+    final now = DateTime.now();
+    final end = DateTime(now.year, now.month + 1, 0);
+    return '${end.year}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _paySandha(Map<String, dynamic> enrollment) async {
+    final masjidId =
+        ref.read(prayerTimesProvider).activeMasjid?['id']?.toString();
+    final plan = Map<String, dynamic>.from(enrollment['plan'] as Map? ?? {});
+    final upiId = plan['upiId']?.toString();
+    final memberId = enrollment['id']?.toString();
+    if (masjidId == null ||
+        memberId == null ||
+        upiId == null ||
+        upiId.isEmpty) {
+      _message('The masjid has not set its UPI payment details yet.');
+      return;
+    }
+    final now = DateTime.now();
+    final month = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+    final payments = (enrollment['payments'] as List<dynamic>? ?? []);
+    final settled = payments
+        .where((p) =>
+            p['periodStart']?.toString().startsWith(month) == true &&
+            (p['status'] == 'PAID' || p['status'] == 'PARTIAL'))
+        .fold<double>(
+            0, (sum, p) => sum + (double.tryParse('${p['amount']}') ?? 0));
+    final pending = payments.any((p) =>
+        p['periodStart']?.toString().startsWith(month) == true &&
+        p['status'] == 'PENDING');
+    if (pending) {
+      _message(
+          'Your payment screenshot for this month is waiting for admin review.');
+      return;
+    }
+    final balance = ((double.tryParse('${plan['amount']}') ?? 0) - settled)
+        .clamp(0, double.infinity)
+        .toDouble();
+    if (balance <= 0) {
+      _message('This month’s Sandha is already marked paid.');
+      return;
+    }
+    final payee =
+        Uri.encodeComponent((plan['payeeName'] ?? 'Masjid Sandha').toString());
+    final note = Uri.encodeComponent('Sandha $month');
+    final uri = Uri.parse(
+        'upi://pay?pa=${Uri.encodeComponent(upiId)}&pn=$payee&am=${balance.toStringAsFixed(2)}&cu=INR&tn=$note');
+    if (!await canLaunchUrl(uri) ||
+        !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      _message('No UPI app could open this payment. Contact the masjid admin.');
+      return;
+    }
+    _message(
+        'Payment app opened with ₹${balance.toStringAsFixed(2)}. After paying, upload your receipt below.');
+  }
+
+  Future<void> _uploadReceipt(Map<String, dynamic> enrollment) async {
+    final masjidId =
+        ref.read(prayerTimesProvider).activeMasjid?['id']?.toString();
+    if (masjidId == null) return;
+    final plan = Map<String, dynamic>.from(enrollment['plan'] as Map? ?? {});
+    final memberId = enrollment['id']?.toString();
+    if (memberId == null) return;
+    final now = DateTime.now();
+    final month = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+    final payments = enrollment['payments'] as List<dynamic>? ?? [];
+    final settled = payments
+        .where((p) =>
+            p['periodStart']?.toString().startsWith(month) == true &&
+            (p['status'] == 'PAID' || p['status'] == 'PARTIAL'))
+        .fold<double>(
+            0, (sum, p) => sum + (double.tryParse('${p['amount']}') ?? 0));
+    final balance = ((double.tryParse('${plan['amount']}') ?? 0) - settled)
+        .clamp(0, double.infinity)
+        .toDouble();
+    if (balance <= 0) return;
+    final image = await ImagePicker()
+        .pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (image == null) return;
+    setState(() => _paymentBusy = true);
+    try {
+      final uploaded =
+          await ApiService.instance.uploadSandhaProof(masjidId, image.path);
+      await ApiService.instance.submitSandhaProof(masjidId, {
+        'planMemberId': memberId,
+        'amount': balance,
+        'periodStart': _periodStart(),
+        'periodEnd': _periodEnd(),
+        'proofPath': uploaded['path'],
+      });
+      await _fetchSandhaData();
+      _message(
+          'Receipt submitted. Sandha will show as paid after admin verification.');
+    } catch (error) {
+      _message(ApiService.getErrorMessage(error,
+          fallback: 'Could not submit the receipt.'));
+    } finally {
+      if (mounted) setState(() => _paymentBusy = false);
+    }
+  }
+
+  void _message(String value) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(value)));
   }
 
   Future<void> _fetchSandhaData() async {
@@ -304,6 +419,92 @@ class _SandhaScreenState extends ConsumerState<SandhaScreen> {
                                     ),
                                   ),
                                 );
+                              }),
+                            ],
+                            if (_enrollments.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Text('Your monthly payments',
+                                  style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.textPrimary)),
+                              const SizedBox(height: 8),
+                              ..._enrollments.map((raw) {
+                                final enrollment =
+                                    Map<String, dynamic>.from(raw as Map);
+                                final payments =
+                                    enrollment['payments'] as List<dynamic>? ??
+                                        [];
+                                final now = DateTime.now();
+                                final month =
+                                    '${now.year}-${now.month.toString().padLeft(2, '0')}';
+                                final monthPayments = payments
+                                    .where((p) =>
+                                        p['periodStart']
+                                            ?.toString()
+                                            .startsWith(month) ==
+                                        true)
+                                    .toList();
+                                final status = monthPayments
+                                        .any((p) => p['status'] == 'PAID')
+                                    ? 'Paid'
+                                    : monthPayments.any(
+                                            (p) => p['status'] == 'PENDING')
+                                        ? 'Waiting for verification'
+                                        : 'Due';
+                                final receiptPending = monthPayments
+                                    .any((p) => p['status'] == 'PENDING');
+                                return Card(
+                                    child: Padding(
+                                        padding: const EdgeInsets.all(12),
+                                        child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: [
+                                              Text(
+                                                  '${enrollment['plan']?['name'] ?? 'Sandha'} · $month',
+                                                  style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w600)),
+                                              const SizedBox(height: 4),
+                                              Text('Status: $status'),
+                                              if (monthPayments.isNotEmpty)
+                                                ...monthPayments.map((p) => Text(
+                                                    '₹${p['amount']} · ${p['status']}',
+                                                    style: TextStyle(
+                                                        color: AppColors
+                                                            .textSecondary))),
+                                              const SizedBox(height: 8),
+                                              Wrap(
+                                                  spacing: 8,
+                                                  runSpacing: 8,
+                                                  children: [
+                                                    FilledButton.icon(
+                                                        onPressed: _paymentBusy ||
+                                                                receiptPending ||
+                                                                status == 'Paid'
+                                                            ? null
+                                                            : () => _paySandha(
+                                                                enrollment),
+                                                        icon: const Icon(
+                                                            Icons.payment),
+                                                        label: const Text(
+                                                            'Pay with UPI')),
+                                                    OutlinedButton.icon(
+                                                        onPressed: _paymentBusy ||
+                                                                receiptPending ||
+                                                                status == 'Paid'
+                                                            ? null
+                                                            : () =>
+                                                                _uploadReceipt(
+                                                                    enrollment),
+                                                        icon: const Icon(
+                                                            Icons.upload_file),
+                                                        label: Text(_paymentBusy
+                                                            ? 'Uploading…'
+                                                            : 'Upload receipt'))
+                                                  ]),
+                                            ])));
                               }),
                             ],
                           ],

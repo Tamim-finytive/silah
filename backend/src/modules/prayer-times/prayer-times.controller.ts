@@ -1,7 +1,7 @@
 import { Controller, Get, Put, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { PrayerTimesService } from './prayer-times.service';
-import { UpdatePrayerTimeDto, UpdatePrayerTimeRangeDto } from './dto/prayer-time.dto';
+import { RamadanDayScheduleDto, UpdatePrayerTimeDto, UpdatePrayerTimeRangeDto, UpsertRamadanScheduleDto } from './dto/prayer-time.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { MasjidRoleGuard } from '../../common/guards/masjid-role.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -30,6 +30,39 @@ export class PrayerTimesController {
     @Query('month') month: number,
   ) {
     return this.prayerTimesService.getMonthSchedule(masjidId, Number(year), Number(month));
+  }
+
+  @Get('ramadan')
+  @ApiOperation({ summary: 'Get saved Ramadan fasting times for a month' })
+  @ApiQuery({ name: 'year', required: true })
+  @ApiQuery({ name: 'month', required: true })
+  async getRamadanMonth(
+    @Param('masjidId') masjidId: string,
+    @Query('year') year: number,
+    @Query('month') month: number,
+  ) {
+    return this.prayerTimesService.getRamadanMonth(
+      masjidId,
+      Number(year),
+      Number(month),
+    );
+  }
+
+  @Put('ramadan')
+  @UseGuards(JwtAuthGuard, MasjidRoleGuard)
+  @MasjidRoles(RoleType.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create or edit per-day Ramadan fasting times' })
+  async upsertRamadanDays(
+    @Param('masjidId') masjidId: string,
+    @CurrentUser('id') userId: string,
+    @Body() dto: UpsertRamadanScheduleDto,
+  ) {
+    return this.prayerTimesService.upsertRamadanDays(
+      masjidId,
+      userId,
+      dto.days as RamadanDayScheduleDto[],
+    );
   }
 
   @Put()

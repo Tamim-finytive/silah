@@ -456,6 +456,10 @@ class ApiService {
   Future<Map<String, dynamic>?> getAdminMasjids({
     String? search,
     String? status,
+    String? approvalStatus,
+    String sort = 'CREATED_DESC',
+    DateTime? createdFrom,
+    DateTime? createdTo,
     int page = 1,
     int limit = 20,
   }) async {
@@ -464,6 +468,11 @@ class ApiService {
       final res = await _dio.get('/masjids/admin/directory', queryParameters: {
         if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
         if (status != null && status != 'ALL') 'status': status,
+        if (approvalStatus != null && approvalStatus != 'ALL')
+          'approvalStatus': approvalStatus,
+        'sort': sort,
+        if (createdFrom != null) 'createdFrom': _formatDateQuery(createdFrom),
+        if (createdTo != null) 'createdTo': _formatDateQuery(createdTo),
         'page': page,
         'limit': limit,
       });
@@ -473,6 +482,9 @@ class ApiService {
     } catch (_) {}
     return null;
   }
+
+  String _formatDateQuery(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
   Future<Map<String, dynamic>> setMasjidActive(
       String masjidId, bool isActive) async {
@@ -771,6 +783,58 @@ class ApiService {
     return [];
   }
 
+  Future<Map<String, dynamic>> uploadSandhaProof(
+      String masjidId, String filePath) async {
+    final form = FormData.fromMap({
+      'masjidId': masjidId,
+      'file': await MultipartFile.fromFile(filePath),
+    });
+    final res = await _dio.post('/uploads/sandha-proof', data: form);
+    return Map<String, dynamic>.from(res.data['data'] as Map);
+  }
+
+  Future<Map<String, dynamic>> submitSandhaProof(
+      String masjidId, Map<String, dynamic> body) async {
+    final res =
+        await _dio.post('/masjids/$masjidId/sandha/payments/proof', data: body);
+    return Map<String, dynamic>.from(res.data['data'] as Map);
+  }
+
+  Future<Map<String, dynamic>> createSandhaPlan(
+      String masjidId, Map<String, dynamic> body) async {
+    final res = await _dio.post('/masjids/$masjidId/sandha/plans', data: body);
+    return Map<String, dynamic>.from(res.data['data'] as Map);
+  }
+
+  Future<Map<String, dynamic>> updateSandhaPlan(
+      String masjidId, String planId, Map<String, dynamic> body) async {
+    final res =
+        await _dio.put('/masjids/$masjidId/sandha/plans/$planId', data: body);
+    return Map<String, dynamic>.from(res.data['data'] as Map);
+  }
+
+  Future<Map<String, dynamic>> getAdminSandhaPayments(
+      String masjidId, String month,
+      {String status = 'ALL', int page = 1}) async {
+    final res = await _dio.get('/masjids/$masjidId/sandha/admin/payments',
+        queryParameters: {
+          'month': month,
+          'status': status,
+          'page': page,
+          'limit': 20
+        });
+    return Map<String, dynamic>.from(res.data['data'] as Map);
+  }
+
+  Future<void> reviewSandhaPayment(String masjidId, String paymentId,
+      {required bool approve, String? notes}) async {
+    await _dio
+        .put('/masjids/$masjidId/sandha/payments/$paymentId/review', data: {
+      'decision': approve ? 'APPROVE' : 'REJECT',
+      if (notes != null && notes.isNotEmpty) 'notes': notes
+    });
+  }
+
   Future<Map<String, dynamic>> updateMasjid(
       String masjidId, Map<String, dynamic> dto) async {
     final res = await _dio.put('/masjids/$masjidId', data: dto);
@@ -801,6 +865,48 @@ class ApiService {
     final res =
         await _dio.post('/masjids/$masjidId/prayer-times/range', data: dto);
     return res.data;
+  }
+
+  Future<List<dynamic>> getPrayerScheduleMonth(
+      String masjidId, int year, int month) async {
+    final res = await _dio.get(
+      '/masjids/$masjidId/prayer-times/schedule',
+      queryParameters: {'year': year, 'month': month},
+    );
+    if (res.data is Map &&
+        res.data['success'] == true &&
+        res.data['data'] is List) {
+      return res.data['data'] as List<dynamic>;
+    }
+    throw ApiException('Prayer schedule could not be loaded.');
+  }
+
+  Future<List<dynamic>> getRamadanScheduleMonth(
+      String masjidId, int year, int month) async {
+    final res = await _dio.get(
+      '/masjids/$masjidId/prayer-times/ramadan',
+      queryParameters: {'year': year, 'month': month},
+    );
+    if (res.data is Map &&
+        res.data['success'] == true &&
+        res.data['data'] is List) {
+      return res.data['data'] as List<dynamic>;
+    }
+    throw ApiException('Ramadan schedule could not be loaded.');
+  }
+
+  Future<List<dynamic>> saveRamadanSchedule(
+      String masjidId, List<Map<String, dynamic>> days) async {
+    final res = await _dio.put(
+      '/masjids/$masjidId/prayer-times/ramadan',
+      data: {'days': days},
+    );
+    if (res.data is Map &&
+        res.data['success'] == true &&
+        res.data['data'] is List) {
+      return res.data['data'] as List<dynamic>;
+    }
+    throw ApiException('Ramadan schedule could not be saved.');
   }
 
   Future<List<dynamic>> getSpecialSchedules(String masjidId) async {

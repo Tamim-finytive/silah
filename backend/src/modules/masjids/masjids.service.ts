@@ -132,15 +132,42 @@ export class MasjidsService {
     return { items, total, page, limit, hasMore: page * limit < total };
   }
 
-  async listAdminDirectory(query: { search?: string; status?: string; page?: number; limit?: number }) {
+  async listAdminDirectory(query: {
+    search?: string;
+    status?: string;
+    approvalStatus?: string;
+    sort?: string;
+    createdFrom?: string;
+    createdTo?: string;
+    page?: number;
+    limit?: number;
+  }) {
     const page = Math.max(1, query.page || 1);
     const limit = Math.min(100, Math.max(1, query.limit || 20));
     const where: Prisma.MasjidWhereInput = {};
     if (query.status === 'ACTIVE') where.isActive = true;
-    if (query.status === 'INACTIVE') where.isActive = false;
-    if (query.status === 'PENDING') where.approvalStatus = MasjidApprovalStatus.PENDING;
-    if (query.status === 'APPROVED') where.approvalStatus = MasjidApprovalStatus.APPROVED;
-    if (query.status === 'REJECTED') where.approvalStatus = MasjidApprovalStatus.REJECTED;
+    if (query.status === 'STOPPED') where.isActive = false;
+    if (query.approvalStatus && query.approvalStatus !== 'ALL') {
+      if (!Object.values(MasjidApprovalStatus).includes(query.approvalStatus as MasjidApprovalStatus)) {
+        throw new BadRequestException('Invalid masjid approval status');
+      }
+      where.approvalStatus = query.approvalStatus as MasjidApprovalStatus;
+    }
+    if (query.createdFrom || query.createdTo) {
+      const createdAt: Prisma.DateTimeFilter = {};
+      if (query.createdFrom) {
+        const from = new Date(`${query.createdFrom}T00:00:00.000Z`);
+        if (Number.isNaN(from.getTime())) throw new BadRequestException('Invalid start date');
+        createdAt.gte = from;
+      }
+      if (query.createdTo) {
+        const to = new Date(`${query.createdTo}T00:00:00.000Z`);
+        if (Number.isNaN(to.getTime())) throw new BadRequestException('Invalid end date');
+        to.setUTCDate(to.getUTCDate() + 1);
+        createdAt.lt = to;
+      }
+      where.createdAt = createdAt;
+    }
     if (query.search?.trim()) {
       const term = query.search.trim();
       where.OR = [
@@ -150,13 +177,21 @@ export class MasjidsService {
         { address: { contains: term, mode: 'insensitive' } },
       ];
     }
+    const orderBy: Prisma.MasjidOrderByWithRelationInput[] =
+      query.sort === 'CREATED_ASC'
+        ? [{ createdAt: 'asc' }, { id: 'asc' }]
+        : query.sort === 'NAME_ASC'
+          ? [{ name: 'asc' }, { id: 'asc' }]
+          : query.sort === 'NAME_DESC'
+            ? [{ name: 'desc' }, { id: 'desc' }]
+            : [{ createdAt: 'desc' }, { id: 'desc' }];
     const [total, items] = await Promise.all([
       this.prisma.masjid.count({ where }),
       this.prisma.masjid.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         include: {
           creator: { select: { id: true, name: true, phone: true } },
           _count: { select: { memberships: true, admins: true } },

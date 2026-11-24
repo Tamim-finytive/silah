@@ -10,64 +10,67 @@ datasource db {
 }
 
 model User {
-  id                String             @id @default(uuid()) @db.Uuid
-  phone             String             @unique @db.VarChar(20)
-  name              String             @db.VarChar(100)
-  avatarUrl         String?            @map("avatar_url") @db.VarChar(500)
-  language          Language           @default(en)
-  isSuperAdmin      Boolean            @default(false) @map("is_super_admin")
-  isOnboarded       Boolean            @default(false) @map("is_onboarded")
-  isActive          Boolean            @default(true) @map("is_active")
-  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  address           String?
-  announcements     Announcement[]     @relation("AnnouncementCreator")
-  announcementStates AnnouncementUserState[]
-  devices           Device[]
-  masjidAdmins      MasjidAdmin[]
-  createdMasjids    Masjid[]           @relation("MasjidCreator")
-  memberships       Membership[]
-  notificationPrefs NotificationPref[]
-  prayerTimes       PrayerTime[]       @relation("PrayerTimeUpdater")
-  recordedPayments  SandhaPayment[]    @relation("PaymentRecorder")
-  sandhaPayments    SandhaPayment[]    @relation("UserPayments")
-  sandhaPlanMembers SandhaPlanMember[] @relation("LinkedUserPlanMembers")
-  sandhaPlans       SandhaPlan[]       @relation("SandhaPlanCreator")
-  specialSchedules  SpecialSchedule[]  @relation("ScheduleCreator")
+  id                     String                  @id @default(uuid()) @db.Uuid
+  phone                  String                  @unique @db.VarChar(20)
+  name                   String                  @db.VarChar(100)
+  avatarUrl              String?                 @map("avatar_url") @db.VarChar(500)
+  language               Language                @default(en)
+  isSuperAdmin           Boolean                 @default(false) @map("is_super_admin")
+  isOnboarded            Boolean                 @default(false) @map("is_onboarded")
+  isActive               Boolean                 @default(true) @map("is_active")
+  createdAt              DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  address                String?
+  announcements          Announcement[]          @relation("AnnouncementCreator")
+  announcementStates     AnnouncementUserState[]
+  devices                Device[]
+  masjidAdmins           MasjidAdmin[]
+  createdMasjids         Masjid[]                @relation("MasjidCreator")
+  memberships            Membership[]
+  notificationPrefs      NotificationPref[]
+  prayerTimes            PrayerTime[]            @relation("PrayerTimeUpdater")
+  recordedPayments       SandhaPayment[]         @relation("PaymentRecorder")
+  verifiedSandhaPayments SandhaPayment[]         @relation("PaymentVerifier")
+  sandhaPayments         SandhaPayment[]         @relation("UserPayments")
+  sandhaPlanMembers      SandhaPlanMember[]      @relation("LinkedUserPlanMembers")
+  sandhaPlans            SandhaPlan[]            @relation("SandhaPlanCreator")
+  specialSchedules       SpecialSchedule[]       @relation("ScheduleCreator")
+  ramadanDaySchedules    RamadanDaySchedule[]    @relation("RamadanScheduleCreator")
 
   @@index([phone], map: "idx_users_phone")
   @@map("users")
 }
 
 model Masjid {
-  id                String             @id @default(uuid()) @db.Uuid
-  name              String             @db.VarChar(200)
-  nameTa            String?            @map("name_ta") @db.VarChar(200)
-  address           String
-  latitude          Decimal?           @db.Decimal(10, 8)
-  longitude         Decimal?           @db.Decimal(11, 8)
-  city              String             @db.VarChar(100)
-  state             String?            @db.VarChar(100)
-  country           String             @default("India") @db.VarChar(100)
-  phone             String?            @db.VarChar(20)
-  photoUrl          String?            @map("photo_url") @db.VarChar(500)
-  mapUrl            String?            @map("map_url") @db.VarChar(500)
-  qrToken           String             @unique @map("qr_token") @db.VarChar(64)
-  qrTokenExpiresAt  DateTime?          @map("qr_token_expires_at") @db.Timestamptz(6)
-  approvalStatus    MasjidApprovalStatus @default(PENDING) @map("approval_status")
-  rejectionReason   String?            @map("rejection_reason")
-  isActive          Boolean            @default(true) @map("is_active")
-  createdBy         String             @map("created_by") @db.Uuid
-  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  announcements     Announcement[]
-  admins            MasjidAdmin[]
-  creator           User               @relation("MasjidCreator", fields: [createdBy], references: [id])
-  memberships       Membership[]
-  notificationPrefs NotificationPref[]
-  prayerTimes       PrayerTime[]
-  sandhaPlans       SandhaPlan[]
-  specialSchedules  SpecialSchedule[]
+  id                  String               @id @default(uuid()) @db.Uuid
+  name                String               @db.VarChar(200)
+  nameTa              String?              @map("name_ta") @db.VarChar(200)
+  address             String
+  latitude            Decimal?             @db.Decimal(10, 8)
+  longitude           Decimal?             @db.Decimal(11, 8)
+  city                String               @db.VarChar(100)
+  state               String?              @db.VarChar(100)
+  country             String               @default("India") @db.VarChar(100)
+  phone               String?              @db.VarChar(20)
+  photoUrl            String?              @map("photo_url") @db.VarChar(500)
+  mapUrl              String?              @map("map_url") @db.VarChar(500)
+  qrToken             String               @unique @map("qr_token") @db.VarChar(64)
+  qrTokenExpiresAt    DateTime?            @map("qr_token_expires_at") @db.Timestamptz(6)
+  approvalStatus      MasjidApprovalStatus @default(PENDING) @map("approval_status")
+  rejectionReason     String?              @map("rejection_reason")
+  isActive            Boolean              @default(true) @map("is_active")
+  createdBy           String               @map("created_by") @db.Uuid
+  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  announcements       Announcement[]
+  admins              MasjidAdmin[]
+  creator             User                 @relation("MasjidCreator", fields: [createdBy], references: [id])
+  memberships         Membership[]
+  notificationPrefs   NotificationPref[]
+  prayerTimes         PrayerTime[]
+  sandhaPlans         SandhaPlan[]
+  specialSchedules    SpecialSchedule[]
+  ramadanDaySchedules RamadanDaySchedule[]
 
   @@index([city], map: "idx_masjids_city")
   @@index([qrToken], map: "idx_masjids_qr_token")
@@ -140,6 +143,23 @@ model PrayerTime {
   @@map("prayer_times")
 }
 
+model RamadanDaySchedule {
+  id        String   @id @default(uuid()) @db.Uuid
+  masjidId  String   @map("masjid_id") @db.Uuid
+  date      DateTime @db.Date
+  sehriEnd  String   @map("sehri_end") @db.VarChar(8)
+  iftarTime String   @map("iftar_time") @db.VarChar(8)
+  notes     String?
+  createdBy String   @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  masjid    Masjid   @relation(fields: [masjidId], references: [id], onDelete: Cascade)
+  creator   User     @relation("RamadanScheduleCreator", fields: [createdBy], references: [id])
+
+  @@unique([masjidId, date], name: "idx_ramadan_day_schedules_unique")
+  @@map("ramadan_day_schedules")
+}
+
 model SpecialSchedule {
   id        String       @id @default(uuid()) @db.Uuid
   masjidId  String       @map("masjid_id") @db.Uuid
@@ -163,26 +183,26 @@ model SpecialSchedule {
 }
 
 model Announcement {
-  id          String               @id @default(uuid()) @db.Uuid
-  masjidId    String?              @map("masjid_id") @db.Uuid
-  createdBy   String               @map("created_by") @db.Uuid
-  category    AnnouncementCategory
-  title       String               @db.VarChar(300)
-  titleTa     String?              @map("title_ta") @db.VarChar(300)
-  body        String
-  bodyTa      String?              @map("body_ta")
-  imageUrl    String?              @map("image_url")
-  audioUrl    String?              @map("audio_url")
-  audioDuration Int?               @map("audio_duration")
-  isPinned    Boolean              @default(false) @map("is_pinned")
-  notifyPush  Boolean              @default(true) @map("notify_push")
-  publishedAt DateTime?            @map("published_at") @db.Timestamptz(6)
-  expiresAt   DateTime?            @map("expires_at") @db.Timestamptz(6)
-  createdAt   DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  creator     User                 @relation("AnnouncementCreator", fields: [createdBy], references: [id])
-  masjid      Masjid?              @relation(fields: [masjidId], references: [id], onDelete: Cascade)
-  userStates  AnnouncementUserState[]
+  id            String                  @id @default(uuid()) @db.Uuid
+  masjidId      String?                 @map("masjid_id") @db.Uuid
+  createdBy     String                  @map("created_by") @db.Uuid
+  category      AnnouncementCategory
+  title         String                  @db.VarChar(300)
+  titleTa       String?                 @map("title_ta") @db.VarChar(300)
+  body          String
+  bodyTa        String?                 @map("body_ta")
+  imageUrl      String?                 @map("image_url")
+  audioUrl      String?                 @map("audio_url")
+  audioDuration Int?                    @map("audio_duration")
+  isPinned      Boolean                 @default(false) @map("is_pinned")
+  notifyPush    Boolean                 @default(true) @map("notify_push")
+  publishedAt   DateTime?               @map("published_at") @db.Timestamptz(6)
+  expiresAt     DateTime?               @map("expires_at") @db.Timestamptz(6)
+  createdAt     DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  creator       User                    @relation("AnnouncementCreator", fields: [createdBy], references: [id])
+  masjid        Masjid?                 @relation(fields: [masjidId], references: [id], onDelete: Cascade)
+  userStates    AnnouncementUserState[]
 
   @@index([masjidId, publishedAt], map: "idx_announcements_published")
   @@map("announcements")
@@ -206,20 +226,23 @@ model AnnouncementUserState {
 }
 
 model SandhaPlan {
-  id          String             @id @default(uuid()) @db.Uuid
-  masjidId    String             @map("masjid_id") @db.Uuid
-  name        String             @db.VarChar(200)
-  amount      Decimal            @db.Decimal(10, 2)
-  frequency   SandhaFrequency
-  description String?
-  isActive    Boolean            @default(true) @map("is_active")
-  createdBy   String             @map("created_by") @db.Uuid
-  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  payments    SandhaPayment[]
-  members     SandhaPlanMember[]
-  creator     User               @relation("SandhaPlanCreator", fields: [createdBy], references: [id])
-  masjid      Masjid             @relation(fields: [masjidId], references: [id], onDelete: Cascade)
+  id           String             @id @default(uuid()) @db.Uuid
+  masjidId     String             @map("masjid_id") @db.Uuid
+  name         String             @db.VarChar(200)
+  amount       Decimal            @db.Decimal(10, 2)
+  frequency    SandhaFrequency
+  description  String?
+  upiId        String?            @map("upi_id") @db.VarChar(120)
+  payeeName    String?            @map("payee_name") @db.VarChar(120)
+  contactPhone String?            @map("contact_phone") @db.VarChar(20)
+  isActive     Boolean            @default(true) @map("is_active")
+  createdBy    String             @map("created_by") @db.Uuid
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  payments     SandhaPayment[]
+  members      SandhaPlanMember[]
+  creator      User               @relation("SandhaPlanCreator", fields: [createdBy], references: [id])
+  masjid       Masjid             @relation(fields: [masjidId], references: [id], onDelete: Cascade)
 
   @@index([masjidId], map: "idx_sandha_plans_masjid")
   @@map("sandha_plans")
@@ -255,15 +278,20 @@ model SandhaPayment {
   periodStart   DateTime         @map("period_start") @db.Date
   periodEnd     DateTime         @map("period_end") @db.Date
   notes         String?
+  proofPath     String?          @map("proof_path") @db.VarChar(500)
+  verifiedAt    DateTime?        @map("verified_at") @db.Timestamptz(6)
+  verifiedBy    String?          @map("verified_by") @db.Uuid
   recordedBy    String           @map("recorded_by") @db.Uuid
   paidAt        DateTime         @map("paid_at") @db.Timestamptz(6)
   createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   plan          SandhaPlan       @relation(fields: [planId], references: [id], onDelete: Cascade)
   planMember    SandhaPlanMember @relation(fields: [planMemberId], references: [id], onDelete: Cascade)
   recorder      User             @relation("PaymentRecorder", fields: [recordedBy], references: [id])
+  verifier      User?            @relation("PaymentVerifier", fields: [verifiedBy], references: [id], onDelete: SetNull)
   user          User?            @relation("UserPayments", fields: [userId], references: [id])
 
   @@index([planMemberId, periodStart], map: "idx_sandha_payments_member_period")
+  @@index([planId, periodStart, status], map: "idx_sandha_payments_month_status")
   @@map("sandha_payments")
 }
 
@@ -357,6 +385,7 @@ enum PaymentStatus {
   PAID
   PARTIAL
   PENDING
+  REJECTED
   WAIVED
 }
 

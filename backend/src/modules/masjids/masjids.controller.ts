@@ -46,10 +46,23 @@ export class MasjidsController {
   async listAdminDirectory(
     @Query('search') search?: string,
     @Query('status') status?: string,
+    @Query('approvalStatus') approvalStatus?: string,
+    @Query('sort') sort?: string,
+    @Query('createdFrom') createdFrom?: string,
+    @Query('createdTo') createdTo?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    return this.masjidsService.listAdminDirectory({ search, status, page: Number(page), limit: Number(limit) });
+    return this.masjidsService.listAdminDirectory({
+      search,
+      status,
+      approvalStatus,
+      sort,
+      createdFrom,
+      createdTo,
+      page: Number(page),
+      limit: Number(limit),
+    });
   }
 
   @Get('requests/pending')

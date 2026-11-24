@@ -1,5 +1,6 @@
-import { IsNotEmpty, IsString, IsOptional, Matches } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional, Matches, IsArray, ValidateNested, ArrayMinSize, ArrayMaxSize } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 
 export class UpdatePrayerTimeDto {
   @ApiProperty({ example: '2026-11-20', description: 'Date in YYYY-MM-DD format' })
@@ -79,83 +80,131 @@ export class UpdatePrayerTimeDto {
 }
 
 export class UpdatePrayerTimeRangeDto {
-  @ApiProperty({ example: '2026-11-20', description: 'Start date in YYYY-MM-DD format' })
+  @ApiProperty({ description: 'Start date, YYYY-MM-DD' })
   @IsNotEmpty()
   @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
   startDate: string;
 
-  @ApiProperty({ example: '2026-11-30', description: 'End date in YYYY-MM-DD format' })
+  @ApiProperty({ description: 'End date, YYYY-MM-DD' })
   @IsNotEmpty()
   @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
   endDate: string;
 
-  @ApiPropertyOptional({ example: '05:00' })
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  fajrAdhan?: string;
-
-  @ApiProperty({ example: '05:30' })
-  @IsNotEmpty()
-  @IsString()
-  fajrJamaah: string;
-
-  @ApiPropertyOptional({ example: '06:05' })
-  @IsOptional()
-  @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
   sunrise?: string;
 
-  @ApiPropertyOptional({ example: '12:30' })
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  dhuhrAdhan?: string;
-
-  @ApiProperty({ example: '13:15' })
-  @IsNotEmpty()
-  @IsString()
-  dhuhrJamaah: string;
-
-  @ApiPropertyOptional({ example: '16:15' })
-  @IsOptional()
-  @IsString()
-  asrAdhan?: string;
-
-  @ApiProperty({ example: '16:45' })
-  @IsNotEmpty()
-  @IsString()
-  asrJamaah: string;
-
-  @ApiPropertyOptional({ example: '18:15' })
-  @IsOptional()
-  @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
   sunset?: string;
 
-  @ApiPropertyOptional({ example: '18:15' })
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  fajrAdhan?: string;
+
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  fajrJamaah: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  dhuhrAdhan?: string;
+
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  dhuhrJamaah: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  asrAdhan?: string;
+
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  asrJamaah: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
   maghribAdhan?: string;
 
-  @ApiProperty({ example: '18:20' })
+  @ApiProperty()
   @IsNotEmpty()
   @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
   maghribJamaah: string;
 
-  @ApiPropertyOptional({ example: '19:45' })
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
   ishaAdhan?: string;
 
-  @ApiProperty({ example: '20:15' })
+  @ApiProperty()
   @IsNotEmpty()
   @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
   ishaJamaah: string;
 
-  @ApiPropertyOptional({ example: '12:45' })
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
   jummahKhutbah?: string;
 
-  @ApiPropertyOptional({ example: '13:30' })
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
   jummahJamaah?: string;
+}
+
+export class RamadanDayScheduleDto {
+  @ApiProperty({ description: 'Local calendar date, YYYY-MM-DD' })
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  date: string;
+
+  @ApiProperty({ description: 'Last time to eat before fasting, HH:mm' })
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  sehriEnd: string;
+
+  @ApiProperty({ description: 'Iftar time, HH:mm' })
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  iftarTime: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class UpsertRamadanScheduleDto {
+  @ApiProperty({ type: [RamadanDayScheduleDto], minItems: 1, maxItems: 31 })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(31)
+  @ValidateNested({ each: true })
+  @Type(() => RamadanDayScheduleDto)
+  days: RamadanDayScheduleDto[];
 }

@@ -1,7 +1,7 @@
-import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards, Put, Query, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { SandhaService } from './sandha.service';
-import { CreateSandhaPlanDto, EnrollMemberDto, RecordPaymentDto } from './dto/sandha.dto';
+import { CreateSandhaPlanDto, EnrollMemberDto, RecordPaymentDto, ReviewPaymentDto, SubmitPaymentProofDto } from './dto/sandha.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { MasjidRoleGuard } from '../../common/guards/masjid-role.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -32,6 +32,14 @@ export class SandhaController {
     return this.sandhaService.createPlan(masjidId, userId, dto);
   }
 
+  @Put('plans/:planId')
+  @UseGuards(JwtAuthGuard, MasjidRoleGuard)
+  @MasjidRoles(RoleType.ADMIN, RoleType.FINANCE)
+  @ApiBearerAuth()
+  async updatePlan(@Param('masjidId') masjidId: string, @Param('planId') planId: string, @Body() dto: CreateSandhaPlanDto) {
+    return this.sandhaService.updatePlan(masjidId, planId, dto);
+  }
+
   @Post('plans/:planId/members')
   @UseGuards(JwtAuthGuard, MasjidRoleGuard)
   @MasjidRoles(RoleType.ADMIN, RoleType.FINANCE)
@@ -55,14 +63,43 @@ export class SandhaController {
     @CurrentUser('id') userId: string,
     @Body() dto: RecordPaymentDto,
   ) {
-    return this.sandhaService.recordPayment(userId, dto);
+    return this.sandhaService.recordPayment(masjidId, userId, dto);
+  }
+
+  @Post('payments/proof')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  async submitPaymentProof(@Param('masjidId') masjidId: string, @CurrentUser('id') userId: string, @Body() dto: SubmitPaymentProofDto) {
+    return this.sandhaService.submitPaymentProof(masjidId, userId, dto);
+  }
+
+  @Get('admin/payments')
+  @UseGuards(JwtAuthGuard, MasjidRoleGuard)
+  @MasjidRoles(RoleType.ADMIN, RoleType.FINANCE)
+  @ApiBearerAuth()
+  async getAdminPayments(
+    @Param('masjidId') masjidId: string,
+    @Query('month') month: string,
+    @Query('status') status = 'ALL',
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+  ) {
+    return this.sandhaService.getAdminMonthHistory(masjidId, month, status, page, limit);
+  }
+
+  @Put('payments/:paymentId/review')
+  @UseGuards(JwtAuthGuard, MasjidRoleGuard)
+  @MasjidRoles(RoleType.ADMIN, RoleType.FINANCE)
+  @ApiBearerAuth()
+  async reviewPayment(@Param('masjidId') masjidId: string, @Param('paymentId') paymentId: string, @CurrentUser('id') userId: string, @Body() dto: ReviewPaymentDto) {
+    return this.sandhaService.reviewPayment(masjidId, paymentId, userId, dto.decision, dto.notes);
   }
 
   @Get('my-status')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current logged-in user Sandha enrollment and payment history' })
-  async getMyStatus(@CurrentUser('id') userId: string) {
-    return this.sandhaService.getUserSandhaStatus(userId);
+  async getMyStatus(@Param('masjidId') masjidId: string, @CurrentUser('id') userId: string) {
+    return this.sandhaService.getUserSandhaStatus(userId, masjidId);
   }
 }
