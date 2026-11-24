@@ -22,6 +22,13 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
 
+    // Read out the heading aloud using voice/TTS
+    final heading =
+        message.notification?.title ?? message.data['title']?.toString();
+    if (heading != null && heading.trim().isNotEmpty) {
+      await NotificationService.speakHeading(heading.trim());
+    }
+
     if (message.notification != null) return;
 
     final title = message.data['title']?.toString();
@@ -89,6 +96,23 @@ class NotificationService {
   static const String _prayerAlarmChannelId = 'silah_adhan_alarm_v1';
   static const String _prayerAlarmEnabledKey = 'silah_prayer_alarms_enabled';
   static const MethodChannel _deviceChannel = MethodChannel('silah/device');
+  static const MethodChannel _ttsChannel = MethodChannel('silah/tts');
+
+  static Future<void> speakHeading(String text) async {
+    final clean = text.trim();
+    if (clean.isEmpty) return;
+    try {
+      await _ttsChannel.invokeMethod('speak', {'text': clean});
+    } catch (e) {
+      debugPrint('[NotificationService] TTS error: $e');
+    }
+  }
+
+  static Future<void> stopSpeech() async {
+    try {
+      await _ttsChannel.invokeMethod('stop');
+    } catch (_) {}
+  }
   static const Map<String, (int, String)> _prayers = {
     'fajrAdhan': (2101, 'Fajr'),
     'dhuhrAdhan': (2102, 'Dhuhr'),
@@ -220,6 +244,11 @@ class NotificationService {
 
       // 3. Foreground messages are surfaced locally and refresh DB-backed UI.
       FirebaseMessaging.onMessage.listen((message) async {
+        final heading =
+            message.notification?.title ?? message.data['title']?.toString();
+        if (heading != null && heading.trim().isNotEmpty) {
+          await speakHeading(heading.trim());
+        }
         _publishNotificationEvent(_messageEvent(message, opened: false));
         try {
           await _showForegroundNotification(message);

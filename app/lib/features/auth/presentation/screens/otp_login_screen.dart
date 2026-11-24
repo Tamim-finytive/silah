@@ -73,9 +73,17 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
           );
         } else if ((user?['adminRoles'] as List<dynamic>?)?.isNotEmpty ==
             true) {
+          final adminRoles = user!['adminRoles'] as List<dynamic>;
+          final firstAdminRole =
+              adminRoles.first is Map ? adminRoles.first as Map : null;
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+            MaterialPageRoute(
+              builder: (_) => AdminDashboardScreen(
+                masjidId: firstAdminRole?['masjidId']?.toString(),
+                masjidName: firstAdminRole?['masjidName']?.toString(),
+              ),
+            ),
           );
         } else {
           // Direct to User Home Screen with complete bottom navigation bar

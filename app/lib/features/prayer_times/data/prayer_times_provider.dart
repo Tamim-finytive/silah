@@ -67,7 +67,6 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
   Timer? _countdownTimer;
 
-  static const String _cachedTimesKey = 'cached_prayer_times_json';
   static const String _cachedMasjidKey = 'cached_active_masjid_json';
 
   PrayerTimesNotifier() : super(PrayerTimesState(isLoading: true)) {
@@ -75,28 +74,20 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
   }
 
   Future<void> _initFromStorageAndBackend() async {
-    // 1. Immediately load maintained state from local storage (offline first)
+    // Restore only the last selected masjid while membership is revalidated.
+    // Prayer rows are date-specific and must be fetched before display; reusing
+    // yesterday's cached row made an unscheduled day look configured.
     try {
-      final cachedTimesRaw = await _storage.read(key: _cachedTimesKey);
+      await _storage.delete(key: 'cached_prayer_times_json');
       final cachedMasjidRaw = await _storage.read(key: _cachedMasjidKey);
-
-      Map<String, dynamic>? cachedTimes;
       Map<String, dynamic>? cachedMasjid;
-
-      if (cachedTimesRaw != null) {
-        cachedTimes = jsonDecode(cachedTimesRaw) as Map<String, dynamic>;
-      }
       if (cachedMasjidRaw != null) {
         cachedMasjid = jsonDecode(cachedMasjidRaw) as Map<String, dynamic>;
       }
-
-      if (cachedTimes != null) {
+      if (cachedMasjid != null) {
         state = state.copyWith(
-          times: cachedTimes,
           activeMasjid: cachedMasjid,
-          isLoading: false,
         );
-        _recalculateNextPrayer();
       }
     } catch (e) {
       debugPrint('Error loading cached prayer times: $e');
@@ -147,6 +138,24 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
               (cachedIsJoined ? cachedId : null) ??
               defaultMasjid?['id']?.toString();
 
+      // Never keep a previous masjid's cached schedule on screen while a new
+      // selection is being resolved. This also prevents old values briefly
+      // appearing after an admin switches accounts or masjids.
+      if (targetId != cachedId) {
+        state = state.copyWith(
+          clearTimes: true,
+          clearNextPrayer: true,
+          isLoading: true,
+        );
+      }
+      final now = DateTime.now();
+      final localDate =
+          '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final cachedDate = state.times?['date']?.toString().split('T').first;
+      if (cachedDate != null && cachedDate != localDate) {
+        state = state.copyWith(clearTimes: true, clearNextPrayer: true);
+      }
+
       // Do NOT auto-link to masjids.first! User must search or scan QR code.
       if (targetId == null) {
         await selectLocalTimes();
@@ -176,9 +185,6 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
           await ApiService.instance.getTodayPrayerTimes(targetMasjid['id']);
 
       if (backendTimes != null) {
-        // Persist fresh backend data to storage
-        await _storage.write(
-            key: _cachedTimesKey, value: jsonEncode(backendTimes));
         await _storage.write(
             key: _cachedMasjidKey, value: jsonEncode(targetMasjid));
 
@@ -202,6 +208,8 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
+        clearTimes: true,
+        clearNextPrayer: true,
         error: 'Backend sync note: $e',
       );
     }
@@ -209,7 +217,13 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
 
   Future<void> switchMasjid(Map<String, dynamic> newMasjid) async {
     state = state.copyWith(
-        isLoading: true, activeMasjid: newMasjid, isLocalTimes: false);
+      isLoading: true,
+      activeMasjid: newMasjid,
+      clearTimes: true,
+      clearNextPrayer: true,
+      clearError: true,
+      isLocalTimes: false,
+    );
     await refreshFromBackend(specificMasjidId: newMasjid['id']);
   }
 
@@ -233,7 +247,8 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
       final cachedRaw =
           await _storage.read(key: 'cached_local_prayer_times_json');
       final cachedDate = await _storage.read(key: 'cached_local_prayer_date');
-      final cachedSchool = await _storage.read(key: 'cached_local_prayer_school');
+      final cachedSchool =
+          await _storage.read(key: 'cached_local_prayer_school');
       final cachedLat = double.tryParse(
           (await _storage.read(key: 'cached_local_prayer_lat')) ?? '');
       final cachedLng = double.tryParse(
@@ -242,7 +257,10 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
           cachedLng != null &&
           (cachedLat - position.latitude).abs() < 0.02 &&
           (cachedLng - position.longitude).abs() < 0.02;
-      if (cachedRaw != null && cachedDate == today && sameLocation && cachedSchool == school.toString()) {
+      if (cachedRaw != null &&
+          cachedDate == today &&
+          sameLocation &&
+          cachedSchool == school.toString()) {
         cachedTimes = jsonDecode(cachedRaw) as Map<String, dynamic>;
         state = state.copyWith(
           times: cachedTimes,
@@ -282,7 +300,8 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
       final cachedRaw =
           await _storage.read(key: 'cached_local_prayer_times_json');
       final cachedDate = await _storage.read(key: 'cached_local_prayer_date');
-      final cachedSchool = await _storage.read(key: 'cached_local_prayer_school');
+      final cachedSchool =
+          await _storage.read(key: 'cached_local_prayer_school');
       if (cachedRaw != null &&
           cachedDate == DateTime.now().toIso8601String().split('T').first &&
           cachedSchool == school.toString()) {
@@ -364,7 +383,8 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
         state = state.copyWith(clearNextPrayer: true);
         return;
       }
-      final tomorrowIqamah = parseTime(times[firstPrayer.jamaahKey]?.toString());
+      final tomorrowIqamah =
+          parseTime(times[firstPrayer.jamaahKey]?.toString());
       final nextDayAdhan = tomorrowFajr.add(const Duration(days: 1));
       final nextDayIqamah = tomorrowIqamah?.add(const Duration(days: 1));
       state = state.copyWith(

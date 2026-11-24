@@ -23,7 +23,14 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   // Data states directly from backend
   Map<String, dynamic>? _stats;
   List<dynamic> _allMasjids = [];
-  List<dynamic> _pendingRequests = [];
+  List<dynamic> _requestItems = [];
+  String _requestStatus = 'PENDING';
+  int _requestPage = 0;
+  int _requestTotal = 0;
+  bool _loadingMoreRequests = false;
+  bool _hasMoreRequests = true;
+  String? _requestLoadError;
+  int _requestGeneration = 0;
   List<dynamic> _users = [];
   List<dynamic> _broadcasts = [];
   String _userSearchQuery = '';
@@ -35,6 +42,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   int _usersTotal = 0;
   final ScrollController _masjidScrollController = ScrollController();
   final ScrollController _usersScrollController = ScrollController();
+  final ScrollController _requestScrollController = ScrollController();
   bool _loadingMoreMasjids = false;
   bool _loadingMoreUsers = false;
   bool _hasMoreMasjids = true;
@@ -49,6 +57,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     super.initState();
     _masjidScrollController.addListener(_onMasjidScroll);
     _usersScrollController.addListener(_onUsersScroll);
+    _requestScrollController.addListener(_onRequestScroll);
     _loadAllData();
     _notificationSubscription =
         NotificationService.instance.notificationEvents.listen((event) {
@@ -76,6 +85,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     _notificationSubscription?.cancel();
     _masjidScrollController.dispose();
     _usersScrollController.dispose();
+    _requestScrollController.dispose();
     super.dispose();
   }
 
@@ -99,6 +109,16 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     }
   }
 
+  void _onRequestScroll() {
+    if (_currentIndex != 2 ||
+        !_requestScrollController.hasClients ||
+        _loadingMoreRequests ||
+        !_hasMoreRequests) return;
+    if (_requestScrollController.position.extentAfter < 320) {
+      _loadRequestPage();
+    }
+  }
+
   Future<void> _loadAllData() async {
     setState(() => _isLoading = true);
     try {
@@ -108,7 +128,12 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
         status: _masjidStatus,
         page: 1,
       );
-      final pending = await ApiService.instance.getPendingMasjidRequests();
+      final requestStatus = _requestStatus;
+      final requestGeneration = ++_requestGeneration;
+      final requestPage = await ApiService.instance.getAdminMasjids(
+        status: requestStatus,
+        page: 1,
+      );
       final usersRes =
           await ApiService.instance.getUsers(search: _userSearchQuery, page: 1);
       final broadcasts = await ApiService.instance.getBroadcastAnnouncements();
@@ -123,7 +148,16 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
           _masjidLoadError = masjidPage == null
               ? 'Masjids could not be loaded. Pull down or tap refresh to try again.'
               : null;
-          _pendingRequests = pending;
+          if (requestStatus == _requestStatus &&
+              requestGeneration == _requestGeneration) {
+            _requestItems = requestPage?['items'] as List<dynamic>? ?? [];
+            _requestPage = 1;
+            _requestTotal = (requestPage?['total'] as num?)?.toInt() ?? 0;
+            _hasMoreRequests = _requestItems.length < _requestTotal;
+            _requestLoadError = requestPage == null
+                ? 'Could not load masjid requests. Tap refresh to retry.'
+                : null;
+          }
           _users = usersRes?['items'] ?? [];
           _usersTotal = usersRes?['total'] ?? 0;
           _usersPage = 1;
@@ -210,6 +244,56 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     } finally {
       if (mounted) setState(() => _loadingMoreUsers = false);
     }
+  }
+
+  Future<void> _loadRequestPage({bool reset = false}) async {
+    if ((!reset && _loadingMoreRequests) || (!reset && !_hasMoreRequests)) {
+      return;
+    }
+    final generation = ++_requestGeneration;
+    final requestStatus = _requestStatus;
+    final page = reset ? 1 : _requestPage + 1;
+    setState(() {
+      _loadingMoreRequests = true;
+      _requestLoadError = null;
+      if (reset) {
+        _requestItems = [];
+        _requestPage = 0;
+        _requestTotal = 0;
+        _hasMoreRequests = true;
+      }
+    });
+    try {
+      final result = await ApiService.instance.getAdminMasjids(
+        status: requestStatus,
+        page: page,
+      );
+      if (result == null) throw StateError('Request list could not be loaded');
+      if (!mounted || generation != _requestGeneration) return;
+      final items = result['items'] as List<dynamic>? ?? [];
+      setState(() {
+        _requestItems = reset ? items : [..._requestItems, ...items];
+        _requestPage = page;
+        _requestTotal =
+            (result['total'] as num?)?.toInt() ?? _requestItems.length;
+        _hasMoreRequests = _requestItems.length < _requestTotal;
+      });
+    } catch (error) {
+      if (mounted && generation == _requestGeneration) {
+        setState(() => _requestLoadError =
+            'Could not load requests: ${ApiService.getErrorMessage(error)}');
+      }
+    } finally {
+      if (mounted && generation == _requestGeneration) {
+        setState(() => _loadingMoreRequests = false);
+      }
+    }
+  }
+
+  void _changeRequestStatus(String? status) {
+    if (status == null || status == _requestStatus) return;
+    setState(() => _requestStatus = status);
+    _loadRequestPage(reset: true);
   }
 
   // -------------------------------------------------------------
@@ -671,8 +755,8 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                     content: Text('Masjid and Admin created successfully!')));
                 _loadAllData();
               } catch (e) {
-                ScaffoldMessenger.of(context)
-                    .showSnackBar(SnackBar(content: Text(ApiService.getErrorMessage(e))));
+                ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(ApiService.getErrorMessage(e))));
               }
             },
             child: const Text('Create'),
@@ -697,97 +781,293 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadAllData),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _pendingRequests.isEmpty
-              ? _buildEmptyState('No Pending Registration Requests',
-                  Icons.check_circle_outline)
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _pendingRequests.length,
-                  itemBuilder: (ctx, i) {
-                    final req = _pendingRequests[i];
-                    final creator = req['creator'] ?? {};
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      elevation: 2,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    req['name'] ?? 'Unnamed',
-                                    style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: DropdownButtonFormField<String>(
+              value: _requestStatus,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Request status',
+                prefixIcon: Icon(Icons.filter_list, size: 20),
+                isDense: true,
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+              items: const [
+                DropdownMenuItem(
+                    value: 'PENDING',
+                    child: Text('Waiting for approval',
+                        style: TextStyle(fontSize: 13))),
+                DropdownMenuItem(
+                    value: 'APPROVED',
+                    child: Text('Approved', style: TextStyle(fontSize: 13))),
+                DropdownMenuItem(
+                    value: 'REJECTED',
+                    child: Text('Rejected', style: TextStyle(fontSize: 13))),
+                DropdownMenuItem(
+                    value: 'ALL',
+                    child:
+                        Text('All requests', style: TextStyle(fontSize: 13))),
+              ],
+              onChanged: _changeRequestStatus,
+            ),
+          ),
+          Expanded(
+            child: _isLoading && _requestItems.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : _requestLoadError != null && _requestItems.isEmpty
+                    ? _buildRetryState(
+                        _requestLoadError!,
+                        () => _loadRequestPage(reset: true),
+                        Icons.pending_actions,
+                      )
+                    : _requestItems.isEmpty
+                        ? _buildEmptyState(
+                            _requestStatus == 'PENDING'
+                                ? 'No Pending Registration Requests'
+                                : 'No Requests Found',
+                            Icons.check_circle_outline,
+                          )
+                        : RefreshIndicator(
+                            onRefresh: () => _loadRequestPage(reset: true),
+                            child: ListView.builder(
+                              controller: _requestScrollController,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 8),
+                              itemCount: _requestItems.length +
+                                  (_loadingMoreRequests ||
+                                          _requestLoadError != null
+                                      ? 1
+                                      : 0),
+                              itemBuilder: (ctx, i) {
+                                if (i == _requestItems.length) {
+                                  return _requestLoadError != null
+                                      ? TextButton(
+                                          onPressed: _loadRequestPage,
+                                          child: Text(_requestLoadError!),
+                                        )
+                                      : const Padding(
+                                          padding: EdgeInsets.all(16),
+                                          child: Center(
+                                            child: CircularProgressIndicator(),
+                                          ),
+                                        );
+                                }
+                                final req =
+                                    _requestItems[i] as Map<String, dynamic>;
+                                final creator = req['creator'] ?? {};
+                                final approval =
+                                    req['approvalStatus']?.toString() ??
+                                        'PENDING';
+                                final city =
+                                    (req['city'] ?? '').toString().trim();
+                                final address =
+                                    (req['address'] ?? '').toString().trim();
+                                final locationText = [
+                                  if (city.isNotEmpty) city,
+                                  if (address.isNotEmpty) address,
+                                ].join(' • ');
+
+                                return Card(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    side: const BorderSide(
+                                        color: AppColors.outline),
                                   ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.amber.shade100,
-                                    borderRadius: BorderRadius.circular(8),
+                                  elevation: 0,
+                                  color: Colors.white,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 14, vertical: 11),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.center,
+                                          children: [
+                                            Container(
+                                              width: 36,
+                                              height: 36,
+                                              decoration: BoxDecoration(
+                                                color:
+                                                    AppColors.primaryContainer,
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                              ),
+                                              child: const Icon(Icons.mosque,
+                                                  color: AppColors.primary,
+                                                  size: 18),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Text(
+                                                req['name'] ?? 'Unnamed',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: approval == 'APPROVED'
+                                                    ? Colors.green.shade50
+                                                    : approval == 'REJECTED'
+                                                        ? Colors.red.shade50
+                                                        : Colors.amber.shade50,
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                                border: Border.all(
+                                                  color: approval == 'APPROVED'
+                                                      ? Colors.green.shade300
+                                                      : approval == 'REJECTED'
+                                                          ? Colors.red.shade300
+                                                          : Colors
+                                                              .amber.shade300,
+                                                ),
+                                              ),
+                                              child: Text(
+                                                approval,
+                                                style: TextStyle(
+                                                  color: approval == 'APPROVED'
+                                                      ? Colors.green.shade800
+                                                      : approval == 'REJECTED'
+                                                          ? Colors.red.shade800
+                                                          : Colors
+                                                              .amber.shade900,
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        if (locationText.isNotEmpty) ...[
+                                          const SizedBox(height: 6),
+                                          Row(
+                                            children: [
+                                              Icon(Icons.location_on_outlined,
+                                                  size: 14,
+                                                  color: Colors.grey.shade600),
+                                              const SizedBox(width: 4),
+                                              Expanded(
+                                                child: Text(
+                                                  locationText,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.grey.shade700,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                        const SizedBox(height: 3),
+                                        Row(
+                                          children: [
+                                            Icon(Icons.person_outline,
+                                                size: 14,
+                                                color: Colors.grey.shade600),
+                                            const SizedBox(width: 4),
+                                            Expanded(
+                                              child: Text(
+                                                'Applicant: ${creator['name'] ?? 'Unknown'} (${creator['phone'] ?? ''})',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.grey.shade700,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        if (approval == 'PENDING') ...[
+                                          const SizedBox(height: 8),
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.end,
+                                            children: [
+                                              SizedBox(
+                                                height: 32,
+                                                child: OutlinedButton(
+                                                  style:
+                                                      OutlinedButton.styleFrom(
+                                                    foregroundColor: Colors.red,
+                                                    side: const BorderSide(
+                                                        color: Colors.red),
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        horizontal: 14),
+                                                    visualDensity:
+                                                        VisualDensity.compact,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _handleReject(
+                                                          req['id'],
+                                                          req['name'] ?? ''),
+                                                  child: const Text('Reject',
+                                                      style: TextStyle(
+                                                          fontSize: 12,
+                                                          fontWeight:
+                                                              FontWeight.w600)),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              SizedBox(
+                                                height: 32,
+                                                child: FilledButton(
+                                                  style:
+                                                      FilledButton.styleFrom(
+                                                    backgroundColor:
+                                                        AppColors.primary,
+                                                    foregroundColor:
+                                                        Colors.white,
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        horizontal: 16),
+                                                    visualDensity:
+                                                        VisualDensity.compact,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _handleApprove(
+                                                          req['id'],
+                                                          req['name'] ?? ''),
+                                                  child: const Text('Approve',
+                                                      style: TextStyle(
+                                                          fontSize: 12,
+                                                          fontWeight:
+                                                              FontWeight.w600)),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ],
+                                    ),
                                   ),
-                                  child: Text('PENDING',
-                                      style: TextStyle(
-                                          color: Colors.amber.shade900,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold)),
-                                ),
-                              ],
+                                );
+                              },
                             ),
-                            const SizedBox(height: 6),
-                            Text(
-                                'City: ${req['city'] ?? ''} | Address: ${req['address'] ?? ''}',
-                                style: const TextStyle(
-                                    fontSize: 13, color: Colors.grey)),
-                            const Divider(height: 20),
-                            Row(
-                              children: [
-                                const Icon(Icons.person,
-                                    size: 14, color: Colors.grey),
-                                const SizedBox(width: 4),
-                                Text(
-                                    'Applicant: ${creator['name'] ?? 'Unknown'} (${creator['phone'] ?? ''})',
-                                    style: const TextStyle(fontSize: 12)),
-                              ],
-                            ),
-                            const SizedBox(height: 14),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                OutlinedButton(
-                                  style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.red),
-                                  onPressed: () => _handleReject(
-                                      req['id'], req['name'] ?? ''),
-                                  child: const Text('Reject'),
-                                ),
-                                const SizedBox(width: 10),
-                                ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppColors.primary,
-                                      foregroundColor: Colors.white),
-                                  onPressed: () => _handleApprove(
-                                      req['id'], req['name'] ?? ''),
-                                  child: const Text('Accept & Approve'),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                          ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -820,9 +1100,20 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                 backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () async {
               Navigator.pop(ctx);
-              await ApiService.instance
-                  .rejectMasjidRequest(id, reasonCtrl.text.trim());
-              _loadAllData();
+              try {
+                await ApiService.instance
+                    .rejectMasjidRequest(id, reasonCtrl.text.trim());
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Request rejected.')));
+                }
+                _loadAllData();
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(ApiService.getErrorMessage(e))));
+                }
+              }
             },
             child: const Text('Confirm Reject'),
           ),
@@ -882,8 +1173,8 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                   content: Text('Broadcast deleted!')));
                           _loadAllData();
                         } catch (e) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(ApiService.getErrorMessage(e))));
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                              content: Text(ApiService.getErrorMessage(e))));
                         }
                       },
                     ),
@@ -1230,8 +1521,8 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                       content: Text('User registered in database!')));
                   _loadAllData();
                 } catch (e) {
-                  ScaffoldMessenger.of(context)
-                      .showSnackBar(SnackBar(content: Text(ApiService.getErrorMessage(e))));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(ApiService.getErrorMessage(e))));
                 }
               },
               child: const Text('Add User'),
@@ -1463,8 +1754,8 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                 _loadAllData();
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context)
-                      .showSnackBar(SnackBar(content: Text(ApiService.getErrorMessage(e))));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(ApiService.getErrorMessage(e))));
                 }
               }
             },
@@ -1511,8 +1802,8 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                 _loadAllData();
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context)
-                      .showSnackBar(SnackBar(content: Text(ApiService.getErrorMessage(e))));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(ApiService.getErrorMessage(e))));
                 }
               }
             },
@@ -1526,17 +1817,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          _buildOverviewTab(),
-          _buildMasjidsTab(),
-          _buildRequestsTab(),
-          _buildAnnouncementsTab(),
-          _buildUsersTab(),
-          _buildProfileTab(),
-        ],
-      ),
+      body: _buildSelectedTab(),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (i) {
@@ -1581,5 +1862,22 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildSelectedTab() {
+    switch (_currentIndex) {
+      case 1:
+        return _buildMasjidsTab();
+      case 2:
+        return _buildRequestsTab();
+      case 3:
+        return _buildAnnouncementsTab();
+      case 4:
+        return _buildUsersTab();
+      case 5:
+        return _buildProfileTab();
+      default:
+        return _buildOverviewTab();
+    }
   }
 }

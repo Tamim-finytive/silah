@@ -27,6 +27,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _selectedTabIndex = 0;
   int _noticeRefreshVersion = 0;
   String? _openedAnnouncementId;
@@ -213,6 +214,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         }
       },
       child: Scaffold(
+        key: _scaffoldKey,
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         drawer: _buildDrawer(),
         body: IndexedStack(
@@ -284,6 +286,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (prayerState.isLoading && prayerState.times == null) {
       return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        drawer: _buildDrawer(),
         appBar: _buildTopAppBar(),
         body: const Center(
           child: Column(
@@ -308,6 +311,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      drawer: _buildDrawer(),
       appBar: _buildTopAppBar(),
       body: Center(
         child: ConstrainedBox(
@@ -407,7 +411,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: IconButton(
               icon: const Icon(Icons.menu, color: Colors.black87, size: 20),
               padding: EdgeInsets.zero,
-              onPressed: () => Scaffold.of(ctx).openDrawer(),
+              onPressed: () {
+                if (_scaffoldKey.currentState != null) {
+                  _scaffoldKey.currentState!.openDrawer();
+                } else {
+                  Scaffold.of(ctx).openDrawer();
+                }
+              },
             ),
           ),
         ),
@@ -456,118 +466,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ),
         ),
-        PopupMenuButton<String>(
-          tooltip: 'More options',
-          icon: const Icon(Icons.more_vert, color: AppColors.textPrimary),
-          onSelected: (value) {
-            if (value == 'quran') {
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const QuranScreen()));
-            }
-          },
-          itemBuilder: (context) => const [
-            PopupMenuItem(
-              value: 'quran',
-              child: Row(children: [
-                Icon(Icons.menu_book, color: AppColors.primary),
-                SizedBox(width: 10),
-                Text('Holy Quran'),
-              ]),
-            ),
-          ],
-        ),
       ],
     );
   }
 
   // 1. Prayer Timings Header & Date Row
   Widget _buildPrayerTimingsHeader() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 390;
-        final titleAndDate = Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 2),
+        Row(
           children: [
-            Text(
-              'Prayer timings',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.cormorantGaramond(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
+            Flexible(
+              child: Text(
+                DateFormat('EEEE, d MMM yyyy').format(DateTime.now()),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade700,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
-            const SizedBox(height: 2),
-            Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    DateFormat('EEEE, d MMM yyyy').format(DateTime.now()),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey.shade700,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                const Icon(Icons.chevron_right, size: 16, color: Colors.grey),
-              ],
-            ),
+            const Icon(Icons.chevron_right, size: 16, color: Colors.grey),
           ],
-        );
-        final methodSelector = InkWell(
-          onTap: _showCalculationMethodDialog,
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.grey.shade300),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.tune, size: 14, color: Colors.black87),
-                const SizedBox(width: 5),
-                Text(
-                  _calcMethod,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-
-        if (compact) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              titleAndDate,
-              const SizedBox(height: 8),
-              methodSelector,
-            ],
-          );
-        }
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(child: titleAndDate),
-            const SizedBox(width: 8),
-            Flexible(child: methodSelector),
-          ],
-        );
-      },
+        ),
+      ],
     );
   }
 
@@ -584,57 +510,57 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 8,
-          runSpacing: 4,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.mosque, size: 14, color: AppColors.success),
-                const SizedBox(width: 5),
-                Text(
-                  isLocalTimes ? 'LOCAL PRAYER TIMES' : 'ACTIVE MASJID',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.8,
-                    color: AppColors.success,
-                  ),
-                ),
-              ],
-            ),
-            if (!isLocalTimes &&
-                activeMasjid != null &&
-                activeMasjid['city'] != null)
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 200),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.location_city,
-                        size: 12, color: Colors.grey),
-                    const SizedBox(width: 3),
-                    Flexible(
-                      child: Text(
-                        activeMasjid['city'] ?? '',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey,
-                            fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
+        // Wrap(
+        //   alignment: WrapAlignment.spaceBetween,
+        //   crossAxisAlignment: WrapCrossAlignment.center,
+        //   spacing: 8,
+        //   runSpacing: 4,
+        //   children: [
+        //     // Row(
+        //     //   mainAxisSize: MainAxisSize.min,
+        //     //   children: [
+        //     //     const Icon(Icons.mosque, size: 14, color: AppColors.success),
+        //     //     const SizedBox(width: 5),
+        //     //     Text(
+        //     //       isLocalTimes ? 'LOCAL PRAYER TIMES' : 'ACTIVE MASJID',
+        //     //       maxLines: 1,
+        //     //       overflow: TextOverflow.ellipsis,
+        //     //       style: TextStyle(
+        //     //         fontSize: 11,
+        //     //         fontWeight: FontWeight.bold,
+        //     //         letterSpacing: 0.8,
+        //     //         color: AppColors.success,
+        //     //       ),
+        //     //     ),
+        //     //   ],
+        //     // ),
+        //     if (!isLocalTimes &&
+        //         activeMasjid != null &&
+        //         activeMasjid['city'] != null)
+        //       ConstrainedBox(
+        //         constraints: const BoxConstraints(maxWidth: 200),
+        //         child: Row(
+        //           mainAxisSize: MainAxisSize.min,
+        //           children: [
+        //             const Icon(Icons.location_city,
+        //                 size: 12, color: Colors.grey),
+        //             const SizedBox(width: 3),
+        //             Flexible(
+        //               child: Text(
+        //                 activeMasjid['city'] ?? '',
+        //                 maxLines: 1,
+        //                 overflow: TextOverflow.ellipsis,
+        //                 style: const TextStyle(
+        //                     fontSize: 11,
+        //                     color: Colors.grey,
+        //                     fontWeight: FontWeight.w500),
+        //               ),
+        //             ),
+        //           ],
+        //         ),
+        //       ),
+        //   ],
+        // ),
         const SizedBox(height: 6),
         InkWell(
           onTap: _showMasjidSelector,
@@ -856,43 +782,88 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Top Row: [ ● UP NEXT ] and [ ⌛ Iqamah in 1h 44m ]
+                // Row(
+                //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                //   children: [
+                //     Container(
+                //       padding: const EdgeInsets.symmetric(
+                //           horizontal: 14, vertical: 7),
+                //       decoration: BoxDecoration(
+                //         color: AppColors.primaryDark,
+                //         borderRadius: BorderRadius.circular(20),
+                //         border:
+                //             Border.all(color: AppColors.primaryMid, width: 1.2),
+                //       ),
+                //       child: Row(
+                //         mainAxisSize: MainAxisSize.min,
+                //         children: [
+                //           Container(
+                //             width: 8,
+                //             height: 8,
+                //             decoration: const BoxDecoration(
+                //               color: Color(0xFF48D38A),
+                //               shape: BoxShape.circle,
+                //             ),
+                //           ),
+                //           const SizedBox(width: 8),
+                //           const Text(
+                //             'UP NEXT',
+                //             style: TextStyle(
+                //               color: Colors.white,
+                //               fontSize: 11,
+                //               fontWeight: FontWeight.w800,
+                //               letterSpacing: 1.2,
+                //             ),
+                //           ),
+                //         ],
+                //       ),
+                //     ),
+                //     Container(
+                //       padding: const EdgeInsets.symmetric(
+                //           horizontal: 14, vertical: 7),
+                //       decoration: BoxDecoration(
+                //         color: AppColors.primaryDark,
+                //         borderRadius: BorderRadius.circular(20),
+                //         border: Border.all(
+                //             color: const Color(0xFF1D5A3A), width: 1),
+                //       ),
+                //       child: Row(
+                //         mainAxisSize: MainAxisSize.min,
+                //         children: [
+                //           const Text('⌛', style: TextStyle(fontSize: 12)),
+                //           const SizedBox(width: 6),
+                //           Text(
+                //             isLocalTimes
+                //                 ? 'Prayer in $prayerTimeStr'
+                //                 : 'Iqamah in $iqamahTimeStr',
+                //             style: const TextStyle(
+                //               color: AppColors.primaryContainer,
+                //               fontSize: 12,
+                //               fontWeight: FontWeight.bold,
+                //             ),
+                //           ),
+                //         ],
+                //       ),
+                //     ),
+                //   ],
+                // ),
+                const SizedBox(height: 18),
+
+                // Main Prayer Name & Congregation Pill
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryDark,
-                        borderRadius: BorderRadius.circular(20),
-                        border:
-                            Border.all(color: AppColors.primaryMid, width: 1.2),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF48D38A),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'UP NEXT',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                        ],
+                    Text(
+                      next.name,
+                      style: GoogleFonts.cormorantGaramond(
+                        fontSize: 44,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        height: 1.05,
                       ),
                     ),
-                    Container(
+                             Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 7),
                       decoration: BoxDecoration(
@@ -919,43 +890,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ],
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-
-                // Main Prayer Name & Congregation Pill
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      next.name,
-                      style: GoogleFonts.cormorantGaramond(
-                        fontSize: 44,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        height: 1.05,
-                      ),
-                    ),
-                    if (!isLocalTimes)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryDark,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                              color: AppColors.primaryMid, width: 1.2),
-                        ),
-                        child: const Text(
-                          'Congregation',
-                          style: TextStyle(
-                            color: Color(0xFF6EE7B7),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -1031,7 +965,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'TIME REMAINING TO\nADHAN',
+                            'TIME REMAINING TO ADHAN',
                             style: TextStyle(
                               fontSize: 10,
                               color: Color(0xFF82B89A),
@@ -1233,36 +1167,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       color: Colors.black,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Auto-synced with masjid clock · $_calcMethod',
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                  ),
+                  // const SizedBox(height: 2),
+                  // Text(
+                  //   'Auto-synced with masjid clock · $_calcMethod',
+                  //   style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  // ),
                 ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryContainer,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.circle, color: AppColors.success, size: 6),
-                    SizedBox(width: 4),
-                    Text(
-                      'Official',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.success,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+              // Container(
+              //   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              //   decoration: BoxDecoration(
+              //     color: AppColors.primaryContainer,
+              //     borderRadius: BorderRadius.circular(12),
+              //   ),
+              //   child: Row(
+              //     mainAxisSize: MainAxisSize.min,
+              //     children: const [
+              //       Icon(Icons.circle, color: AppColors.success, size: 6),
+              //       SizedBox(width: 4),
+              //       Text(
+              //         'Official',
+              //         style: TextStyle(
+              //           fontSize: 10,
+              //           fontWeight: FontWeight.bold,
+              //           color: AppColors.success,
+              //         ),
+              //       ),
+              //     ],
+              //   ),
+              // ),
+           ],
           ),
           const SizedBox(height: 16),
 
@@ -1504,14 +1438,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   fontWeight: FontWeight.bold,
                   color: Colors.black,
                 ),
-              ),
-              Row(
-                children: const [
-                  Icon(Icons.schedule, size: 12, color: Colors.grey),
-                  SizedBox(width: 4),
-                  Text('Local solar time',
-                      style: TextStyle(fontSize: 11, color: Colors.grey)),
-                ],
               ),
             ],
           ),
@@ -2182,7 +2108,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     children: [
                       const Expanded(
                         child: Text(
-                          'My Masjids / என் பள்ளிவாசல்கள்',
+                          'My Masjids',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -2453,7 +2379,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                       icon: const Icon(Icons.add, size: 20),
                       label: const Text(
-                        '+ Search & Add Another Masjid (தேடி இணைக்கவும்)',
+                        ' Search & Add',
                         style: TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 13),
                       ),

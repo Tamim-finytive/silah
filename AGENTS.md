@@ -111,7 +111,7 @@ This file is the durable handoff for anyone working on this repository. Keep it 
 - Validation on 2026-11-23: targeted Dart analysis reported no errors (only existing info-level lints); `git diff --check` passed. The Dart process prints a telemetry file permission warning after analysis because it cannot update a file outside the workspace. Tests were not run.
 - Age was removed from onboarding, user create/register APIs, response DTOs, Prisma model, and member/admin views. The age column was dropped from `public.users` in Supabase using the requested SQL and verified absent through `information_schema` on 2026-11-23. The repeatable SQL is `backend/prisma/manual-schema-updates/2026-11-23-remove-user-age.sql`.
 - A live read-only Supabase inspection found 8 masjids: 7 approved and active, 1 approved but inactive (`chennai mas`). All 8 have QR tokens. The inactive record is intentionally omitted by public discovery/join routes. `uniq` exists as an approved, active masjid in the database.
-- Supabase health advisors report RLS is disabled on all 14 public application tables, which means the Data API roles can access rows without row-level policies. Do not enable RLS without designing policies for the NestJS/Postgres access model; this finding must be raised for owner review.
+- Supabase health review on 2026-11-24 found 13 public application tables with RLS disabled and `announcement_user_states` with RLS enabled but no policies. The Supabase Data API exposure is a critical security risk. Do not enable RLS broadly without designing policies for the NestJS/Postgres access model; `announcement_user_states` also needs a policy plan. Raise this for owner review.
 - Special schedule records now support edit through a masjid-scoped backend `PUT` endpoint, and the admin Prayer & Events screen exposes create/edit actions and a responsive empty state. Month-by-month daily Ramadan Sehri/Iftar schedules remain a separate required database-backed feature and are not complete yet.
 - In Admin "Manage Prayer & Events" (Tab 2), when no prayer times exist in the database, only the primary "Create Prayer Schedule" and "Set Date Range Schedule" buttons are displayed (no edit buttons on empty state). Once prayer times are created, the screen switches to displaying the configured timings with the "Edit Schedule" and "Edit Date Range Schedule" actions.
 - In "Connect with Masjid" directory (`connect_masjid_screen.dart`), clicking Connect now only sets the loading state (`Connecting…` spinner) on the specifically clicked masjid card via `_connectingMasjidId`, preventing other unselected masjid cards from showing loading spinners simultaneously.
@@ -171,6 +171,20 @@ This file is the durable handoff for anyone working on this repository. Keep it 
 - The Android launcher label, iOS display name, and web app title are `Silah`. Keep the Dart package name and Android application ID `com.finytive.silah` unchanged so imports, Firebase setup, and installed app identity remain stable.
 - `:app:assembleRelease` keeps Flutter's standard artifact and copies the release APK to `app/build/app/outputs/flutter-apk/Silah.apk` for sharing.
 
+## Masjid-specific prayer schedule integrity (2026-11-24)
+
+- The prayer-times `/today` endpoint returns only the row for the requested calendar date. It must never fall back to the latest date in that masjid, because that makes an old schedule look newly configured for today.
+- Flutter sends the device's local calendar date to `/today`, avoiding a server UTC date mismatch for users in other time zones.
+- Admin login passes the masjid ID/name from the authenticated `adminRoles` record into `AdminDashboardScreen`. The admin dashboard no longer falls back to the first ordinary membership; only an assigned admin masjid can be managed.
+- Cached member prayer rows are no longer hydrated or displayed; the previous local prayer-row cache is deleted on startup. The selected masjid ID may persist, but its date-specific schedule is fetched from the backend before display. Switching masjids clears the previous times and countdown immediately.
+- The Prayer & Events tab keeps the create-schedule and date-range actions visible when that masjid has no saved schedule. Once the backend returns saved timings, it exposes edit actions. Never add placeholder prayer values to make the screen look populated.
+- The Prayer & Events empty-state card and its heading are live widgets; keep the card wrapper intact so the action buttons and explanatory text render.
+- Prayer-time lookup errors must remain distinct from a successful response with `data: null`: show a retry/error state for request failures and show the create-schedule action only after a successful empty response.
+- Validation on 2026-11-24: backend `nest build` passed. Targeted Dart analysis found no compile errors (only existing info-level lints); the installed SDK emitted its usual analytics file permission warning after analysis. `git diff --check` passed after whitespace cleanup. Tests and device preview were not run.
+- Removed confirmed legacy seed fixtures from Supabase project `silah-db`: the old repository seed script created `Jamia Masjid` and `Madina Masjid`, their placeholder prayer row, demo admin/member accounts, and linked sample announcement/Sandha data. Deleted only those verified fixture records and their dependencies. Post-delete query confirmed 0 matching masjids, prayer rows, and demo accounts; 9 masjids and 6 prayer rows remain. Other rows are not identified by the historical seed and were preserved.
+- Startup no longer hydrates cached masjid prayer rows; it revalidates the selected masjid and fetches that local calendar day's database row before displaying timings. Changing masjids clears times/countdown immediately, and API failures clear stale values. Admin dashboard and Prayer & Events now show retryable load errors rather than a blank screen or a false “no schedule” state.
+- Post-cleanup Supabase review: 13 public tables still have RLS disabled, and `announcement_user_states` has RLS enabled without policies. Do not change this without an authorization policy design for the NestJS database access path.
+
 ## Adhan alarms, Quran menu, and notice form follow-up (2026-11-24)
 
 - The Home Alert control now enables or disables five daily device-side Adhan reminders using the currently selected live prayer-time map (masjid schedule or local prayer API). Stable notification IDs replace prior alarms, the enabled choice is saved on-device, and changed prayer times reschedule the alarms. Android exact-alarm permission, reboot rescheduling receivers, local timezone lookup, and the user's `app/asset/azan1.mp3` Android notification sound are configured. This uses the existing prayer data; no example schedule was added.
@@ -192,9 +206,30 @@ This file is the durable handoff for anyone working on this repository. Keep it 
 - `ApiService.uploadFile` sets `Options(contentType: Headers.multipartFormDataContentType)` and lets Dio generate the multipart boundary. Backend `POST /v1/uploads` already accepts the `file` multipart field and stores it in Supabase Storage; the reported failure occurred in Flutter request logging before reaching the backend.
 - Validation on 2026-11-24: targeted Dart analysis of networking, onboarding, and Home files reported no compile errors; `git diff --check` passed. Tests and a device upload were not run.
 
+## Super Admin approval-request layout (2026-11-24)
+
+- The Super Admin dashboard now builds only its selected tab; do not place all nested tab Scaffolds in an `IndexedStack` when each tab owns scrollable lists. This prevents offstage list children from receiving invalid layout constraints and reduces unnecessary work.
+- Pending masjid request cards wrap applicant details and approve/reject actions on compact widths. The request screen filters server-side by Waiting for approval, Approved, Rejected, or All, and loads pages as the admin scrolls. Keep long address/applicant text bounded and wrapping so scrolling the approval list cannot leave an unlaid-out sliver child.
+- The pasted device trace showed HTTP 200 for both `/masjids/admin/directory` (11 records, mixed statuses) and `/masjids/requests/pending`; those responses identify a Flutter layout failure rather than an API failure. `listAdminDirectory` supports the approval-status filters and returns the creator's name/phone for each request card.
+- Validation on 2026-11-24: `npm run build` in `backend/` passed. Targeted Dart analysis of `super_admin_dashboard_screen.dart` reported no compile errors; `git diff --check` passed. No device screenshot or tests were run.
+
 ## Centralized Frontend Error Handling (2026-11-24)
 
 - Introduced `ApiException` and `ApiService.getErrorMessage(e)` in `app/lib/core/network/api_service.dart`.
 - The helper automatically unwraps backend error structures (`error.message`, `message` array or string), network timeouts, status codes (401, 403, 404, 500), and custom exception messages.
 - Replaced raw Dio exception logging and `Failed: $e` string interpolations across `onboarding_screen.dart`, `otp_login_screen.dart`, `connect_masjid_screen.dart`, `admin_dashboard_screen.dart`, and `super_admin_dashboard_screen.dart` with `ApiService.getErrorMessage(e)`.
 - Backend validation and duplicate messages (e.g., `Duplicate Masjid Detected: "..." is already registered within ~100 meters...`) now render cleanly in frontend error banners and SnackBars without technical DioException prefixes.
+
+## Background Notification Voice Reading (TTS) (2026-11-24)
+
+- Implemented native `TtsManager` (`app/android/app/src/main/kotlin/com/finytive/silah/TtsManager.kt`) utilizing Android's native `TextToSpeech` engine. Detects Tamil Unicode ranges (`0x0B80..0x0BFF`) to speak in `ta-IN` or defaults to the device's locale / English.
+- Created `SilahFirebaseMessagingService` extending `FlutterFirebaseMessagingService` with priority 1000 in `AndroidManifest.xml` so background and incoming push notifications invoke `TtsManager.speak(...)` immediately on reception.
+- Added `silah/tts` MethodChannel to `MainActivity.kt` and wired `NotificationService.speakHeading` in `app/lib/core/services/notification_service.dart` across `firebaseMessagingBackgroundHandler` and `FirebaseMessaging.onMessage`.
+- Updated `backend/src/common/firebase/firebase.service.ts` to ensure `title` and `body` are always mirrored in the `data` payload so the notification heading is accessible in all Android delivery states.
+- Added `com.google.firebase:firebase-messaging:24.1.0` directly to `app/android/app/build.gradle.kts` dependencies and set `compileSdk = flutter.compileSdkVersion` so `SilahFirebaseMessagingService` compiles with full access to Android Firebase types.
+- Fixed syntax error in `home_screen.dart`: cleaned up commented code, stray closing brace, and missing reference in `_buildPrayerTimingsHeader()`.
+- Fixed `_buildTopAppBar()` in `home_screen.dart`: restored drawer menu `IconButton` on `leading` and moved Holy Quran `PopupMenuButton<String>` to `actions`.
+- Removed 3-dots `PopupMenuButton` completely from `_buildTopAppBar()` as requested; Holy Quran is accessible exclusively from the top-left Menu icon via Side Nav (Drawer).
+- Fixed drawer opening from nested Scaffold: configured `_scaffoldKey` and passed `drawer: _buildDrawer()` to the inner home Scaffolds so the 3-line menu icon reliably opens the Side Nav containing Holy Quran.
+- Redesigned "Connect with Masjid" directory layout: eliminated bloated dead space by making the top search header compact (~115px instead of ~250px), reducing search field and sort row padding, and redesigning masjid cards to ~88px height (compact 38x38 icon, single-line text with inline distance badge, and right-aligned 32px action buttons). 4+ masjids now fit on screen comfortably.
+- Modern Profile Screen Design for All 3 Roles: created interactive UI artifact `profile_screens_3_roles.html` demonstrating clean, modern profiles for Member, Masjid Admin, and Super Admin with role switching and bilingual (English/Tamil) support.

@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.finytive.silah"
-    compileSdk = 36
+    compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -52,6 +52,7 @@ kotlin {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    implementation("com.google.firebase:firebase-messaging:24.1.0")
 }
 
 flutter {

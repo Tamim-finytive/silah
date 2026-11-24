@@ -10,7 +10,7 @@ export class PrayerTimesService {
     const targetDate = dateStr ? new Date(dateStr) : new Date();
     targetDate.setHours(0, 0, 0, 0);
 
-    let times = await this.prisma.prayerTime.findUnique({
+    const times = await this.prisma.prayerTime.findUnique({
       where: {
         idx_prayer_times_unique: {
           masjidId,
@@ -19,16 +19,9 @@ export class PrayerTimesService {
       },
     });
 
-    // If specific date not found, fallback to latest configured day for this masjid
     if (!times) {
-      times = await this.prisma.prayerTime.findFirst({
-        where: { masjidId },
-        orderBy: { date: 'desc' },
-      });
-    }
-
-    if (!times) {
-      // Zero mock data: Return null when no timings are configured in database
+      // A masjid schedule is date-specific. Never present another day's
+      // timings as today's schedule; an absent row means the admin must create it.
       return null;
     }
 

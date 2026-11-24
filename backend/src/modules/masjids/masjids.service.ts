@@ -139,6 +139,8 @@ export class MasjidsService {
     if (query.status === 'ACTIVE') where.isActive = true;
     if (query.status === 'INACTIVE') where.isActive = false;
     if (query.status === 'PENDING') where.approvalStatus = MasjidApprovalStatus.PENDING;
+    if (query.status === 'APPROVED') where.approvalStatus = MasjidApprovalStatus.APPROVED;
+    if (query.status === 'REJECTED') where.approvalStatus = MasjidApprovalStatus.REJECTED;
     if (query.search?.trim()) {
       const term = query.search.trim();
       where.OR = [
@@ -155,7 +157,10 @@ export class MasjidsService {
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: { _count: { select: { memberships: true, admins: true } } },
+        include: {
+          creator: { select: { id: true, name: true, phone: true } },
+          _count: { select: { memberships: true, admins: true } },
+        },
       }),
     ]);
     return { total, page, limit, items };

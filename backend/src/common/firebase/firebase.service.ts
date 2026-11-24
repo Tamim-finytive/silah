@@ -56,6 +56,8 @@ export class FirebaseService implements OnModuleInit {
         },
         data: {
           ...data,
+          title,
+          body,
           click_action: 'FLUTTER_NOTIFICATION_CLICK',
         },
         android: {

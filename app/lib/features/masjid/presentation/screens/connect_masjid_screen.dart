@@ -425,50 +425,33 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
         Container(
           width: double.infinity,
           color: Colors.white,
-          padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 720),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    lang.tr(
-                      en: 'Find your masjid',
-                      ta: 'உங்கள் பள்ளிவாசலைத் தேடுங்கள்',
-                    ),
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    lang.tr(
-                      en: 'Search by masjid name, city, or address, then connect.',
-                      ta: 'பெயர், ஊர் அல்லது முகவரி மூலம் தேடி இணையுங்கள்.',
-                    ),
-                    style: TextStyle(color: Colors.grey.shade700),
-                  ),
-                  const SizedBox(height: 14),
+                
+                  const SizedBox(height: 8),
                   TextField(
                     controller: _searchCtrl,
                     onChanged: _onSearchChanged,
                     textInputAction: TextInputAction.search,
                     decoration: InputDecoration(
-                      prefixIcon:
-                          const Icon(Icons.search, color: AppColors.primary),
+                      prefixIcon: const Icon(Icons.search,
+                          color: AppColors.primary, size: 20),
                       hintText: lang.tr(
                         en: 'Search masjid by name or city...',
                         ta: 'பள்ளிவாசல் பெயர் அல்லது ஊர் தேடுக...',
                       ),
+                      isDense: true,
                       suffixIcon: _searchCtrl.text.isEmpty
                           ? null
                           : IconButton(
                               tooltip:
                                   lang.tr(en: 'Clear search', ta: 'நீக்கு'),
-                              icon: const Icon(Icons.close),
+                              icon: const Icon(Icons.close, size: 18),
                               onPressed: () {
                                 _searchCtrl.clear();
                                 _onSearchChanged('');
@@ -476,25 +459,27 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
                             ),
                       filled: true,
                       fillColor: const Color(0xFFF7F8FA),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(10),
                         borderSide: const BorderSide(color: AppColors.outline),
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(10),
                         borderSide: const BorderSide(color: AppColors.outline),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 6),
                   Row(
                     children: [
-                      Icon(Icons.sort, size: 19, color: Colors.grey.shade700),
+                      Icon(Icons.sort, size: 16, color: Colors.grey.shade600),
                       const SizedBox(width: 6),
                       Text(
                         lang.tr(en: 'Sort by', ta: 'வரிசை'),
-                        style: TextStyle(color: Colors.grey.shade700),
+                        style: TextStyle(
+                            color: Colors.grey.shade600, fontSize: 12),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -502,6 +487,11 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
                           value: _sort,
                           underline: const SizedBox.shrink(),
                           isExpanded: true,
+                          isDense: true,
+                          style: const TextStyle(
+                              fontSize: 13,
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w500),
                           items: [
                             DropdownMenuItem(
                               value: 'NAME_ASC',
@@ -527,7 +517,7 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
                           lang.tr(en: 'Nearby', ta: 'அருகில்'),
                           style: const TextStyle(
                             color: AppColors.primary,
-                            fontSize: 12,
+                            fontSize: 11,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -535,15 +525,15 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
                   ),
                   if (_searchTooShort)
                     Padding(
-                      padding: const EdgeInsets.only(top: 8, left: 4),
+                      padding: const EdgeInsets.only(top: 6, left: 4),
                       child: Text(
                         lang.tr(
                           en: 'Type at least 3 characters. Results search after you pause typing.',
                           ta: 'குறைந்தது 3 எழுத்துகள் உள்ளிடுங்கள். தட்டச்சை நிறுத்தியதும் தேடப்படும்.',
                         ),
                         style: TextStyle(
-                          color: Colors.grey.shade700,
-                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                          fontSize: 11,
                         ),
                       ),
                     ),
@@ -565,7 +555,7 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Padding(
-                              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                              padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
                               child: Text(
                                 _isSearching
                                     ? lang.tr(
@@ -578,6 +568,7 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
                                       ),
                                 style: TextStyle(
                                   color: Colors.grey.shade700,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -586,7 +577,7 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
                               child: ListView.builder(
                                 controller: _resultsScrollController,
                                 padding:
-                                    const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                                    const EdgeInsets.fromLTRB(12, 4, 12, 16),
                                 itemCount: _filteredMasjids.length +
                                     (_isLoadingMore || _loadError != null
                                         ? 1
@@ -596,10 +587,11 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
                                     if (_loadError != null) {
                                       return Center(
                                         child: Padding(
-                                          padding: const EdgeInsets.all(16),
+                                          padding: const EdgeInsets.all(14),
                                           child: OutlinedButton.icon(
                                             onPressed: () => _loadMasjids(),
-                                            icon: const Icon(Icons.refresh),
+                                            icon: const Icon(Icons.refresh,
+                                                size: 16),
                                             label: Text(lang.tr(
                                               en: 'Could not load more · Retry',
                                               ta: 'மேலும் ஏற்ற முடியவில்லை · மீண்டும் முயற்சி',
@@ -609,7 +601,7 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
                                       );
                                     }
                                     return const Padding(
-                                      padding: EdgeInsets.all(20),
+                                      padding: EdgeInsets.all(16),
                                       child: Center(
                                         child: CircularProgressIndicator(),
                                       ),
@@ -718,128 +710,152 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
         _isProcessing && masjidId != null && _connectingMasjidId == masjidId;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 8),
       elevation: 0,
       color: Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         side: const BorderSide(color: AppColors.outline),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
-                  width: 48,
-                  height: 48,
+                  width: 38,
+                  height: 38,
                   decoration: BoxDecoration(
                     color: AppColors.primaryContainer,
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(Icons.mosque,
-                      color: AppColors.primary, size: 27),
+                      color: AppColors.primary, size: 20),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         name,
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 17,
+                          fontSize: 15,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      if (location.isNotEmpty) ...[
-                        const SizedBox(height: 5),
-                        Text(
-                          location,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey.shade700,
-                          ),
-                        ),
-                      ],
-                      if (distanceKm != null) ...[
-                        const SizedBox(height: 5),
-                        Text(
-                          distanceKm < 1
-                              ? '${(distanceKm * 1000).round()} m away'
-                              : '${distanceKm.toStringAsFixed(1)} km away',
-                          style: const TextStyle(
-                            color: AppColors.primary,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          if (location.isNotEmpty)
+                            Expanded(
+                              child: Text(
+                                location,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ),
+                          if (distanceKm != null) ...[
+                            if (location.isNotEmpty)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 4),
+                                child: Text('•',
+                                    style: TextStyle(
+                                        fontSize: 11, color: Colors.grey)),
+                              ),
+                            Text(
+                              distanceKm < 1
+                                  ? '${(distanceKm * 1000).round()}m'
+                                  : '${distanceKm.toStringAsFixed(1)}km',
+                              style: const TextStyle(
+                                color: AppColors.primary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-            Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              runAlignment: WrapAlignment.center,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 8,
-              runSpacing: 8,
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                TextButton.icon(
-                  onPressed: () => _openMasjidLocation(map),
-                  icon: const Icon(Icons.directions_outlined, size: 18),
-                  label: Text(lang.tr(en: 'Location', ta: 'இடம்')),
+                SizedBox(
+                  height: 32,
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: () => _openMasjidLocation(map),
+                    icon: const Icon(Icons.directions_outlined, size: 16),
+                    label: Text(lang.tr(en: 'Location', ta: 'இடம்'),
+                        style: const TextStyle(fontSize: 12)),
+                  ),
                 ),
-                FilledButton.icon(
-                  onPressed: _isProcessing ||
-                          _isLoadingConnectedMasjids ||
-                          masjidId == null ||
-                          isConnected
-                      ? null
-                      : () => _handleJoinMasjid(masjidId, name),
-                  icon: _isLoadingConnectedMasjids
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : isThisConnecting
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Icon(
-                              isConnected
-                                  ? Icons.check_circle_outline
-                                  : Icons.add_link,
-                              size: 18),
-                  label: Text(_isLoadingConnectedMasjids
-                      ? lang.tr(en: 'Checking…', ta: 'சரிபார்க்கிறது…')
-                      : isConnected
-                          ? lang.tr(en: 'Connected', ta: 'இணைக்கப்பட்டது')
-                          : isThisConnecting
-                              ? lang.tr(en: 'Connecting…', ta: 'இணைக்கிறது…')
-                              : lang.tr(en: 'Connect', ta: 'இணை')),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
+                const SizedBox(width: 8),
+                SizedBox(
+                  height: 32,
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: _isProcessing ||
+                            _isLoadingConnectedMasjids ||
+                            masjidId == null ||
+                            isConnected
+                        ? null
+                        : () => _handleJoinMasjid(masjidId, name),
+                    icon: _isLoadingConnectedMasjids
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : isThisConnecting
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Icon(
+                                isConnected
+                                    ? Icons.check_circle_outline
+                                    : Icons.add_link,
+                                size: 16),
+                    label: Text(
+                      _isLoadingConnectedMasjids
+                          ? lang.tr(en: 'Checking…', ta: 'சரிபார்க்கிறது…')
+                          : isConnected
+                              ? lang.tr(en: 'Connected', ta: 'இணைக்கப்பட்டது')
+                              : isThisConnecting
+                                  ? lang.tr(en: 'Connecting…', ta: 'இணைக்கிறது…')
+                                  : lang.tr(en: 'Connect', ta: 'இணை'),
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ),
               ],

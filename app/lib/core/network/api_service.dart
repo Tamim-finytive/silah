@@ -484,14 +484,28 @@ class ApiService {
 
   Future<Map<String, dynamic>?> getTodayPrayerTimes(String masjidId) async {
     try {
-      final res = await _dio.get('/masjids/$masjidId/prayer-times/today');
-      if (res.data['success'] == true && res.data['data'] != null) {
-        return res.data['data'] as Map<String, dynamic>;
+      final now = DateTime.now();
+      final localDate =
+          '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final res = await _dio.get(
+        '/masjids/$masjidId/prayer-times/today',
+        queryParameters: {'date': localDate},
+      );
+      if (res.data is Map && res.data['success'] == true) {
+        final data = res.data['data'];
+        return data == null ? null : Map<String, dynamic>.from(data as Map);
       }
-    } catch (e) {
-      // Return null on network error
+      final error = res.data is Map ? res.data['error'] : null;
+      final message = error is Map
+          ? error['message']?.toString()
+          : res.data is Map
+              ? res.data['message']?.toString()
+              : null;
+      throw ApiException(message ?? 'Prayer schedule could not be loaded.');
+    } on DioException catch (e) {
+      throw ApiException(getErrorMessage(e),
+          statusCode: e.response?.statusCode);
     }
-    return null;
   }
 
   Future<List<dynamic>> getAnnouncements(String masjidId) async {
