@@ -9,7 +9,7 @@ class AppColors {
   static const Color onPrimary = Color(0xFFFFFFFF);
   static const Color primaryContainer = Color(0xFFE8EFE8);
   static const Color onPrimaryContainer = Color(0xFF183D30);
-
+  static const Color error = Color.fromARGB(255, 115, 11, 11);
   // Secondary & Accents
   static const Color secondary = Color(0xFFD5AD35);
   static const Color onSecondary = Color(0xFF292411);

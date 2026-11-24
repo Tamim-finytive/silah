@@ -1,6 +1,8 @@
 import 'package:masjid_namaz_app/core/constants/app_colors.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:masjid_namaz_app/core/l10n/language_provider.dart';
 import 'package:masjid_namaz_app/core/network/api_service.dart';
 import 'package:masjid_namaz_app/core/services/notification_service.dart';
 import 'package:masjid_namaz_app/features/prayer_times/presentation/screens/home_screen.dart';
@@ -324,7 +326,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: const Text('System Dashboard',
+        title: const AppLanguageText('System Dashboard',
             style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
@@ -465,7 +467,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: const Text('Masjid Directory',
+        title: const AppLanguageText('Masjid Directory',
             style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
@@ -879,7 +881,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: const Text('Masjid Approval Requests',
+        title: const AppLanguageText('Masjid Approval Requests',
             style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
@@ -1232,7 +1234,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: const Text('Broadcast Announcements',
+        title: const AppLanguageText('Broadcast Announcements',
             style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
@@ -1383,7 +1385,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: const Text('User Management',
+        title: const AppLanguageText('User Management',
             style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
@@ -1644,7 +1646,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: const Text('Super Admin Profile',
+        title: const AppLanguageText('Super Admin Profile',
             style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
@@ -1652,6 +1654,8 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          const AppLanguageSettingsTile(),
+          const Divider(height: 1),
           // Header Card
           Card(
             shape:
@@ -1668,7 +1672,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                         size: 40, color: AppColors.primary),
                   ),
                   const SizedBox(height: 12),
-                  const Text('Super Administrator',
+                  const AppLanguageText('Super Administrator',
                       style: TextStyle(
                           color: Colors.white,
                           fontSize: 18,
@@ -1686,7 +1690,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
           const SizedBox(height: 16),
 
           // System Metrics
-          const Text('System Live Metrics',
+          const AppLanguageText('System Live Metrics',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           Row(
@@ -1919,52 +1923,56 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: _buildSelectedTab(),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (i) {
-          setState(() => _currentIndex = i);
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (i == 1) _onMasjidScroll();
-            if (i == 4) _onUsersScroll();
-          });
-        },
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard_rounded),
-            label: 'Overview',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.mosque_outlined),
-            selectedIcon: Icon(Icons.mosque_rounded),
-            label: 'Masjids',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.pending_actions_outlined),
-            selectedIcon: Icon(Icons.pending_actions_rounded),
-            label: 'Requests',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.campaign_outlined),
-            selectedIcon: Icon(Icons.campaign_rounded),
-            label: 'Notices',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people_rounded),
-            label: 'Users',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person_rounded),
-            label: 'Profile',
-          ),
-        ],
-      ),
-    );
+    return Consumer(builder: (context, ref, _) {
+      ref.watch(languageProvider);
+      final language = ref.read(languageProvider.notifier);
+      return Scaffold(
+        body: _buildSelectedTab(),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _currentIndex,
+          onDestinationSelected: (i) {
+            setState(() => _currentIndex = i);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (i == 1) _onMasjidScroll();
+              if (i == 4) _onUsersScroll();
+            });
+          },
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          destinations: [
+            NavigationDestination(
+              icon: Icon(Icons.dashboard_outlined),
+              selectedIcon: Icon(Icons.dashboard_rounded),
+              label: language.text('Overview'),
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.mosque_outlined),
+              selectedIcon: Icon(Icons.mosque_rounded),
+              label: language.text('Masjids'),
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.pending_actions_outlined),
+              selectedIcon: Icon(Icons.pending_actions_rounded),
+              label: language.text('Requests'),
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.campaign_outlined),
+              selectedIcon: Icon(Icons.campaign_rounded),
+              label: language.text('Notices'),
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.people_outline),
+              selectedIcon: Icon(Icons.people_rounded),
+              label: language.text('Users'),
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person_rounded),
+              label: language.text('Profile'),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   Widget _buildSelectedTab() {

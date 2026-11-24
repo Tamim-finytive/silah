@@ -157,17 +157,23 @@ class AppTheme {
         backgroundColor: AppColors.surfaceCard,
         indicatorColor: AppColors.primaryContainer,
         elevation: 0,
-        height: 76,
-        labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
+        height: 68,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
               color: states.contains(WidgetState.selected)
                   ? AppColors.primary
                   : AppColors.textMuted,
-              size: 23,
+              size: 22,
             )),
-        labelTextStyle: WidgetStateProperty.all(
-          const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-        ),
+        labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
+              fontSize: 11,
+              fontWeight: states.contains(WidgetState.selected)
+                  ? FontWeight.w700
+                  : FontWeight.w500,
+              color: states.contains(WidgetState.selected)
+                  ? AppColors.primary
+                  : AppColors.textMuted,
+            )),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: AppColors.surfaceCard,

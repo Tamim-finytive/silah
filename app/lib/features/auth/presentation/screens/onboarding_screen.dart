@@ -41,7 +41,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   // Step 3: Masjid Form (for Masjid Admin)
   final _masjidNameController = TextEditingController();
-  final _masjidNameTaController = TextEditingController();
   final _masjidCityController = TextEditingController(text: 'Chennai');
   final _masjidAddressController = TextEditingController();
   final _latController = TextEditingController();
@@ -74,7 +73,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     _nameController.dispose();
     _addressController.dispose();
     _masjidNameController.dispose();
-    _masjidNameTaController.dispose();
     _masjidCityController.dispose();
     _masjidAddressController.dispose();
     _latController.dispose();
@@ -177,7 +175,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         name: masjidName,
         city: city,
         address: masjidAddress,
-        nameTa: _masjidNameTaController.text.trim(),
         latitude: lat,
         longitude: lng,
         mapUrl: _mapUrlController.text.trim().isEmpty
@@ -700,21 +697,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   ta: 'பள்ளிவாசல் பெயர் (English) *'),
               hintText: 'e.g. City Central Masjid',
               prefixIcon: const Icon(Icons.mosque),
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // Masjid Name Tamil (Optional)
-          TextField(
-            controller: _masjidNameTaController,
-            decoration: InputDecoration(
-              labelText: lang.tr(
-                  en: 'Masjid Name (Tamil) - Optional',
-                  ta: 'பள்ளிவாசல் பெயர் (தமிழ்)'),
-              hintText: 'எ.கா: ஜாமியா பள்ளிவாசல்',
-              prefixIcon: const Icon(Icons.translate),
               border:
                   OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),

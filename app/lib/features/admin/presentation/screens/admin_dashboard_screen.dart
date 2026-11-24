@@ -1,6 +1,9 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:masjid_namaz_app/core/constants/app_colors.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:masjid_namaz_app/core/l10n/language_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:masjid_namaz_app/core/network/api_service.dart';
 import 'package:masjid_namaz_app/core/services/notification_service.dart';
@@ -11,6 +14,7 @@ import 'package:masjid_namaz_app/features/masjid/presentation/widgets/location_i
 import 'package:masjid_namaz_app/features/admin/presentation/screens/notice_editor_screen.dart';
 import 'package:masjid_namaz_app/features/admin/presentation/screens/masjid_qr_screen.dart';
 import 'package:masjid_namaz_app/features/sandha/presentation/screens/sandha_management_screen.dart';
+import 'package:masjid_namaz_app/features/sandha/presentation/screens/sandha_settings_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   final String? masjidId;
@@ -22,24 +26,50 @@ class AdminDashboardScreen extends StatefulWidget {
 }
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
+  static const _storage = FlutterSecureStorage();
+  static const _lastAdminMasjidKey = 'last_selected_admin_masjid_id';
+  static const _lastAdminMasjidNameKey = 'last_selected_admin_masjid_name';
+
   int _currentIndex = 0;
   bool _isLoading = true;
+  String? _prayerDataError;
 
   String? _masjidId;
   String? _masjidName;
   Map<String, dynamic>? _masjidDetails;
   Map<String, dynamic>? _adminOverview;
   Map<String, dynamic>? _todayPrayerTimes;
+  List<dynamic> _monthPrayerTimes = [];
+  List<dynamic> _monthRamadanTimes = [];
+  DateTime _visibleScheduleMonth =
+      DateTime(DateTime.now().year, DateTime.now().month);
+  DateTime _selectedScheduleDate =
+      DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+  bool _calendarRangeMode = false;
+  DateTime? _calendarRangeStart;
+  DateTime? _calendarRangeEnd;
+  int _prayerEventsTab = 0;
+  bool _isScheduleCalendarLoading = false;
+  String? _scheduleCalendarError;
+  String? _prayerScheduleLoadError;
   List<dynamic> _specialSchedules = [];
   List<dynamic> _announcements = [];
   Map<String, dynamic>? _membersData;
   StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
+  StreamSubscription<InactiveMasjidEvent>? _inactiveMasjidSubscription;
+  bool _isMasjidInactive = false;
 
   @override
   void initState() {
     super.initState();
     _masjidId = widget.masjidId;
     _masjidName = widget.masjidName;
+    _inactiveMasjidSubscription =
+        ApiService.instance.inactiveMasjidEvents.listen((event) {
+      if (mounted && event.masjidId == _masjidId) {
+        setState(() => _isMasjidInactive = true);
+      }
+    });
     _notificationSubscription =
         NotificationService.instance.notificationEvents.listen((event) {
       if (event['opened'] == true && event['type'] == 'BROADCAST' && mounted) {
@@ -62,15 +92,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       }
     });
 
-    final cachedUser = ApiService.instance.currentUser;
-    final cachedRoles = cachedUser?['adminRoles'] as List<dynamic>?;
-    if (_masjidId == null && cachedRoles != null && cachedRoles.isNotEmpty) {
-      final firstRole = cachedRoles.first;
-      if (firstRole is Map<String, dynamic>) {
-        _masjidId = firstRole['masjidId'];
-        _masjidName = firstRole['masjidName'] ?? 'Masjid Admin';
-      }
-    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadMasjidData();
       final pending =
@@ -94,20 +115,64 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   void dispose() {
     _notificationSubscription?.cancel();
+    _inactiveMasjidSubscription?.cancel();
     super.dispose();
   }
 
   Future<void> _loadMasjidData() async {
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _prayerDataError = null;
+      });
+    }
     try {
-      final user = await ApiService.instance.getProfile() ??
-          ApiService.instance.currentUser;
       String? mId = _masjidId ?? widget.masjidId;
       String? mName = _masjidName ?? widget.masjidName;
+      var user = ApiService.instance.currentUser;
+      if (mId == null &&
+          (user == null ||
+              (user['adminRoles'] == null && user['masjidAdmins'] == null))) {
+        user = await ApiService.instance.getProfile() ?? user;
+      }
 
-      // 1. Check adminRoles
+      final adminRoles = (user?['adminRoles'] as List<dynamic>?) ??
+          (ApiService.instance.currentUser?['adminRoles'] as List<dynamic>?);
+
+      // 1. Check stored last selected admin masjid
+      if (widget.masjidId == null && mId == null) {
+        final lastSavedId = await _storage.read(key: _lastAdminMasjidKey);
+        final lastSavedName = await _storage.read(key: _lastAdminMasjidNameKey);
+        if (lastSavedId != null && adminRoles != null) {
+          final matchingRole = adminRoles.firstWhere(
+            (r) =>
+                r is Map<String, dynamic> &&
+                r['masjidId']?.toString() == lastSavedId,
+            orElse: () => null,
+          );
+          if (matchingRole != null && matchingRole is Map<String, dynamic>) {
+            mId = matchingRole['masjidId']?.toString();
+            mName = matchingRole['masjidName']?.toString();
+          } else if (lastSavedId.isNotEmpty) {
+            final masjidAdmins = user?['masjidAdmins'] as List<dynamic>?;
+            final matchingAdmin = masjidAdmins?.firstWhere(
+              (r) =>
+                  r is Map<String, dynamic> &&
+                  r['masjidId']?.toString() == lastSavedId,
+              orElse: () => null,
+            );
+            if (matchingAdmin != null &&
+                matchingAdmin is Map<String, dynamic>) {
+              mId = matchingAdmin['masjidId']?.toString();
+              mName =
+                  matchingAdmin['masjid']?['name']?.toString() ?? lastSavedName;
+            }
+          }
+        }
+      }
+
+      // 2. Fallback to first role in adminRoles
       if (mId == null) {
-        final adminRoles = (user?['adminRoles'] as List<dynamic>?) ??
-            (ApiService.instance.currentUser?['adminRoles'] as List<dynamic>?);
         if (adminRoles != null && adminRoles.isNotEmpty) {
           final primary = adminRoles.first;
           if (primary is Map<String, dynamic>) {
@@ -117,7 +182,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         }
       }
 
-      // 2. Check masjidAdmins in profile
+      // 3. Fallback to first in masjidAdmins
       if (mId == null) {
         final masjidAdmins = user?['masjidAdmins'] as List<dynamic>?;
         if (masjidAdmins != null && masjidAdmins.isNotEmpty) {
@@ -133,9 +198,29 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         _masjidId = mId;
         _masjidName = mName ?? _masjidName ?? 'Masjid Admin';
 
+        // Prayer management has its own month-scoped load. Render the screen
+        // as soon as its masjid is known; unrelated dashboard requests must
+        // never hold this screen behind a blank body.
+        if (mounted) setState(() => _isLoading = false);
+        unawaited(_loadScheduleCalendar(mId));
+
+        // Automatically store active selection so reopening the app sets this masjid
+        await _storage.write(key: _lastAdminMasjidKey, value: mId);
+        if (_masjidName != null) {
+          await _storage.write(
+              key: _lastAdminMasjidNameKey, value: _masjidName);
+        }
+
         final overview = await ApiService.instance.getMasjidAdminOverview(mId);
         final masjidInfo = await ApiService.instance.getMasjidById(mId);
-        final todayTimes = await ApiService.instance.getTodayPrayerTimes(mId);
+        Map<String, dynamic>? todayTimes;
+        String? prayerTimesError;
+        try {
+          todayTimes = await ApiService.instance.getTodayPrayerTimes(mId);
+        } catch (error) {
+          prayerTimesError = ApiService.getErrorMessage(error,
+              fallback: 'Prayer schedule could not be loaded.');
+        }
         final schedules = await ApiService.instance.getSpecialSchedules(mId);
         final notices = await ApiService.instance.getAnnouncements(mId);
         final members = await ApiService.instance.getMasjidMembers(mId);
@@ -144,7 +229,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           setState(() {
             _adminOverview = overview;
             _masjidDetails = masjidInfo ?? overview?['masjid'];
-            _todayPrayerTimes = todayTimes;
+            // The overview already includes the saved current-day record. Use
+            // it if the dedicated endpoint returns an empty response so both
+            // admin surfaces stay consistent with the same backend data.
+            final overviewTimes = overview?['todayPrayerTimes'];
+            final today = DateTime.now();
+            final selectedDateIsToday =
+                _selectedScheduleDate.year == today.year &&
+                    _selectedScheduleDate.month == today.month &&
+                    _selectedScheduleDate.day == today.day;
+            if (selectedDateIsToday) {
+              _todayPrayerTimes = todayTimes ??
+                  (overviewTimes is Map
+                      ? Map<String, dynamic>.from(overviewTimes)
+                      : null);
+              _prayerDataError = prayerTimesError;
+            }
             _specialSchedules = schedules;
             _announcements = notices;
             _membersData = members;
@@ -159,6 +259,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             _adminOverview = null;
             _masjidDetails = null;
             _todayPrayerTimes = null;
+            _monthPrayerTimes = [];
+            _monthRamadanTimes = [];
+            _scheduleCalendarError = null;
             _specialSchedules = [];
             _announcements = [];
             _membersData = null;
@@ -166,9 +269,665 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           });
         }
       }
-    } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _prayerDataError = ApiService.getErrorMessage(error,
+              fallback: 'Prayer data could not be loaded. Please retry.');
+          _isLoading = false;
+        });
+      }
     }
+  }
+
+  String _calendarDateKey(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  String? _rowDateKey(dynamic row) {
+    if (row is! Map) return null;
+    final value = row['date']?.toString();
+    if (value == null || value.length < 10) return null;
+    return value.substring(0, 10);
+  }
+
+  dynamic _rowForDate(List<dynamic> rows, DateTime date) {
+    final key = _calendarDateKey(date);
+    for (final row in rows) {
+      if (_rowDateKey(row) == key) return row;
+    }
+    return null;
+  }
+
+  Future<void> _loadScheduleCalendar(String masjidId, {DateTime? month}) async {
+    final targetMonth = month ?? _visibleScheduleMonth;
+    if (mounted) {
+      setState(() {
+        _isScheduleCalendarLoading = true;
+        _scheduleCalendarError = null;
+      });
+    }
+    try {
+      List<dynamic> prayers = [];
+      List<dynamic> fasting = [];
+      String? loadError;
+      String? prayerError;
+      try {
+        prayers = await ApiService.instance.getPrayerScheduleMonth(
+            masjidId, targetMonth.year, targetMonth.month);
+      } catch (error) {
+        prayerError = ApiService.getErrorMessage(error,
+            fallback: 'Prayer schedule could not be loaded.');
+        loadError = prayerError;
+      }
+      try {
+        fasting = await ApiService.instance.getRamadanScheduleMonth(
+            masjidId, targetMonth.year, targetMonth.month);
+      } catch (error) {
+        loadError ??= ApiService.getErrorMessage(error,
+            fallback: 'Fasting schedule could not be loaded.');
+      }
+      if (!mounted || masjidId != _masjidId) return;
+      final selectedRow = _rowForDate(prayers, _selectedScheduleDate);
+      final todayRow = _rowForDate(prayers, DateTime.now());
+      setState(() {
+        _visibleScheduleMonth = DateTime(targetMonth.year, targetMonth.month);
+        _monthPrayerTimes = prayers;
+        _monthRamadanTimes = fasting;
+        _scheduleCalendarError = loadError;
+        _prayerScheduleLoadError = prayerError;
+        if (_selectedScheduleDate.year == targetMonth.year &&
+            _selectedScheduleDate.month == targetMonth.month) {
+          _todayPrayerTimes = selectedRow is Map
+              ? Map<String, dynamic>.from(selectedRow)
+              : (_selectedScheduleDate.year == DateTime.now().year &&
+                      _selectedScheduleDate.month == DateTime.now().month &&
+                      _selectedScheduleDate.day == DateTime.now().day &&
+                      todayRow is Map
+                  ? Map<String, dynamic>.from(todayRow)
+                  : null);
+        }
+        _isScheduleCalendarLoading = false;
+      });
+    } catch (error) {
+      if (mounted && masjidId == _masjidId) {
+        setState(() {
+          _scheduleCalendarError = ApiService.getErrorMessage(error,
+              fallback: 'Schedule calendar could not be loaded.');
+          _isScheduleCalendarLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _changeScheduleMonth(int offset) async {
+    final next = DateTime(
+        _visibleScheduleMonth.year, _visibleScheduleMonth.month + offset);
+    setState(() {
+      _visibleScheduleMonth = next;
+      _selectedScheduleDate = DateTime(next.year, next.month, 1);
+      _todayPrayerTimes = null;
+      _monthPrayerTimes = [];
+      _monthRamadanTimes = [];
+      _scheduleCalendarError = null;
+      _prayerScheduleLoadError = null;
+    });
+    final masjidId = _masjidId;
+    if (masjidId != null) await _loadScheduleCalendar(masjidId, month: next);
+  }
+
+  Future<void> _selectScheduleDate(DateTime date) async {
+    setState(() {
+      _selectedScheduleDate = DateTime(date.year, date.month, date.day);
+      _todayPrayerTimes = null;
+    });
+    final prayerRow = _rowForDate(_monthPrayerTimes, date);
+    if (prayerRow is Map) {
+      setState(() {
+        _todayPrayerTimes = Map<String, dynamic>.from(prayerRow);
+        _prayerDataError = null;
+      });
+      return;
+    }
+    final today = DateTime.now();
+    if (date.year == today.year &&
+        date.month == today.month &&
+        date.day == today.day) {
+      try {
+        final row = await ApiService.instance.getTodayPrayerTimes(_masjidId!);
+        if (mounted && row != null) setState(() => _todayPrayerTimes = row);
+      } catch (error) {
+        if (mounted)
+          setState(() => _prayerDataError = ApiService.getErrorMessage(error));
+      }
+    }
+  }
+
+  void _handleScheduleCalendarTap(DateTime date) {
+    if (!_calendarRangeMode) {
+      _selectScheduleDate(date);
+      return;
+    }
+    final day = DateTime(date.year, date.month, date.day);
+    if (_calendarRangeStart == null || _calendarRangeEnd != null) {
+      setState(() {
+        _calendarRangeStart = day;
+        _calendarRangeEnd = null;
+      });
+      return;
+    }
+    final first = _calendarRangeStart!;
+    final range = DateTimeRange(
+      start: day.isBefore(first) ? day : first,
+      end: day.isBefore(first) ? first : day,
+    );
+    final rangeDays = range.duration.inDays + 1;
+    if (_prayerEventsTab == 0 && rangeDays > 31) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content:
+                Text('Prayer schedules can cover up to 31 days at a time.')),
+      );
+      setState(() {
+        _calendarRangeEnd = null;
+        _calendarRangeMode = true;
+      });
+      return;
+    }
+    setState(() {
+      _calendarRangeStart = range.start;
+      _calendarRangeEnd = range.end;
+      _calendarRangeMode = false;
+      _selectedScheduleDate = range.start;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_prayerEventsTab == 0) {
+        _showDateRangePrayerDialog(initialRange: range);
+      } else {
+        _chooseEventsRangeAction(range);
+      }
+    });
+  }
+
+  void _chooseEventsRangeAction(DateTimeRange range) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('What do you want to schedule?'),
+        content: Text(
+            '${_calendarDateKey(range.start)} to ${_calendarDateKey(range.end)}'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel')),
+          OutlinedButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              _showAddSpecialEventDialog(
+                startDate: _calendarDateKey(range.start),
+                endDate: _calendarDateKey(range.end),
+              );
+            },
+            child: const Text('Special prayer / event'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              _showRamadanRangeDialog(initialRange: range);
+            },
+            child: const Text('Fasting times'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScheduleCalendar() {
+    final first =
+        DateTime(_visibleScheduleMonth.year, _visibleScheduleMonth.month, 1);
+    final daysInMonth =
+        DateTime(_visibleScheduleMonth.year, _visibleScheduleMonth.month + 1, 0)
+            .day;
+    final leading = (first.weekday % 7);
+    final selectedKey = _calendarDateKey(_selectedScheduleDate);
+    final prayerDates =
+        _monthPrayerTimes.map(_rowDateKey).whereType<String>().toSet();
+    final ramadanDates =
+        _monthRamadanTimes.map(_rowDateKey).whereType<String>().toSet();
+    final eventDates = <String>{};
+    for (final event in _specialSchedules) {
+      if (event is! Map) continue;
+      final start = DateTime.tryParse(event['startDate']?.toString() ?? '');
+      final end =
+          DateTime.tryParse(event['endDate']?.toString() ?? '') ?? start;
+      if (start == null || end == null) continue;
+      for (var d = DateTime(start.year, start.month, start.day);
+          !d.isAfter(DateTime(end.year, end.month, end.day));
+          d = d.add(const Duration(days: 1))) {
+        if (d.year == _visibleScheduleMonth.year &&
+            d.month == _visibleScheduleMonth.month) {
+          eventDates.add(_calendarDateKey(d));
+        }
+      }
+    }
+    final cells = <Widget>[];
+    for (var i = 0; i < leading; i++) cells.add(const SizedBox(height: 48));
+    for (var day = 1; day <= daysInMonth; day++) {
+      final date = DateTime(
+          _visibleScheduleMonth.year, _visibleScheduleMonth.month, day);
+      final key = _calendarDateKey(date);
+      final isSelected = key == selectedKey;
+      final rangeStart = _calendarRangeStart;
+      final rangeEnd = _calendarRangeEnd;
+      final inSelectedRange = rangeStart != null &&
+          !date.isBefore(
+              DateTime(rangeStart.year, rangeStart.month, rangeStart.day)) &&
+          (rangeEnd == null ||
+              !date.isAfter(
+                  DateTime(rangeEnd.year, rangeEnd.month, rangeEnd.day)));
+      final hasPrayer = prayerDates.contains(key);
+      final hasRamadan = ramadanDates.contains(key);
+      final hasEvent = eventDates.contains(key);
+      cells.add(InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _handleScheduleCalendarTap(date),
+        child: Container(
+          height: 48,
+          margin: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppColors.primary
+                : inSelectedRange
+                    ? AppColors.primary.withValues(alpha: 0.14)
+                    : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: !isSelected && _calendarDateKey(DateTime.now()) == key
+                ? Border.all(color: AppColors.primary, width: 1.2)
+                : null,
+          ),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text('$day',
+                style: TextStyle(
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                    color: isSelected ? Colors.white : null)),
+            const SizedBox(height: 2),
+            Wrap(spacing: 2, children: [
+              if (hasPrayer)
+                _calendarDot(isSelected ? Colors.white : AppColors.primary),
+              if (hasRamadan)
+                _calendarDot(isSelected ? Colors.white : Colors.orange),
+              if (hasEvent)
+                _calendarDot(isSelected ? Colors.white : Colors.purple),
+            ]),
+          ]),
+        ),
+      ));
+    }
+    final weeks = <Widget>[];
+    for (var i = 0; i < cells.length; i += 7) {
+      weeks.add(Row(
+          children: List.generate(
+              7,
+              (j) => Expanded(
+                  child: i + j < cells.length
+                      ? cells[i + j]
+                      : const SizedBox(height: 48)))));
+    }
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(children: [
+          Row(children: [
+            IconButton(
+                onPressed: () => _changeScheduleMonth(-1),
+                icon: const Icon(Icons.chevron_left)),
+            Expanded(
+                child: Text(
+                    '${_monthName(_visibleScheduleMonth.month)} ${_visibleScheduleMonth.year}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 16))),
+            IconButton(
+                onPressed: () => _changeScheduleMonth(1),
+                icon: const Icon(Icons.chevron_right)),
+          ]),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => setState(() {
+                _calendarRangeMode = !_calendarRangeMode;
+                _calendarRangeStart = null;
+                _calendarRangeEnd = null;
+              }),
+              icon: Icon(_calendarRangeMode ? Icons.close : Icons.date_range),
+              label: Text(
+                  _calendarRangeMode ? 'Cancel range' : 'Select date range'),
+            ),
+          ),
+          if (_calendarRangeMode)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _calendarRangeStart == null
+                    ? 'Tap the start date, then tap the end date.'
+                    : 'Start date: ${_calendarDateKey(_calendarRangeStart!)} · tap an end date.',
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ),
+          Row(
+              children: ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+                  .map((d) => Expanded(
+                      child: Center(
+                          child: Text(d,
+                              style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontWeight: FontWeight.w600)))))
+                  .toList()),
+          const SizedBox(height: 4),
+          ...weeks,
+          const SizedBox(height: 8),
+          Wrap(spacing: 12, runSpacing: 6, children: [
+            _calendarLegend(AppColors.primary, 'Prayer'),
+            _calendarLegend(Colors.orange, 'Fasting'),
+            _calendarLegend(Colors.purple, 'Special event'),
+          ]),
+          if (_isScheduleCalendarLoading)
+            const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: LinearProgressIndicator(minHeight: 2)),
+          if (_scheduleCalendarError != null)
+            Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(children: [
+                  Expanded(
+                      child: Text(_scheduleCalendarError!,
+                          style: TextStyle(
+                              color: Theme.of(context).colorScheme.error))),
+                  TextButton(
+                      onPressed: () {
+                        final id = _masjidId;
+                        if (id != null) _loadScheduleCalendar(id);
+                      },
+                      child: const Text('Retry'))
+                ])),
+        ]),
+      ),
+    );
+  }
+
+  Widget _calendarDot(Color color) => Container(
+      width: 5,
+      height: 5,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle));
+  Widget _calendarLegend(Color color, String label) =>
+      Row(mainAxisSize: MainAxisSize.min, children: [
+        _calendarDot(color),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(fontSize: 11))
+      ]);
+  String _monthName(int month) => const [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December'
+      ][month - 1];
+
+  Widget _buildSelectedEventsPanel() {
+    final fasting = _rowForDate(_monthRamadanTimes, _selectedScheduleDate);
+    final selectedDate = _calendarDateKey(_selectedScheduleDate);
+    final events = _specialSchedules.where((item) {
+      if (item is! Map) return false;
+      final start = DateTime.tryParse(item['startDate']?.toString() ?? '');
+      final end = DateTime.tryParse(item['endDate']?.toString() ?? '') ?? start;
+      if (start == null || end == null) return false;
+      final date = DateTime(_selectedScheduleDate.year,
+          _selectedScheduleDate.month, _selectedScheduleDate.day);
+      return !date.isBefore(DateTime(start.year, start.month, start.day)) &&
+          !date.isAfter(DateTime(end.year, end.month, end.day));
+    }).toList();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('Events on $selectedDate',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+      const SizedBox(height: 10),
+      Card(
+          child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Icon(Icons.nightlight_round, color: Colors.orange),
+            const SizedBox(width: 8),
+            const Expanded(
+                child: Text('Fasting times',
+                    style: TextStyle(fontWeight: FontWeight.bold))),
+            TextButton.icon(
+              onPressed: _showRamadanScheduleDialog,
+              icon: Icon(fasting == null ? Icons.add : Icons.edit, size: 17),
+              label: Text(fasting == null ? 'Add' : 'Edit'),
+            ),
+          ]),
+          if (fasting == null)
+            const Text('No fasting times saved for this date.',
+                style: TextStyle(color: Colors.grey))
+          else
+            Wrap(spacing: 18, runSpacing: 8, children: [
+              _eventTime('Sehri ends', fasting['sehriEnd']),
+              _eventTime('Iftar', fasting['iftarTime']),
+              if ((fasting['notes']?.toString() ?? '').isNotEmpty)
+                _eventTime('Note', fasting['notes']),
+            ]),
+        ]),
+      )),
+      const SizedBox(height: 12),
+      Row(children: [
+        const Expanded(
+            child: Text('Special prayers and events',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+        FilledButton.icon(
+            onPressed: _showAddSpecialEventDialog,
+            icon: const Icon(Icons.add),
+            label: const Text('Add')),
+      ]),
+      const SizedBox(height: 8),
+      if (events.isEmpty)
+        const Card(
+            child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                    'No special events on this date. Add Taraweeh, Eid prayer, or another event.')))
+      else
+        ...events.map((item) {
+          final event = Map<String, dynamic>.from(item as Map);
+          final notes = event['notes']?.toString();
+          return Card(
+            child: ListTile(
+              leading: const CircleAvatar(
+                  child: Icon(Icons.event, color: AppColors.primary)),
+              title: Text(event['title']?.toString() ?? 'Special event',
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
+              subtitle: Text(
+                  '${event['startTime'] ?? ''}${event['endTime'] == null ? '' : ' – ${event['endTime']}'}${(notes ?? '').isEmpty ? '' : '\n$notes'}'),
+              isThreeLine: (notes ?? '').isNotEmpty,
+              onTap: () => _showAddSpecialEventDialog(existing: event),
+              trailing: PopupMenuButton<String>(
+                onSelected: (action) {
+                  if (action == 'edit')
+                    _showAddSpecialEventDialog(existing: event);
+                  if (action == 'delete')
+                    _deleteSpecialSchedule(event['id']?.toString() ?? '');
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'edit', child: Text('Edit')),
+                  PopupMenuItem(value: 'delete', child: Text('Delete')),
+                ],
+              ),
+            ),
+          );
+        }),
+    ]);
+  }
+
+  Widget _eventTime(String label, dynamic value) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(value?.toString() ?? '—',
+            style: const TextStyle(fontWeight: FontWeight.w600))
+      ]);
+
+  void _showRamadanScheduleDialog() {
+    if (_masjidId == null) return;
+    final existing = _rowForDate(_monthRamadanTimes, _selectedScheduleDate);
+    final sehri = TextEditingController(
+        text: existing is Map ? existing['sehriEnd']?.toString() ?? '' : '');
+    final iftar = TextEditingController(
+        text: existing is Map ? existing['iftarTime']?.toString() ?? '' : '');
+    final notes = TextEditingController(
+        text: existing is Map ? existing['notes']?.toString() ?? '' : '');
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title:
+            Text(existing == null ? 'Add fasting times' : 'Edit fasting times'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(_calendarDateKey(_selectedScheduleDate)),
+          const SizedBox(height: 12),
+          _buildTimePickerInput(dialogContext, sehri, 'Sehri ends *'),
+          const SizedBox(height: 12),
+          _buildTimePickerInput(dialogContext, iftar, 'Iftar *'),
+          const SizedBox(height: 12),
+          TextField(
+              controller: notes,
+              decoration: const InputDecoration(labelText: 'Notes (optional)')),
+        ]),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              if (sehri.text.trim().isEmpty || iftar.text.trim().isEmpty)
+                return;
+              Navigator.pop(dialogContext);
+              try {
+                final id = _masjidId;
+                if (id == null) return;
+                await ApiService.instance.saveRamadanSchedule(id, [
+                  {
+                    'date': _calendarDateKey(_selectedScheduleDate),
+                    'sehriEnd': sehri.text.trim(),
+                    'iftarTime': iftar.text.trim(),
+                    if (notes.text.trim().isNotEmpty) 'notes': notes.text.trim()
+                  },
+                ]);
+                await _loadScheduleCalendar(id);
+                if (mounted)
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Fasting times saved.')));
+              } catch (error) {
+                if (mounted)
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(ApiService.getErrorMessage(error))));
+              }
+            },
+            child: const Text('Save times'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSwitchAdminMasjidSheet() {
+    final user = ApiService.instance.currentUser;
+    final adminRoles = (user?['adminRoles'] as List<dynamic>?) ?? [];
+    if (adminRoles.isEmpty) return;
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Text(
+                  'Switch Admin Masjid',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const Divider(),
+              ...adminRoles.map((role) {
+                if (role is! Map<String, dynamic>) {
+                  return const SizedBox.shrink();
+                }
+                final roleMasjidId = role['masjidId']?.toString();
+                final roleMasjidName =
+                    role['masjidName']?.toString() ?? 'Masjid';
+                final isSelected = roleMasjidId == _masjidId;
+
+                return ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppColors.primary
+                          : AppColors.primaryContainer,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.mosque,
+                      color: isSelected ? Colors.white : AppColors.primary,
+                      size: 22,
+                    ),
+                  ),
+                  title: Text(
+                    roleMasjidName,
+                    style: TextStyle(
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.w600,
+                      color: isSelected ? AppColors.primary : Colors.black87,
+                    ),
+                  ),
+                  subtitle: Text(role['role']?.toString() ?? 'Admin'),
+                  trailing: isSelected
+                      ? const Icon(Icons.check_circle, color: AppColors.primary)
+                      : null,
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    if (roleMasjidId != null && roleMasjidId != _masjidId) {
+                      setState(() {
+                        _masjidId = roleMasjidId;
+                        _masjidName = roleMasjidName;
+                        _isMasjidInactive = false;
+                        _isLoading = true;
+                      });
+                      await _storage.write(
+                          key: _lastAdminMasjidKey, value: roleMasjidId);
+                      await _storage.write(
+                          key: _lastAdminMasjidNameKey, value: roleMasjidName);
+                      _loadMasjidData();
+                    }
+                  },
+                );
+              }),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // -------------------------------------------------------------
@@ -179,15 +938,44 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final memberCount = metrics['memberCount'] ?? 0;
     final noticesCount =
         metrics['activeAnnouncementsCount'] ?? _announcements.length;
+    final user = ApiService.instance.currentUser;
+    final adminRoles = (user?['adminRoles'] as List<dynamic>?) ?? [];
+    final hasMultipleMasjids = adminRoles.length > 1;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(_masjidName ?? 'Masjid Admin Dashboard',
-            style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: InkWell(
+          onTap: hasMultipleMasjids ? _showSwitchAdminMasjidSheet : null,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(_masjidName ?? 'Masjid Admin Dashboard',
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+                if (hasMultipleMasjids) ...[
+                  const SizedBox(width: 4),
+                  const Icon(Icons.arrow_drop_down,
+                      color: Colors.white, size: 22),
+                ],
+              ],
+            ),
+          ),
+        ),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         actions: [
+          if (hasMultipleMasjids)
+            IconButton(
+              icon: const Icon(Icons.swap_horiz),
+              tooltip: 'Switch Admin Masjid',
+              onPressed: _showSwitchAdminMasjidSheet,
+            ),
           IconButton(
               icon: const Icon(Icons.refresh), onPressed: _loadMasjidData),
         ],
@@ -415,7 +1203,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   void _showCreateMasjidDialog() {
     final nameCtrl = TextEditingController();
-    final nameTaCtrl = TextEditingController();
     final cityCtrl = TextEditingController();
     final addrCtrl = TextEditingController();
     final latCtrl = TextEditingController();
@@ -436,11 +1223,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   controller: nameCtrl,
                   decoration:
                       const InputDecoration(labelText: 'Masjid Name *')),
-              const SizedBox(height: 12),
-              TextField(
-                  controller: nameTaCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Tamil Name (Optional)')),
               const SizedBox(height: 12),
               TextField(
                   controller: cityCtrl,
@@ -481,9 +1263,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   name: nameCtrl.text.trim(),
                   city: cityCtrl.text.trim(),
                   address: addrCtrl.text.trim(),
-                  nameTa: nameTaCtrl.text.trim().isEmpty
-                      ? null
-                      : nameTaCtrl.text.trim(),
                   latitude: double.tryParse(latCtrl.text),
                   longitude: double.tryParse(lngCtrl.text),
                   mapUrl: mapUrlCtrl.text.trim().isEmpty
@@ -841,7 +1620,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Manage Prayer & Events',
+        title: const AppLanguageText('Manage Prayer & Events',
             style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
@@ -861,7 +1640,148 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   child: ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
-                      if (!hasPrayerTimes) ...[
+                      SegmentedButton<int>(
+                        segments: const [
+                          ButtonSegment(
+                              value: 0,
+                              icon: Icon(Icons.schedule),
+                              label: AppLanguageText('Prayers')),
+                          ButtonSegment(
+                              value: 1,
+                              icon: Icon(Icons.event),
+                              label: AppLanguageText('Events')),
+                        ],
+                        selected: {_prayerEventsTab},
+                        onSelectionChanged: (selection) =>
+                            setState(() => _prayerEventsTab = selection.first),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildScheduleCalendar(),
+                      const SizedBox(height: 12),
+                      if (_prayerDataError != null) ...[
+                        Card(
+                          color: Theme.of(context).colorScheme.errorContainer,
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(Icons.cloud_off_outlined,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onErrorContainer),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Some prayer information could not be loaded',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onErrorContainer,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        _prayerDataError!,
+                                        style: TextStyle(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onErrorContainer,
+                                        ),
+                                      ),
+                                      Align(
+                                        alignment: Alignment.centerRight,
+                                        child: TextButton.icon(
+                                          onPressed: _loadMasjidData,
+                                          icon: const Icon(Icons.refresh),
+                                          label: const Text('Retry'),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      Card(
+                        margin: EdgeInsets.zero,
+                        child: ListTile(
+                          leading: const CircleAvatar(
+                            backgroundColor: AppColors.primary,
+                            child: Icon(Icons.mosque, color: Colors.white),
+                          ),
+                          title: Text(
+                            _masjidName ?? 'Masjid Prayer Schedule',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          subtitle: const Text('Prayer timings and events'),
+                          trailing: IconButton(
+                            tooltip: 'Refresh prayer data',
+                            onPressed: _loadMasjidData,
+                            icon: const Icon(Icons.refresh),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      if (_prayerEventsTab == 0 &&
+                          !hasPrayerTimes &&
+                          _isScheduleCalendarLoading) ...[
+                        const Card(
+                          child: Padding(
+                            padding: EdgeInsets.all(22),
+                            child: Row(children: [
+                              SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                              SizedBox(width: 14),
+                              Expanded(
+                                child: Text(
+                                  'Loading saved prayer times for this month…',
+                                ),
+                              ),
+                            ]),
+                          ),
+                        ),
+                      ] else if (_prayerEventsTab == 0 &&
+                          !hasPrayerTimes &&
+                          _prayerScheduleLoadError != null) ...[
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(children: [
+                              const Icon(Icons.cloud_off_outlined,
+                                  color: Colors.orange, size: 36),
+                              const SizedBox(height: 10),
+                              Text(_prayerScheduleLoadError!,
+                                  textAlign: TextAlign.center),
+                              const SizedBox(height: 8),
+                              FilledButton.icon(
+                                onPressed: () {
+                                  final id = _masjidId;
+                                  if (id != null) _loadScheduleCalendar(id);
+                                },
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Retry loading schedule'),
+                              ),
+                            ]),
+                          ),
+                        ),
+                      ] else if (_prayerEventsTab == 0 && !hasPrayerTimes) ...[
                         // // 1. FIRST TIME / EMPTY: SHOW CREATE BUTTON FIRST (NO EDIT BUTTON)
                         const Text('Prayer Timings',
                             style: TextStyle(
@@ -952,12 +1872,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             ),
                           ),
                         ),
-                      ] else ...[
+                      ] else if (_prayerEventsTab == 0) ...[
                         // 2. TIMINGS CONFIGURED: SHOW SAVED TIMINGS WITH EDIT OPTIONS
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Today Prayer Timings',
+                            Text(
+                                '${_calendarDateKey(_selectedScheduleDate)} Prayer Timings',
                                 style: TextStyle(
                                     fontSize: 16, fontWeight: FontWeight.bold)),
                             ElevatedButton.icon(
@@ -1092,112 +2013,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           ),
                         ),
                       ],
-                      const SizedBox(height: 24),
-
-                      // Special Events Section (Ramadan, Eid, Taraweeh, Tahajjud)
-                      Wrap(
-                        alignment: WrapAlignment.spaceBetween,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        runSpacing: 8,
-                        children: [
-                          const Text('Special Events (Ramadan / Eid)',
-                              style: TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.bold)),
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                                foregroundColor: Colors.white),
-                            icon: const Icon(Icons.add, size: 16),
-                            label: const Text('Add Event',
-                                style: TextStyle(fontSize: 12)),
-                            onPressed: _showAddSpecialEventDialog,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-
-                      if (_specialSchedules.isEmpty)
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(18),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Icon(Icons.event_available,
-                                    color: AppColors.primary, size: 26),
-                                const SizedBox(height: 10),
-                                const Text(
-                                  'No special events yet. Add Ramadan, Eid, Taraweeh, Tahajjud, or another masjid event.',
-                                ),
-                                const SizedBox(height: 12),
-                                Align(
-                                  alignment: Alignment.centerRight,
-                                  child: FilledButton.icon(
-                                    onPressed: _showAddSpecialEventDialog,
-                                    icon: const Icon(Icons.add),
-                                    label: const Text('Create event'),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      else
-                        ..._specialSchedules.map((s) {
-                          if (s is! Map<String, dynamic>)
-                            return const SizedBox.shrink();
-                          final notes = s['notes']?.toString();
-                          final title =
-                              s['title']?.toString() ?? 'Special Event';
-                          final startTime = s['startTime']?.toString() ?? '';
-                          final endTime = s['endTime']?.toString();
-                          final startDate =
-                              s['startDate']?.toString().split('T').first ?? '';
-                          final endDate =
-                              s['endDate']?.toString().split('T').first;
-
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10)),
-                            child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor:
-                                    AppColors.primary.withValues(alpha: 0.1),
-                                child: const Icon(Icons.event,
-                                    color: AppColors.primary),
-                              ),
-                              title: Text(title,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold)),
-                              subtitle: Text(
-                                  'Time: $startTime${endTime != null && endTime.isNotEmpty ? '–$endTime' : ''} • $startDate${endDate != null && endDate.isNotEmpty ? ' to $endDate' : ''}${notes != null && notes.isNotEmpty ? '\n$notes' : ''}'),
-                              isThreeLine: notes != null && notes.isNotEmpty,
-                              onTap: () =>
-                                  _showAddSpecialEventDialog(existing: s),
-                              trailing: PopupMenuButton<String>(
-                                onSelected: (action) {
-                                  if (action == 'edit') {
-                                    _showAddSpecialEventDialog(existing: s);
-                                  } else if (action == 'delete') {
-                                    _deleteSpecialSchedule(
-                                        s['id']?.toString() ?? '');
-                                  }
-                                },
-                                itemBuilder: (context) => const [
-                                  PopupMenuItem(
-                                    value: 'edit',
-                                    child: Text('Edit event'),
-                                  ),
-                                  PopupMenuItem(
-                                    value: 'delete',
-                                    child: Text('Delete event'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }),
+                      if (_prayerEventsTab == 1) ...[
+                        _buildSelectedEventsPanel(),
+                      ],
                     ],
                   ),
                 ),
@@ -1244,7 +2062,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         _todayPrayerTimes!['fajrJamaah'] == null ||
         _todayPrayerTimes!['fajrJamaah'].toString().trim().isEmpty;
 
-    final dateStr = DateTime.now().toIso8601String().split('T')[0];
+    final dateStr = _calendarDateKey(_selectedScheduleDate);
     final sunriseCtrl =
         TextEditingController(text: _todayPrayerTimes?['sunrise'] ?? '');
     final sunsetCtrl =
@@ -1528,14 +2346,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  void _showDateRangePrayerDialog() {
+  void _showDateRangePrayerDialog({DateTimeRange? initialRange}) {
     final startCtrl = TextEditingController(
-        text: DateTime.now().toIso8601String().split('T')[0]);
+        text: _calendarDateKey(initialRange?.start ?? _selectedScheduleDate));
     final endCtrl = TextEditingController(
-        text: DateTime.now()
-            .add(const Duration(days: 30))
-            .toIso8601String()
-            .split('T')[0]);
+        text: _calendarDateKey(initialRange?.end ?? _selectedScheduleDate));
     final fajrJCtrl = TextEditingController();
     final dhuhrJCtrl = TextEditingController();
     final asrJCtrl = TextEditingController();
@@ -1623,16 +2438,87 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  void _showAddSpecialEventDialog({Map<String, dynamic>? existing}) {
+  void _showRamadanRangeDialog({required DateTimeRange initialRange}) {
+    if (_masjidId == null) return;
+    final sehri = TextEditingController();
+    final iftar = TextEditingController();
+    final notes = TextEditingController();
+    final days = initialRange.end.difference(initialRange.start).inDays + 1;
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Set fasting times for selected dates'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(
+              '${_calendarDateKey(initialRange.start)} to ${_calendarDateKey(initialRange.end)} · $days days'),
+          const SizedBox(height: 12),
+          _buildTimePickerInput(dialogContext, sehri, 'Sehri ends *'),
+          const SizedBox(height: 12),
+          _buildTimePickerInput(dialogContext, iftar, 'Iftar *'),
+          const SizedBox(height: 12),
+          TextField(
+              controller: notes,
+              decoration: const InputDecoration(labelText: 'Notes (optional)')),
+        ]),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              if (days > 31 ||
+                  sehri.text.trim().isEmpty ||
+                  iftar.text.trim().isEmpty) return;
+              Navigator.pop(dialogContext);
+              try {
+                final payload = <Map<String, dynamic>>[];
+                for (var offset = 0; offset < days; offset++) {
+                  final date = initialRange.start.add(Duration(days: offset));
+                  payload.add({
+                    'date': _calendarDateKey(date),
+                    'sehriEnd': sehri.text.trim(),
+                    'iftarTime': iftar.text.trim(),
+                    if (notes.text.trim().isNotEmpty)
+                      'notes': notes.text.trim(),
+                  });
+                }
+                final id = _masjidId;
+                if (id == null) return;
+                await ApiService.instance.saveRamadanSchedule(id, payload);
+                await _loadScheduleCalendar(id);
+                if (mounted)
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content:
+                          Text('Fasting schedule saved for selected dates.')));
+              } catch (error) {
+                if (mounted)
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(ApiService.getErrorMessage(error))));
+              }
+            },
+            child: const Text('Save range'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddSpecialEventDialog({
+    Map<String, dynamic>? existing,
+    String? startDate,
+    String? endDate,
+  }) {
     final id = existing?['id']?.toString();
     String selectedType = existing?['type']?.toString() ?? 'RAMZAN_TIMETABLE';
     final titleCtrl =
         TextEditingController(text: existing?['title']?.toString() ?? '');
     final startCtrl = TextEditingController(
         text: existing?['startDate']?.toString().split('T').first ??
-            DateTime.now().toIso8601String().split('T')[0]);
+            startDate ??
+            _calendarDateKey(_selectedScheduleDate));
     final endDateCtrl = TextEditingController(
-        text: existing?['endDate']?.toString().split('T').first ?? '');
+        text:
+            existing?['endDate']?.toString().split('T').first ?? endDate ?? '');
     final timeCtrl =
         TextEditingController(text: existing?['startTime']?.toString() ?? '');
     final endTimeCtrl =
@@ -1784,7 +2670,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Masjid Notice Board',
+        title: const AppLanguageText('Masjid Notice Board',
             style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
@@ -1913,7 +2799,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Manage Members & Roles',
+        title: const AppLanguageText('Manage Members & Roles',
             style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
@@ -2443,12 +3329,23 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   // -------------------------------------------------------------
-  // TAB 5: Masjid Profile & Settings
+  // TAB 3: Sandha Management Module
+  // -------------------------------------------------------------
+  Widget _buildSandhaTab() {
+    if (_masjidId == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return SandhaManagementScreen(
+      masjidId: _masjidId!,
+      isEmbedded: true,
+    );
+  }
+
+  // -------------------------------------------------------------
+  // TAB 6: Masjid Profile & Settings
   // -------------------------------------------------------------
   Widget _buildProfileTab() {
     final nameCtrl = TextEditingController(text: _masjidDetails?['name'] ?? '');
-    final nameTaCtrl =
-        TextEditingController(text: _masjidDetails?['nameTa'] ?? '');
     final cityCtrl = TextEditingController(text: _masjidDetails?['city'] ?? '');
     final addrCtrl =
         TextEditingController(text: _masjidDetails?['address'] ?? '');
@@ -2462,14 +3359,58 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Masjid Settings & Profile',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Consumer(
+            builder: (context, ref, _) => Text(
+                  ref
+                      .read(languageProvider.notifier)
+                      .text('Masjid Settings & Profile'),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                )),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          const AppLanguageSettingsTile(),
+          const Divider(height: 1),
+
+          // Sandha Settings Tile (User requested: Sandha settings inside Settings)
+          Card(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: ListTile(
+              leading: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryContainer,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.payments_outlined,
+                    color: AppColors.primary, size: 20),
+              ),
+              title: const Text('Sandha Settings',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              subtitle: const Text(
+                  'Configure monthly subscription plan, amount & UPI payment details',
+                  style:
+                      TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                if (_masjidId != null) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          SandhaSettingsScreen(masjidId: _masjidId!),
+                    ),
+                  );
+                }
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
           Card(
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -2486,10 +3427,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       controller: nameCtrl,
                       decoration:
                           const InputDecoration(labelText: 'Masjid Name')),
-                  TextField(
-                      controller: nameTaCtrl,
-                      decoration:
-                          const InputDecoration(labelText: 'Tamil Name')),
                   TextField(
                       controller: cityCtrl,
                       decoration: const InputDecoration(labelText: 'City')),
@@ -2526,9 +3463,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       try {
                         await ApiService.instance.updateMasjid(_masjidId!, {
                           'name': nameCtrl.text.trim(),
-                          'nameTa': nameTaCtrl.text.trim().isEmpty
-                              ? null
-                              : nameTaCtrl.text.trim(),
                           'city': cityCtrl.text.trim(),
                           'address': addrCtrl.text.trim(),
                           'phone': phoneCtrl.text.trim().isEmpty
@@ -2605,49 +3539,143 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: switch (_currentIndex) {
-        0 => _buildDashboardTab(),
-        1 => _buildPrayerTimesTab(),
-        2 => _buildAnnouncementsTab(),
-        3 => _buildMembersTab(),
-        _ => _buildProfileTab(),
-      },
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) => setState(() => _currentIndex = index),
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard_rounded),
-            label: 'Home',
+  Widget _buildInactiveMasjidScreen() {
+    final roles =
+        (ApiService.instance.currentUser?['adminRoles'] as List<dynamic>?) ??
+            [];
+    return SafeArea(
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 92,
+                  height: 92,
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.mosque_outlined,
+                      size: 46, color: Colors.deepOrange),
+                ),
+                const SizedBox(height: 20),
+                const AppLanguageText(
+                  'Masjid currently inactive',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _masjidName ?? 'Masjid',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 12),
+                const AppLanguageText(
+                  'This masjid is currently inactive. Admin tools and schedules are unavailable until a Super Admin reactivates it.',
+                  style:
+                      TextStyle(fontSize: 15, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 24),
+                if (roles.length > 1) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _showSwitchAdminMasjidSheet,
+                      icon: const Icon(Icons.swap_horiz),
+                      label: const AppLanguageText('Switch Admin Masjid'),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      if (Navigator.canPop(context)) {
+                        Navigator.pop(context);
+                      } else {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(builder: (_) => const HomeScreen()),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.home_outlined),
+                    label: const AppLanguageText('Return to User App'),
+                  ),
+                ),
+              ],
+            ),
           ),
-          NavigationDestination(
-            icon: Icon(Icons.schedule_outlined),
-            selectedIcon: Icon(Icons.schedule_rounded),
-            label: 'Prayer',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.campaign_outlined),
-            selectedIcon: Icon(Icons.campaign_rounded),
-            label: 'Notices',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people_rounded),
-            label: 'Members',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings_rounded),
-            label: 'Settings',
-          ),
-        ],
+        ),
       ),
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer(builder: (context, ref, _) {
+      ref.watch(languageProvider);
+      final language = ref.read(languageProvider.notifier);
+      return Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        body: _isMasjidInactive
+            ? _buildInactiveMasjidScreen()
+            : switch (_currentIndex) {
+                0 => _buildDashboardTab(),
+                1 => _buildPrayerTimesTab(),
+                2 => _buildSandhaTab(),
+                3 => _buildAnnouncementsTab(),
+                4 => _buildMembersTab(),
+                _ => _buildProfileTab(),
+              },
+        bottomNavigationBar: _isMasjidInactive
+            ? null
+            : NavigationBar(
+                selectedIndex: _currentIndex,
+                onDestinationSelected: (index) =>
+                    setState(() => _currentIndex = index),
+                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                destinations: [
+                  NavigationDestination(
+                    icon: Icon(Icons.dashboard_outlined),
+                    selectedIcon: Icon(Icons.dashboard_rounded),
+                    label: language.text('Home'),
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.schedule_outlined),
+                    selectedIcon: Icon(Icons.schedule_rounded),
+                    label: language.text('Prayer'),
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.payments_outlined),
+                    selectedIcon: Icon(Icons.payments_rounded),
+                    label: language.text('Sandha'),
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.campaign_outlined),
+                    selectedIcon: Icon(Icons.campaign_rounded),
+                    label: language.text('Notices'),
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.people_outline),
+                    selectedIcon: Icon(Icons.people_rounded),
+                    label: language.text('Members'),
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.settings_outlined),
+                    selectedIcon: Icon(Icons.settings_rounded),
+                    label: language.text('Settings'),
+                  ),
+                ],
+              ),
+      );
+    });
   }
 }

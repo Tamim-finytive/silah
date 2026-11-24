@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Put, Query, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards, Put, Delete, Query, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { SandhaService } from './sandha.service';
 import { CreateSandhaPlanDto, EnrollMemberDto, RecordPaymentDto, ReviewPaymentDto, SubmitPaymentProofDto } from './dto/sandha.dto';
@@ -38,6 +38,31 @@ export class SandhaController {
   @ApiBearerAuth()
   async updatePlan(@Param('masjidId') masjidId: string, @Param('planId') planId: string, @Body() dto: CreateSandhaPlanDto) {
     return this.sandhaService.updatePlan(masjidId, planId, dto);
+  }
+
+  @Get('members')
+  @UseGuards(JwtAuthGuard, MasjidRoleGuard)
+  @MasjidRoles(RoleType.ADMIN, RoleType.FINANCE)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List enrolled sandha members with current month status' })
+  async getMembers(
+    @Param('masjidId') masjidId: string,
+    @Query('planId') planId?: string,
+    @Query('month') month?: string,
+  ) {
+    return this.sandhaService.getMembers(masjidId, planId, month);
+  }
+
+  @Delete('members/:memberId')
+  @UseGuards(JwtAuthGuard, MasjidRoleGuard)
+  @MasjidRoles(RoleType.ADMIN, RoleType.FINANCE)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Remove a member from sandha plan' })
+  async removeMember(
+    @Param('masjidId') masjidId: string,
+    @Param('memberId') memberId: string,
+  ) {
+    return this.sandhaService.removeMember(masjidId, memberId);
   }
 
   @Post('plans/:planId/members')

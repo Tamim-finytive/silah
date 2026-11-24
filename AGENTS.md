@@ -76,7 +76,12 @@ This file is the durable handoff for anyone working on this repository. Keep it 
 ## User display preferences (2026-11-23)
 
 - Member-facing prayer, sunrise, Ishraq, sunset, and fasting times display in 12-hour `h:mm AM/PM` format. Backend prayer-time values remain in their existing API/database format; admin schedule entry labels remain 24-hour because they configure backend values.
-- Removed the separate language switch controls from login, onboarding, and Qibla. Language is selected from the member Profile settings and persisted locally in secure storage. Existing English/Tamil translated strings read this shared setting.
+- The language provider stores `preferred_language_code`, migrates the prior English/Tamil preference, and offers English, Tamil, Arabic, Hindi, and Urdu through the member, masjid-admin, and Super Admin profile/settings surfaces. Shared UI translation helpers are in `app/lib/core/l10n/language_provider.dart`.
+- Language is selected in member Profile, masjid-admin Settings, and Super Admin Profile and persisted locally in secure storage. Available app interface languages are English (default), Tamil, Arabic, Hindi, and Urdu.
+- Language preference only localizes Silah UI strings. Do not switch user-authored/database content (`name`, notice heading/message, etc.) to another backend translation field based on this app preference; display the primary backend value as stored. Existing translated backend fields may remain readable as separate content where already exposed.
+- Arabic and Urdu apply RTL text direction app-wide. Keep long labels and instructions wrapping, and avoid fixed-width language dialogs or shrinking system text scale to work around overflow.
+- The member, masjid-admin, and Super Admin bottom navigation labels and key profile/dashboard headings use shared app translations. Search results display the primary masjid name; notice cards display the saved primary heading/message regardless of app language.
+- Validation on 2026-11-24: targeted Dart analysis found no compile errors (87 info-level lints across touched files); `git diff --check` passed. The Dart SDK emitted its known telemetry file permission warning outside the project. Tests and device preview were not run.
 - Shared display formatter: `app/lib/core/utils/prayer_time_format.dart`; global language setting: `app/lib/core/l10n/language_provider.dart`.
 - Validation on 2026-11-23: Dart analysis of the touched Flutter files found no compile errors; info-level lint notices remain. `git diff --check` passed. Tests were not run.
 
@@ -114,6 +119,7 @@ This file is the durable handoff for anyone working on this repository. Keep it 
 - Supabase health review on 2026-11-24 found 13 public application tables with RLS disabled and `announcement_user_states` with RLS enabled but no policies. The Supabase Data API exposure is a critical security risk. Do not enable RLS broadly without designing policies for the NestJS/Postgres access model; `announcement_user_states` also needs a policy plan. Raise this for owner review.
 - Special schedule records now support edit through a masjid-scoped backend `PUT` endpoint, and the admin Prayer & Events screen exposes create/edit actions and a responsive empty state.
 - In Admin "Manage Prayer & Events" (Tab 2), when no prayer times exist in the database, only the primary "Create Prayer Schedule" and "Set Date Range Schedule" buttons are displayed (no edit buttons on empty state). Once prayer times are created, the screen switches to displaying the configured timings with the "Edit Schedule" and "Edit Date Range Schedule" actions.
+- A 403 response whose backend message is exactly `This masjid is currently inactive` is published through `ApiService.inactiveMasjidEvents`. `AdminDashboardScreen` replaces all admin tabs/navigation with a full-screen inactive notice for the matching masjid; admins with multiple masjids can switch to another assigned masjid or return to the user app. Keep the MasjidRoleGuard protection intact.
 - In "Connect with Masjid" directory (`connect_masjid_screen.dart`), clicking Connect now only sets the loading state (`Connecting…` spinner) on the specifically clicked masjid card via `_connectingMasjidId`, preventing other unselected masjid cards from showing loading spinners simultaneously.
 - Android background push notifications are configured in `AndroidManifest.xml` with `com.google.firebase.messaging.default_notification_channel_id` mapped to `silah_announcements`, launcher icon metadata, and `VIBRATE`, `WAKE_LOCK`, and `RECEIVE_BOOT_COMPLETED` permissions so incoming push notifications trigger the heads-up notification channel even when the app is in background or killed.
 - The Flutter FCM background callback initializes Firebase and handles data-only pushes by showing a local notification on the shared `silah_announcements` channel. For normal notification-plus-data pushes, Android/iOS displays the remote notification itself; the callback intentionally does not create a duplicate. Admin masjid notices default to push delivery unless explicitly disabled, target active registered devices of connected masjid members, and backend logs delivery counts without logging tokens.
@@ -127,7 +133,7 @@ This file is the durable handoff for anyone working on this repository. Keep it 
 - Shared UI tokens remain the source of truth in `app/lib/core/constants/app_colors.dart`, `app_spacing.dart`, and `app/lib/core/theme/app_theme.dart`. Preserve the emerald primary, warm gold accent, light neutral surfaces, readable body text, and clear status colors; do not add a second theme or UI package.
 - The shared theme now standardizes text roles, input borders, 48 px button targets, low-elevation bordered cards, dialogs, snackbars, and Material 3 navigation. Home and admin surfaces use the theme background instead of separate near-identical hardcoded backgrounds.
 - Member Home uses Material `NavigationBar`, a responsive content width, a live Gregorian date, and no static “Live Sync” or fixed Hijri date claim. Prayer time rendering continues to use the shared 12-hour formatter.
-- Login, onboarding, Qibla, member notice/Sandha, and Super Admin detail content are constrained on wide viewports. Home navigation, Quran title/search, and notice/Sandha headers and empty states use the saved global English/Tamil preference; notice titles/bodies use localized backend fields when available, and notice timestamps use 12-hour time.
+- Login, onboarding, Qibla, member notice/Sandha, and Super Admin detail content are constrained on wide viewports. App navigation and interface headings use the saved five-language preference; database-backed notice text and masjid names remain the primary values returned by the backend regardless of app language.
 - Super Admin navigation now uses the same Material 3 navigation component as the member/admin app. Keep directory, notice, prayer, member, and finance content sourced from backend APIs; never add fixture records to production flows.
 - This pass received source review and Flutter static analysis with no compile errors; existing info-level lints remain. Screens were not captured in a representative in-app fixture, so do not claim rendered visual verification until checked on a safe emulator/app-only screen in compact and wide layouts.
 - Updated the shared app palette to the supplied Qibla reference: forest green, warm ivory surfaces, and restrained gold. Replaced repeated primary green/background literals in member Home, masjid/admin, onboarding, and shared app surfaces with the shared palette. The Home layout keeps its live prayer, masjid, and notice data while matching the reference's spacious rounded-card hierarchy.
@@ -157,6 +163,15 @@ This file is the durable handoff for anyone working on this repository. Keep it 
 - Check new `Row` children that contain user/backend text: use `Expanded`/`Flexible`, max lines with ellipsis, or `Wrap` where actions need to move onto a second line. Preserve system text scaling; do not fix overflow by clipping the whole screen or reducing accessibility text size.
 - `git diff --check` passed. Full app Dart analysis completed with no compile errors; existing info-level lints remain. The analyzer emitted its existing telemetry file permission warning outside the project. No tests or device preview were run.
 
+## Manage Prayer & Events blank screen recovery (2026-11-24)
+
+- The affected view is the Admin `Manage Prayer & Events` screen, not the dashboard Home page. Its actual Flutter implementation is `_buildPrayerTimesTab()` in `admin_dashboard_screen.dart`.
+- The prior implementation only requested today's row and waited for dashboard, notice, member, and masjid requests before rendering. It did not implement the month calendar/two inner tabs described below, so saved rows on other dates could not appear and slow unrelated requests could delay the whole screen.
+- The screen now loads saved prayer and Ramadan rows for the visible month through the existing backend APIs, marks saved dates in a calendar, selects a date to display its persisted prayer row, and separates `Prayers` from `Events`. The Events tab shows fasting times and special schedules for the selected date, with database-backed create/edit flows.
+- Calendar range selection is tap-start then tap-end across month navigation. Prayer ranges go to the existing transactional prayer range API (up to 31 days); Events ranges let admins choose a special prayer/event or per-day fasting times. Ramadan day rows are persisted through the existing `ramadan_day_schedules` API/table.
+- The calendar starts loading as soon as the admin masjid ID is known; unrelated admin overview/notices/members requests no longer hold the prayer screen behind its initial loading state. It shows loading, retryable request errors, or a create action only after a successful empty response.
+- Validation: Dart formatting and targeted analysis completed with no compile errors (info-level lint notices only); `git diff --check` passed. Tests and rendered device preview were not run. The analyzer still prints its environment telemetry-file permission warning after completing.
+
 ## App Icon, Media Notices & Auto-Refresh Status (2026-11-24)
 
 - App Icons & Assets: User's updated `app/asset/logo.png` (1254x1254) has been processed and deployed across Android launcher mipmaps (mdpi, hdpi, xhdpi, xxhdpi, xxxhdpi), Android notification status bar icon (`ic_stat_silah.png`), iOS AppIcon catalog (`AppIcon.appiconset` 20x20 through 1024x1024), Web favicon & PWA icons (192, 512, maskable), and `app/asset/logo.jpg`.
@@ -178,7 +193,7 @@ This file is the durable handoff for anyone working on this repository. Keep it 
 - Receipt screenshots are validated as JPG/PNG/WEBP (8 MB max), stored in the private Supabase Storage bucket `silah-private`, and referenced by object path in `sandha_payments.proof_path`. The API returns one-hour signed viewing URLs only in authenticated, masjid-scoped member/admin reads. Do not move these files into public `silah-media`.
 - Submitted screenshots create `PENDING` payment rows. Admin/Finance roles can view month-filtered history, inspect the private receipt, and approve to `PAID` or reject to `REJECTED`; the reviewer and verification time are persisted. Admin history is paginated at 20 items and loads more on scroll with expected, collected, outstanding, and pending-proof summaries.
 - Live database migration is `backend/prisma/manual-schema-updates/2026-11-24-sandha-upi-payment-proofs.sql`. Applied to Supabase project `eojasudtbpgwwtivcvbs` on 2026-11-24; verified plan/payment columns, `REJECTED`, and private bucket (`public=false`). No demo payment rows were inserted. UPI app intent does not independently confirm bank settlement; screenshots require admin review unless a payment gateway is added later.
-- Backend `npm run build` passed. Targeted Dart analysis reported no compile errors (only info-level lints); the local Flutter launcher could not update its SDK cache outside the writable project, so analysis ran through the bundled Dart SDK. `git diff --check` remains to be run after the final edits. Tests and device preview were not run.
+- Backend `npm run build` passed. Targeted Dart analysis reported no compile errors (only info-level lints); the local Flutter launcher could not update its SDK cache outside the writable project, so analysis ran through the bundled Dart SDK. `git diff --check` passed. Tests and device preview were not run.
 
 ## Masjid-specific prayer schedule integrity (2026-11-24)
 
@@ -291,3 +306,62 @@ This file is the durable handoff for anyone working on this repository. Keep it 
   - Added `SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp, DeviceOrientation.portraitDown])` in `main.dart`.
   - Configured `android:screenOrientation="portrait"` on `MainActivity` in `AndroidManifest.xml`.
   - Removed `UIInterfaceOrientationLandscapeLeft` and `UIInterfaceOrientationLandscapeRight` from iOS `Info.plist`.
+
+## Admin Navigation Bar Labels (2026-11-24)
+
+- Configured `labelBehavior: NavigationDestinationLabelBehavior.alwaysShow` globally in `AppTheme.navigationBarTheme` (`app/lib/core/theme/app_theme.dart`) and specifically in `SuperAdminDashboardScreen` and `AdminDashboardScreen`.
+- Set navigation bar height to `68px` with compact `11px` typography (`FontWeight.w700` selected, `FontWeight.w500` unselected) so that all 6 destinations (`Overview`, `Masjids`, `Requests`, `Notices`, `Users`, `Profile`) fit cleanly across all screen sizes without text clipping or hiding unselected tab labels.
+
+## App Logo & Launcher Icons (2026-11-24)
+
+- Generated high-resolution Android launcher icons across all densities (`mipmap-mdpi`, `mipmap-hdpi`, `mipmap-xhdpi`, `mipmap-xxhdpi`, `mipmap-xxxhdpi`), supporting both `ic_launcher.png` and `ic_launcher_round.png`.
+- Generated complete iOS `AppIcon.appiconset` suite (20x20, 29x29, 40x40, 60x60, 76x76, 83.5x83.5, and 1024x1024 marketing icon) from `app/asset/logo.png`.
+- Configured `android:roundIcon="@mipmap/ic_launcher_round"` in `AndroidManifest.xml`.
+- Replaced generic placeholder `CircleAvatar(child: Icon(Icons.mosque))` in `otp_login_screen.dart` with high-resolution `asset/logo.png` inside rounded container with elevation.
+
+## Prayer Adhan Alarm Timezone Fix (2026-11-24)
+
+- Root cause: When scheduling alarms with `zonedSchedule`, `_setLocalTimezone()` previously fell back to creating a dummy location `tz.Location('device-local', ...)`. `FlutterLocalNotificationsPlugin.java` called `java.time.ZoneId.of("device-local")` which failed with `ZoneRulesException: Unknown time-zone ID: device-local`.
+- Resolution: `_setLocalTimezone()` in `notification_service.dart` now:
+  1. Queries Android's `java.time.ZoneId.systemDefault().id` via `silah/device` channel.
+  2. Maps common abbreviations (e.g. `IST` or `Asia/Calcutta`) to `Asia/Kolkata`.
+  3. Matches the device's UTC offset against registered IANA locations in `tz.timeZoneDatabase.locations` (defaulting Indian offset +5:30 to `Asia/Kolkata`).
+  4. Always guarantees a valid IANA timezone string (with safe fallback to `UTC`), completely eliminating the `device-local` exception.
+
+## Sandha Management Module & Settings (2026-11-24)
+
+- **Dedicated Sandha Settings in Admin Settings**:
+  - Added "Sandha Settings" tile inside Admin Dashboard -> Tab 5 (Settings & Profile), opening `SandhaSettingsScreen`.
+  - Allows masjid admins to configure the Sandha subscription plan: Plan Name, Monthly Amount (₹), Frequency (Monthly, Quarterly, Yearly), UPI ID, Payee Name, Contact Phone, and Description.
+  - Connected to backend endpoints `POST /v1/masjids/:masjidId/sandha/plans` and `PUT /v1/masjids/:masjidId/sandha/plans/:planId`.
+- **Top-Level Sandha Tab in Admin Navigation**:
+  - Added dedicated "Sandha" (`சந்தா`) destination (Tab 2) in the Admin Dashboard bottom navigation bar (`Icons.payments_outlined`).
+  - Embeds `SandhaManagementScreen`, providing comprehensive monthly metrics and tabs.
+- **Assigned Members Only (Selective Enrollment)**:
+  - Sandha is not billed to every masjid user; it is only assigned to enrolled members (e.g., household heads/subscribers).
+  - Admin can assign members via "+ Assign Member":
+    - Option 1: Pick from connected masjid members (fetches memberships from `GET /v1/masjids/:masjidId/members` with search).
+    - Option 2: Enter Member Name & Mobile Number manually.
+    - Persists via `POST /v1/masjids/:masjidId/sandha/plans/:planId/members` (auto-links to registered user ID if user exists).
+  - Backend added `GET /v1/masjids/:masjidId/sandha/members` and `DELETE /v1/masjids/:masjidId/sandha/members/:memberId`.
+  - Shows assigned members list with status badges (`PAID`, `PARTIAL`, `DUE`, `UNDER REVIEW`), remaining balance, and direct actions:
+    - **Record Payment**: Admins can record Cash, UPI, or Bank Transfer payments for the selected month via `POST /v1/masjids/:masjidId/sandha/payments`.
+    - **Remove Member**: Unenrolls member from Sandha subscription.
+- **Collection History & Verification**:
+  - Tab 2 displays full payment history for the selected month with status filter (`ALL`, `PAID`, `PENDING REVIEW`, `REJECTED`).
+  - View member-uploaded UPI screenshot proofs in full-screen preview.
+  - Approve or Reject pending proofs directly via `PUT /v1/masjids/:masjidId/sandha/payments/:paymentId/review`.
+- **Validation**:
+  - Backend `npm run build` compiled cleanly.
+  - Flutter analysis on `sandha_management_screen.dart`, `sandha_settings_screen.dart`, `admin_dashboard_screen.dart`, and `api_service.dart` passed with 0 errors.
+  - `git diff --check` passed with 0 formatting issues.
+
+## Persistent Active Masjid Selection on App Reopen (2026-11-24)
+
+- Member Home / Prayer Times Provider (`prayer_times_provider.dart`):
+  - Fixed selection regression on cold restart: `cachedIsJoined ? cachedId : null` now takes priority over `primaryId` / `memberships.first`. Previously, `memberships.first` overrode the user's manual selection on every app restart.
+  - Immediate persistence: `switchMasjid` and `refreshFromBackend` now immediately write the active masjid into `_storage` (`_cachedMasjidKey`) regardless of whether today's prayer times are already generated or null.
+- Admin Dashboard (`admin_dashboard_screen.dart`):
+  - Added persistence for active admin masjid: uses `last_selected_admin_masjid_id` and `last_selected_admin_masjid_name` in `FlutterSecureStorage`.
+  - When opening the admin portal on app restart, the previously selected admin masjid is checked against the user's admin roles and restored automatically instead of always defaulting to `adminRoles.first`.
+  - Added `_showSwitchAdminMasjidSheet()` and interactive AppBar dropdown/swap action allowing multi-masjid admins to switch active masjids seamlessly. Selection is saved immediately.

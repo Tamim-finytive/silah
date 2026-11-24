@@ -599,6 +599,7 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                           ],
                         ),
                       ),
+
                     ],
                   ),
                 ),

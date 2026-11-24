@@ -369,7 +369,7 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isEn = ref.watch(languageProvider);
+    ref.watch(languageProvider);
     final lang = ref.read(languageProvider.notifier);
 
     return Scaffold(
@@ -410,16 +410,16 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
         controller: _tabController,
         children: [
           // Tab 1: Search & Add
-          _buildSearchAndAddTab(lang, isEn),
+          _buildSearchAndAddTab(lang),
 
           // Tab 2: Scan QR Code
-          _buildQrScannerTab(lang, isEn),
+          _buildQrScannerTab(lang),
         ],
       ),
     );
   }
 
-  Widget _buildSearchAndAddTab(LanguageNotifier lang, bool isEn) {
+  Widget _buildSearchAndAddTab(LanguageNotifier lang) {
     return Column(
       children: [
         Container(
@@ -432,7 +432,6 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                
                   const SizedBox(height: 8),
                   TextField(
                     controller: _searchCtrl,
@@ -610,7 +609,6 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
                                   return _buildMasjidResultCard(
                                     _filteredMasjids[index],
                                     lang,
-                                    isEn,
                                   );
                                 },
                               ),
@@ -647,10 +645,7 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
                               en: 'No masjids are available right now',
                               ta: 'தற்போது பள்ளிவாசல்கள் இல்லை',
                             )
-                          : lang.tr(
-                              en: 'No masjids found for "$query"',
-                              ta: '"$query" க்கு பள்ளிவாசல்கள் இல்லை',
-                            ),
+                          : lang.text('No masjids match your search'),
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
@@ -690,12 +685,9 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
   Widget _buildMasjidResultCard(
     dynamic masjid,
     LanguageNotifier lang,
-    bool isEn,
   ) {
     final map = Map<String, dynamic>.from(masjid as Map);
-    final name = isEn
-        ? (map['name'] ?? 'Masjid').toString()
-        : (map['nameTa'] ?? map['name'] ?? 'பள்ளிவாசல்').toString();
+    final name = (map['name'] ?? 'Masjid').toString();
     final city = (map['city'] ?? '').toString().trim();
     final address = (map['address'] ?? '').toString().trim();
     final location = [
@@ -852,9 +844,11 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
                           : isConnected
                               ? lang.tr(en: 'Connected', ta: 'இணைக்கப்பட்டது')
                               : isThisConnecting
-                                  ? lang.tr(en: 'Connecting…', ta: 'இணைக்கிறது…')
+                                  ? lang.tr(
+                                      en: 'Connecting…', ta: 'இணைக்கிறது…')
                                   : lang.tr(en: 'Connect', ta: 'இணை'),
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ),
@@ -866,7 +860,7 @@ class _ConnectMasjidScreenState extends ConsumerState<ConnectMasjidScreen>
     );
   }
 
-  Widget _buildQrScannerTab(LanguageNotifier lang, bool isEn) {
+  Widget _buildQrScannerTab(LanguageNotifier lang) {
     return Stack(
       children: [
         MobileScanner(

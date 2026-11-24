@@ -94,7 +94,8 @@ class _QuranScreenState extends ConsumerState<QuranScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isEnglish = ref.watch(languageProvider);
+    ref.watch(languageProvider);
+    final language = ref.read(languageProvider.notifier);
     final visible = _surahs.where((surah) {
       final query = _query.trim().toLowerCase();
       return query.isEmpty ||
@@ -117,7 +118,7 @@ class _QuranScreenState extends ConsumerState<QuranScreen> {
                   }
                 })
             : null,
-        title: Text(isEnglish ? 'Holy Quran' : 'திருக்குர்ஆன்'),
+        title: Text(language.text('Holy Quran')),
       ),
       body: Column(children: [
         if (_lastSurah != null)
@@ -126,7 +127,7 @@ class _QuranScreenState extends ConsumerState<QuranScreen> {
             color: AppColors.primary,
             child: ListTile(
               leading: const Icon(Icons.bookmark, color: AppColors.secondary),
-              title: Text(isEnglish ? 'Last read' : 'கடைசியாகப் படித்தது',
+              title: Text(language.text('Last read'),
                   style: TextStyle(color: Colors.white70, fontSize: 13)),
               subtitle: Text(
                   '${_lastSurahName ?? 'Surah $_lastSurah'} · Ayah $_lastAyah',
@@ -147,9 +148,7 @@ class _QuranScreenState extends ConsumerState<QuranScreen> {
           child: TextField(
             onChanged: (value) => setState(() => _query = value),
             decoration: InputDecoration(
-              hintText: isEnglish
-                  ? 'Search chapters by name or number'
-                  : 'அத்தியாயப் பெயர் அல்லது எண்ணைத் தேடுங்கள்',
+              hintText: language.text('Search chapters by name or number'),
               prefixIcon: const Icon(Icons.search),
               filled: true,
               fillColor: Colors.white,
@@ -174,7 +173,7 @@ class _QuranScreenState extends ConsumerState<QuranScreen> {
                               OutlinedButton.icon(
                                   onPressed: _loadSurahs,
                                   icon: const Icon(Icons.refresh),
-                                  label: const Text('Try again'))
+                                  label: Text(language.text('Try again')))
                             ],
                           )))
                   : ListView.separated(
@@ -201,7 +200,7 @@ class _QuranScreenState extends ConsumerState<QuranScreen> {
                               style:
                                   const TextStyle(fontWeight: FontWeight.w600)),
                           subtitle: Text(
-                              '${surah['numberOfAyahs']} ${isEnglish ? 'verses' : 'வசனங்கள்'} · ${surah['revelationType']}'),
+                              '${surah['numberOfAyahs']} ${language.text('verses')} · ${surah['revelationType']}'),
                           trailing: Text('${surah['name']}',
                               textDirection: TextDirection.rtl,
                               style: const TextStyle(

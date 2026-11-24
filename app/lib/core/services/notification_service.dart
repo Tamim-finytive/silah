@@ -381,19 +381,52 @@ class NotificationService {
 
   Future<void> _setLocalTimezone() async {
     tzdata.initializeTimeZones();
+    // 1. Try to query the device platform channel for native timezone ID
+    String? name;
     try {
-      final name = await _deviceChannel.invokeMethod<String>('localTimeZone');
-      if (name != null && name.isNotEmpty) {
-        tz.setLocalLocation(tz.getLocation(name));
+      name = await _deviceChannel.invokeMethod<String>('localTimeZone');
+      if (name != null && name.trim().isNotEmpty) {
+        final trimmed = name.trim();
+        if (tz.timeZoneDatabase.locations.containsKey(trimmed)) {
+          tz.setLocalLocation(tz.getLocation(trimmed));
+          return;
+        }
+      }
+    } catch (_) {}
+
+    // 2. Common aliases / mappings (e.g. IST, Asia/Calcutta -> Asia/Kolkata)
+    if (name != null) {
+      final upper = name.trim().toUpperCase();
+      if (upper == 'IST' || upper == 'ASIA/CALCUTTA') {
+        if (tz.timeZoneDatabase.locations.containsKey('Asia/Kolkata')) {
+          tz.setLocalLocation(tz.getLocation('Asia/Kolkata'));
+          return;
+        }
+      }
+    }
+
+    // 3. Fallback: match by current device offset against known IANA locations
+    final now = DateTime.now();
+    final deviceOffsetMs = now.timeZoneOffset.inMilliseconds;
+
+    // Check for Indian Standard Time (+5:30)
+    if (deviceOffsetMs == const Duration(hours: 5, minutes: 30).inMilliseconds) {
+      if (tz.timeZoneDatabase.locations.containsKey('Asia/Kolkata')) {
+        tz.setLocalLocation(tz.getLocation('Asia/Kolkata'));
         return;
       }
-    } catch (_) {
-      // Use the device's current offset if the platform bridge is unavailable.
     }
-    final offset = DateTime.now().timeZoneOffset.inMilliseconds;
-    tz.setLocalLocation(tz.Location('device-local', const [], const [], [
-      tz.TimeZone(offset, isDst: false, abbreviation: 'LOCAL'),
-    ]));
+
+    for (final loc in tz.timeZoneDatabase.locations.values) {
+      final tzTime = tz.TZDateTime.from(now, loc);
+      if (tzTime.timeZoneOffset.inMilliseconds == deviceOffsetMs) {
+        tz.setLocalLocation(loc);
+        return;
+      }
+    }
+
+    // 4. Default to UTC if no offset matched (always valid on Android java.time.ZoneId)
+    tz.setLocalLocation(tz.getLocation('UTC'));
   }
 
   Future<bool> prayerAlarmsEnabled() async =>

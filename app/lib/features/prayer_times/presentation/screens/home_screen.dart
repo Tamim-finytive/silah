@@ -239,7 +239,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   // Use the platform navigation component for consistent touch and focus states.
   Widget _buildCustomBottomNav() {
-    final isEnglish = ref.watch(languageProvider);
+    ref.watch(languageProvider);
+    final language = ref.read(languageProvider.notifier);
     return NavigationBar(
       selectedIndex: _selectedTabIndex,
       onDestinationSelected: (index) {
@@ -253,27 +254,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         NavigationDestination(
           icon: Icon(Icons.home_outlined),
           selectedIcon: Icon(Icons.home_rounded),
-          label: isEnglish ? 'Home' : 'முகப்பு',
+          label: language.text('Home'),
         ),
         NavigationDestination(
           icon: Icon(Icons.mosque_outlined),
           selectedIcon: Icon(Icons.mosque_rounded),
-          label: isEnglish ? 'Masjids' : 'பள்ளிவாசல்கள்',
+          label: language.text('Masjids'),
         ),
         NavigationDestination(
           icon: Icon(Icons.explore_outlined),
           selectedIcon: Icon(Icons.explore_rounded),
-          label: isEnglish ? 'Qibla' : 'கிப்லா',
+          label: language.text('Qibla'),
         ),
         NavigationDestination(
           icon: Icon(Icons.campaign_outlined),
           selectedIcon: Icon(Icons.campaign_rounded),
-          label: isEnglish ? 'Notices' : 'அறிவிப்புகள்',
+          label: language.text('Notices'),
         ),
         NavigationDestination(
           icon: Icon(Icons.person_outline),
           selectedIcon: Icon(Icons.person_rounded),
-          label: isEnglish ? 'Profile' : 'சுயவிவரம்',
+          label: language.text('Profile'),
         ),
       ],
     );
@@ -863,7 +864,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         height: 1.05,
                       ),
                     ),
-                             Container(
+                    Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 7),
                       decoration: BoxDecoration(
@@ -1196,7 +1197,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               //     ],
               //   ),
               // ),
-           ],
+            ],
           ),
           const SizedBox(height: 16),
 
@@ -1698,7 +1699,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   // Profile Tab (Tab 4)
   Widget _buildProfileTab() {
-    final isEnglish = ref.watch(languageProvider);
     final user = ApiService.instance.currentUser;
     final userName = user?['name'] ?? 'User';
     final userPhone = user?['phone'] ?? '';
@@ -1707,7 +1707,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Profile'),
+        title: const AppLanguageText('My Profile'),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
@@ -1806,13 +1806,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               onTap: _showCalculationMethodDialog,
             ),
             const Divider(),
-            ListTile(
-              leading: const Icon(Icons.language),
-              title: const Text('Language'),
-              subtitle: Text(isEnglish ? 'English' : 'தமிழ்'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _showLanguageDialog(isEnglish),
-            ),
+            const AppLanguageSettingsTile(),
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
@@ -1825,38 +1819,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   context,
                   MaterialPageRoute(builder: (_) => const OtpLoginScreen()),
                 );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _showLanguageDialog(bool isEnglish) async {
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('App language'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            RadioListTile<bool>(
-              value: true,
-              groupValue: isEnglish,
-              title: const Text('English'),
-              onChanged: (_) {
-                ref.read(languageProvider.notifier).setEnglish(true);
-                Navigator.pop(dialogContext);
-              },
-            ),
-            RadioListTile<bool>(
-              value: false,
-              groupValue: isEnglish,
-              title: const Text('தமிழ்'),
-              onChanged: (_) {
-                ref.read(languageProvider.notifier).setEnglish(false);
-                Navigator.pop(dialogContext);
               },
             ),
           ],

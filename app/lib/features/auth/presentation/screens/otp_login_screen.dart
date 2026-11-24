@@ -146,12 +146,29 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
                 children: [
                   const SizedBox(height: 16),
                   // Logo
-                  const Center(
-                    child: CircleAvatar(
-                      radius: 36,
-                      backgroundColor: AppColors.primaryContainer,
-                      child: Icon(Icons.mosque,
-                          size: 42, color: AppColors.primary),
+                  Center(
+                    child: Container(
+                      width: 76,
+                      height: 76,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withValues(alpha: 0.15),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: Image.asset(
+                          'asset/logo.png',
+                          width: 76,
+                          height: 76,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 18),

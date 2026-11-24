@@ -2,6 +2,7 @@ import 'package:masjid_namaz_app/core/constants/app_colors.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/l10n/language_provider.dart';
 import 'core/theme/app_theme.dart';
 import 'core/network/api_service.dart';
 import 'core/services/notification_service.dart';
@@ -21,12 +22,19 @@ class MasjidApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final languageCode = ref.watch(languageProvider);
     return MaterialApp(
       title: 'Silah Community Adhan',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       scaffoldMessengerKey: appScaffoldMessengerKey,
       navigatorKey: appNavigatorKey,
+      builder: (context, child) => Directionality(
+        textDirection: languageCode == 'ar' || languageCode == 'ur'
+            ? TextDirection.rtl
+            : TextDirection.ltr,
+        child: child ?? const SizedBox.shrink(),
+      ),
       home: const _InAppNotificationBridge(child: AppStartupGate()),
     );
   }

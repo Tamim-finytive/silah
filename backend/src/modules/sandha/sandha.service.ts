@@ -73,6 +73,110 @@ export class SandhaService {
     });
   }
 
+  async getMembers(masjidId: string, planId?: string, month?: string) {
+    const plans = await this.prisma.sandhaPlan.findMany({
+      where: { masjidId, ...(planId ? { id: planId } : { isActive: true }) },
+      select: { id: true, name: true, amount: true },
+    });
+    const planIds = plans.map((p) => p.id);
+    if (planIds.length === 0) return [];
+
+    let periodStart: Date | undefined;
+    let periodNext: Date | undefined;
+    if (month && /^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+      const { start, next } = this.monthWindow(month);
+      periodStart = start;
+      periodNext = next;
+    }
+
+    const members = await this.prisma.sandhaPlanMember.findMany({
+      where: { planId: { in: planIds } },
+      include: {
+        plan: {
+          select: {
+            id: true,
+            name: true,
+            amount: true,
+            upiId: true,
+            payeeName: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+          },
+        },
+        payments: {
+          where: periodStart && periodNext
+            ? { periodStart: { gte: periodStart, lt: periodNext } }
+            : undefined,
+          orderBy: { paidAt: 'desc' },
+          take: periodStart && periodNext ? undefined : 5,
+          select: {
+            id: true,
+            amount: true,
+            status: true,
+            method: true,
+            paidAt: true,
+            receiptNumber: true,
+            periodStart: true,
+            proofPath: true,
+          },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    return members.map((m) => {
+      const planAmount = Number(m.plan.amount);
+      const paidSum = m.payments
+        .filter((p) => p.status === PaymentStatus.PAID || p.status === PaymentStatus.PARTIAL)
+        .reduce((sum, p) => sum + Number(p.amount), 0);
+      const pendingSum = m.payments
+        .filter((p) => p.status === PaymentStatus.PENDING)
+        .reduce((sum, p) => sum + Number(p.amount), 0);
+
+      let status = 'UNPAID';
+      if (paidSum >= planAmount && planAmount > 0) {
+        status = 'PAID';
+      } else if (paidSum > 0) {
+        status = 'PARTIAL';
+      } else if (pendingSum > 0) {
+        status = 'PENDING_APPROVAL';
+      }
+
+      return {
+        id: m.id,
+        planId: m.planId,
+        userId: m.userId,
+        phone: m.phone,
+        name: m.name,
+        autoLinked: m.autoLinked,
+        linkedAt: m.linkedAt,
+        createdAt: m.createdAt,
+        plan: m.plan,
+        user: m.user,
+        paidSum,
+        pendingSum,
+        balance: Math.max(0, planAmount - paidSum),
+        monthStatus: status,
+        payments: m.payments,
+      };
+    });
+  }
+
+  async removeMember(masjidId: string, memberId: string) {
+    const member = await this.prisma.sandhaPlanMember.findFirst({
+      where: { id: memberId, plan: { masjidId } },
+    });
+    if (!member) throw new NotFoundException('Member not found in sandha plan');
+    return this.prisma.sandhaPlanMember.delete({
+      where: { id: memberId },
+    });
+  }
+
   async recordPayment(masjidId: string, userId: string, dto: RecordPaymentDto) {
     const member = await this.prisma.sandhaPlanMember.findFirst({
       where: { id: dto.planMemberId, plan: { masjidId } },

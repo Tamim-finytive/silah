@@ -472,13 +472,10 @@ class _AnnouncementsScreenState extends ConsumerState<AnnouncementsScreen>
     final isEmergency = item['isEmergency'] == true ||
         item['type'] == 'EMERGENCY' ||
         item['category'] == 'EMERGENCY';
-    final isEnglish = ref.read(languageProvider);
-    final title = (isEnglish ? item['title'] : item['titleTa'] ?? item['title'])
-            ?.toString() ??
-        '';
-    final body = (isEnglish ? item['body'] : item['bodyTa'] ?? item['body'])
-            ?.toString() ??
-        '';
+    // Announcement text is user-authored backend content; app language only
+    // localizes Silah's interface labels and never rewrites this content.
+    final title = item['title']?.toString() ?? '';
+    final body = item['body']?.toString() ?? '';
     final imageUrl = item['imageUrl']?.toString();
     final audioUrl = item['audioUrl']?.toString();
     final createdAt =

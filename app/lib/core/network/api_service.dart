@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -16,6 +17,11 @@ class ApiException implements Exception {
   String toString() => message;
 }
 
+class InactiveMasjidEvent {
+  final String masjidId;
+  const InactiveMasjidEvent(this.masjidId);
+}
+
 class ApiService {
   static final ApiService instance = ApiService._internal();
   factory ApiService() => instance;
@@ -29,6 +35,11 @@ class ApiService {
   String? authToken;
   Map<String, dynamic>? currentUser;
   Future<String?>? _refreshingSession;
+  final StreamController<InactiveMasjidEvent> _inactiveMasjidEvents =
+      StreamController<InactiveMasjidEvent>.broadcast();
+
+  Stream<InactiveMasjidEvent> get inactiveMasjidEvents =>
+      _inactiveMasjidEvents.stream;
 
   static String getErrorMessage(dynamic error,
       {String fallback = 'An unexpected error occurred'}) {
@@ -127,6 +138,7 @@ class ApiService {
         },
         onError: (DioException error, handler) async {
           final request = error.requestOptions;
+          _publishInactiveMasjidIfNeeded(error);
           final canRefresh = error.response?.statusCode == 401 &&
               request.extra['skipAuthRefresh'] != true &&
               request.extra['authRetry'] != true &&
@@ -163,6 +175,23 @@ class ApiService {
       ),
     );
     _dio.interceptors.add(ApiDebugInterceptor());
+  }
+
+  void _publishInactiveMasjidIfNeeded(DioException error) {
+    if (error.response?.statusCode != 403) return;
+    final payload = error.response?.data;
+    if (payload is! Map) return;
+    final details = payload['error'];
+    if (details is! Map ||
+        details['message']?.toString() != 'This masjid is currently inactive') {
+      return;
+    }
+    final match = RegExp(r'(?:^|/)masjids/([^/?]+)')
+        .firstMatch(error.requestOptions.path);
+    final masjidId = match?.group(1);
+    if (masjidId != null && masjidId.isNotEmpty) {
+      _inactiveMasjidEvents.add(InactiveMasjidEvent(masjidId));
+    }
   }
 
   Future<Map<String, dynamic>> checkUser(String phone) async {
@@ -833,6 +862,41 @@ class ApiService {
       'decision': approve ? 'APPROVE' : 'REJECT',
       if (notes != null && notes.isNotEmpty) 'notes': notes
     });
+  }
+
+  Future<List<dynamic>> getSandhaMembers(String masjidId,
+      {String? planId, String? month}) async {
+    try {
+      final res = await _dio.get('/masjids/$masjidId/sandha/members',
+          queryParameters: {
+            if (planId != null) 'planId': planId,
+            if (month != null) 'month': month,
+          });
+      if (res.data['success'] == true && res.data['data'] != null) {
+        return res.data['data'] as List<dynamic>;
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<Map<String, dynamic>> enrollSandhaMember(
+      String masjidId, String planId, Map<String, dynamic> body) async {
+    final res = await _dio.post(
+      '/masjids/$masjidId/sandha/plans/$planId/members',
+      data: body,
+    );
+    return Map<String, dynamic>.from(res.data['data'] as Map);
+  }
+
+  Future<void> removeSandhaMember(String masjidId, String memberId) async {
+    await _dio.delete('/masjids/$masjidId/sandha/members/$memberId');
+  }
+
+  Future<Map<String, dynamic>> recordSandhaPayment(
+      String masjidId, Map<String, dynamic> body) async {
+    final res =
+        await _dio.post('/masjids/$masjidId/sandha/payments', data: body);
+    return Map<String, dynamic>.from(res.data['data'] as Map);
   }
 
   Future<Map<String, dynamic>> updateMasjid(

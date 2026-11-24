@@ -131,11 +131,16 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
       final defaultMasjid = primaryMasjids.isNotEmpty
           ? primaryMasjids.first
           : (userMasjids.isNotEmpty ? userMasjids.first : null);
+      // Priority:
+      // 1. Explicitly requested specificMasjidId (e.g. from switchMasjid)
+      // 2. Previously selected & cached masjid (MUST be respected on app restart so the user's choice stays!)
+      // 3. Explicit primary masjid configured in user profile
+      // 4. Default to first joined masjid
       final String? targetId = state.isLocalTimes && specificMasjidId == null
           ? null
           : specificMasjidId ??
-              (availableIds.contains(primaryId) ? primaryId : null) ??
               (cachedIsJoined ? cachedId : null) ??
+              (availableIds.contains(primaryId) ? primaryId : null) ??
               defaultMasjid?['id']?.toString();
 
       // Never keep a previous masjid's cached schedule on screen while a new
@@ -184,10 +189,15 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
       final backendTimes =
           await ApiService.instance.getTodayPrayerTimes(targetMasjid['id']);
 
-      if (backendTimes != null) {
+      // Persist the resolved active masjid selection so it is preserved across app restarts
+      try {
         await _storage.write(
             key: _cachedMasjidKey, value: jsonEncode(targetMasjid));
+      } catch (e) {
+        debugPrint('Error saving cached active masjid: $e');
+      }
 
+      if (backendTimes != null) {
         state = state.copyWith(
           times: backendTimes,
           activeMasjid: targetMasjid,
@@ -216,6 +226,10 @@ class PrayerTimesNotifier extends StateNotifier<PrayerTimesState> {
   }
 
   Future<void> switchMasjid(Map<String, dynamic> newMasjid) async {
+    try {
+      await _storage.write(
+          key: _cachedMasjidKey, value: jsonEncode(newMasjid));
+    } catch (_) {}
     state = state.copyWith(
       isLoading: true,
       activeMasjid: newMasjid,
