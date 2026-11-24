@@ -32,16 +32,21 @@ android {
     }
 }
 
-// Keep the normal Gradle artifact for Flutter tooling and also provide the
-// user-facing release APK name requested for distribution.
+// Keep the normal Gradle artifact (app-release.apk) for Flutter tooling and also provide the
+// user-facing release APK name (Silah.apk) requested for distribution.
 val copyReleaseApk = tasks.register<Copy>("copyReleaseApk") {
+    from(layout.buildDirectory.file("outputs/apk/release/app-release.apk"))
+    into(rootProject.layout.projectDirectory.dir("../build/app/outputs/flutter-apk"))
+}
+
+val copySilahApk = tasks.register<Copy>("copySilahApk") {
     from(layout.buildDirectory.file("outputs/apk/release/app-release.apk"))
     into(rootProject.layout.projectDirectory.dir("../build/app/outputs/flutter-apk"))
     rename { "Silah.apk" }
 }
 
 tasks.matching { it.name == "assembleRelease" }.configureEach {
-    finalizedBy(copyReleaseApk)
+    finalizedBy(copyReleaseApk, copySilahApk)
 }
 
 kotlin {

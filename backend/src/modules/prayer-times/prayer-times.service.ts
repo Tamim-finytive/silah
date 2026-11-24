@@ -185,13 +185,15 @@ export class PrayerTimesService {
         },
       },
     });
+    const applicablePeriod = await this.findApplicablePeriod(masjidId, date);
+    const base = existing ?? applicablePeriod;
 
     const requiredJamaahTimes = [
-      dto.fajrJamaah ?? existing?.fajrJamaah,
-      dto.dhuhrJamaah ?? existing?.dhuhrJamaah,
-      dto.asrJamaah ?? existing?.asrJamaah,
-      dto.maghribJamaah ?? existing?.maghribJamaah,
-      dto.ishaJamaah ?? existing?.ishaJamaah,
+      dto.fajrJamaah ?? base?.fajrJamaah,
+      dto.dhuhrJamaah ?? base?.dhuhrJamaah,
+      dto.asrJamaah ?? base?.asrJamaah,
+      dto.maghribJamaah ?? base?.maghribJamaah,
+      dto.ishaJamaah ?? base?.ishaJamaah,
     ];
     if (requiredJamaahTimes.some((time) => !time?.trim())) {
       throw new BadRequestException(
@@ -200,21 +202,28 @@ export class PrayerTimesService {
     }
 
     const dataToSave = {
-      fajrAdhan: dto.fajrAdhan !== undefined ? dto.fajrAdhan : existing?.fajrAdhan,
-      fajrJamaah: dto.fajrJamaah || existing?.fajrJamaah,
-      sunrise: dto.sunrise !== undefined ? dto.sunrise : existing?.sunrise,
-      dhuhrAdhan: dto.dhuhrAdhan !== undefined ? dto.dhuhrAdhan : existing?.dhuhrAdhan,
-      dhuhrJamaah: dto.dhuhrJamaah || existing?.dhuhrJamaah,
-      asrAdhan: dto.asrAdhan !== undefined ? dto.asrAdhan : existing?.asrAdhan,
-      asrJamaah: dto.asrJamaah || existing?.asrJamaah,
-      sunset: dto.sunset !== undefined ? dto.sunset : existing?.sunset,
-      maghribAdhan: dto.maghribAdhan !== undefined ? dto.maghribAdhan : existing?.maghribAdhan,
-      maghribJamaah: dto.maghribJamaah || existing?.maghribJamaah,
-      ishaAdhan: dto.ishaAdhan !== undefined ? dto.ishaAdhan : existing?.ishaAdhan,
-      ishaJamaah: dto.ishaJamaah || existing?.ishaJamaah,
-      jummahKhutbah: dto.jummahKhutbah !== undefined ? dto.jummahKhutbah : existing?.jummahKhutbah,
-      jummahJamaah: dto.jummahJamaah !== undefined ? dto.jummahJamaah : existing?.jummahJamaah,
+      fajrAdhan: dto.fajrAdhan !== undefined ? dto.fajrAdhan : base?.fajrAdhan,
+      fajrJamaah: dto.fajrJamaah || base?.fajrJamaah,
+      sunrise: dto.sunrise !== undefined ? dto.sunrise : base?.sunrise,
+      dhuhrAdhan: dto.dhuhrAdhan !== undefined ? dto.dhuhrAdhan : base?.dhuhrAdhan,
+      dhuhrJamaah: dto.dhuhrJamaah || base?.dhuhrJamaah,
+      asrAdhan: dto.asrAdhan !== undefined ? dto.asrAdhan : base?.asrAdhan,
+      asrJamaah: dto.asrJamaah || base?.asrJamaah,
+      sunset: dto.sunset !== undefined ? dto.sunset : base?.sunset,
+      maghribAdhan: dto.maghribAdhan !== undefined ? dto.maghribAdhan : base?.maghribAdhan,
+      maghribJamaah: dto.maghribJamaah || base?.maghribJamaah,
+      ishaAdhan: dto.ishaAdhan !== undefined ? dto.ishaAdhan : base?.ishaAdhan,
+      ishaJamaah: dto.ishaJamaah || base?.ishaJamaah,
+      jummahKhutbah: dto.jummahKhutbah !== undefined ? dto.jummahKhutbah : base?.jummahKhutbah,
+      jummahJamaah: dto.jummahJamaah !== undefined ? dto.jummahJamaah : base?.jummahJamaah,
     };
+
+    if (!existing && applicablePeriod) {
+      return this.prisma.prayerSchedulePeriod.update({
+        where: { id: applicablePeriod.id },
+        data: { ...dataToSave, updatedBy: userId },
+      });
+    }
 
     return this.prisma.prayerTime.upsert({
       where: {

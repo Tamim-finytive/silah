@@ -861,8 +861,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ]);
                 await _loadScheduleCalendar(id);
                 if (mounted)
-                  ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Alhamdulillah! Fasting times saved.')));
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Alhamdulillah! Fasting times saved.')));
               } catch (error) {
                 if (mounted)
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -1556,7 +1556,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   void _editSinglePrayerTime(String prayerKey, String prayerName,
       String? currentAdhan, String? currentJamaah) {
-    final dateStr = DateTime.now().toIso8601String().split('T')[0];
+    final selectedDate = DateTime(_selectedScheduleDate.year,
+        _selectedScheduleDate.month, _selectedScheduleDate.day);
+    final dateStr = _calendarDateKey(selectedDate);
     final adhanCtrl = TextEditingController(text: currentAdhan ?? '');
     final jamaahCtrl = TextEditingController(text: currentJamaah ?? '');
 
@@ -1577,7 +1579,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Date: $dateStr (Today)',
+            Text('Date: $dateStr',
                 style: const TextStyle(fontSize: 12, color: Colors.grey)),
             const SizedBox(height: 16),
             _buildTimePickerInput(ctx, adhanCtrl, '$prayerName Adhan Time'),
@@ -1609,11 +1611,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     '${prayerKey}Adhan': adhanVal,
                     '${prayerKey}Jamaah': jamaahVal,
                   };
-                  _dashboardPrayerTimes = {
-                    ...?_dashboardPrayerTimes,
-                    '${prayerKey}Adhan': adhanVal,
-                    '${prayerKey}Jamaah': jamaahVal,
-                  };
+                  if (dateStr == _calendarDateKey(DateTime.now())) {
+                    _dashboardPrayerTimes = {
+                      ...?_dashboardPrayerTimes,
+                      '${prayerKey}Adhan': adhanVal,
+                      '${prayerKey}Jamaah': jamaahVal,
+                    };
+                  }
                 });
 
                 await ApiService.instance.updatePrayerTimes(_masjidId!, {
@@ -1624,8 +1628,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content:
-                          Text('Alhamdulillah! $prayerName timing updated to $jamaahVal.'),
+                      content: Text(
+                          'Alhamdulillah! $prayerName timing updated to $jamaahVal.'),
                       backgroundColor: AppColors.primary,
                     ),
                   );
@@ -2482,7 +2486,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 Navigator.pop(ctx);
                 try {
                   final payload = <String, dynamic>{
-                    'date': dateStr,
                     'sunrise': sunriseCtrl.text.trim(),
                     'sunset': sunsetCtrl.text.trim(),
                     'fajrAdhan': fajrACtrl.text.trim(),
@@ -2645,7 +2648,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     'ishaJamaah': ishaJCtrl.text.trim(),
                   });
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Alhamdulillah! Date range schedule applied.')));
+                      content:
+                          Text('Alhamdulillah! Date range schedule applied.')));
                   _loadMasjidData();
                 } catch (e) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -2710,8 +2714,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 await _loadScheduleCalendar(id);
                 if (mounted)
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content:
-                          Text('Alhamdulillah! Fasting schedule saved for selected dates.')));
+                      content: Text(
+                          'Alhamdulillah! Fasting schedule saved for selected dates.')));
               } catch (error) {
                 if (mounted)
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -3447,7 +3451,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     phone: phoneCtrl.text.trim(), name: nameCtrl.text.trim());
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Alhamdulillah! Member added successfully.')));
+                      content:
+                          Text('Alhamdulillah! Member added successfully.')));
                 }
                 _loadMasjidData();
               } catch (e) {
@@ -3524,8 +3529,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     name: nameCtrl.text.trim(),
                     role: selectedRole,
                   );
-                  ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Alhamdulillah! Role assigned.')));
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Alhamdulillah! Role assigned.')));
                   _loadMasjidData();
                 } catch (e) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -3685,7 +3690,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         });
                         ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                                content: Text('Alhamdulillah! Masjid details updated.')));
+                                content: Text(
+                                    'Alhamdulillah! Masjid details updated.')));
                         _loadMasjidData();
                       } catch (e) {
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
