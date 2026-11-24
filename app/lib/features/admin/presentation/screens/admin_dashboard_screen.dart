@@ -1,3 +1,4 @@
+import 'package:masjid_namaz_app/core/constants/app_colors.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -7,6 +8,7 @@ import 'package:masjid_namaz_app/features/announcements/presentation/screens/ann
 import 'package:masjid_namaz_app/features/prayer_times/presentation/screens/home_screen.dart';
 import 'package:masjid_namaz_app/features/auth/presentation/screens/otp_login_screen.dart';
 import 'package:masjid_namaz_app/features/masjid/presentation/widgets/location_input_widget.dart';
+import 'package:masjid_namaz_app/features/admin/presentation/screens/notice_editor_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   final String? masjidId;
@@ -179,7 +181,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       appBar: AppBar(
         title: Text(_masjidName ?? 'Masjid Admin Dashboard',
             style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF0F432B),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -197,7 +199,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     Card(
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16)),
-                      color: const Color(0xFF0F432B),
+                      color: AppColors.primary,
                       child: Padding(
                         padding: const EdgeInsets.all(20),
                         child: Column(
@@ -240,7 +242,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Icon(Icons.schedule,
-                                  color: Color(0xFF0F432B), size: 30),
+                                  color: AppColors.primary, size: 30),
                               const SizedBox(height: 10),
                               const Text('Create Your Prayer Schedule',
                                   style: TextStyle(
@@ -254,7 +256,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                 width: double.infinity,
                                 child: FilledButton.icon(
                                   style: FilledButton.styleFrom(
-                                      backgroundColor: const Color(0xFF0F432B)),
+                                      backgroundColor: AppColors.primary),
                                   onPressed: _openCreatePrayerSchedule,
                                   icon: const Icon(Icons.add),
                                   label: const Text('Create Schedule'),
@@ -348,11 +350,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0F432B).withValues(alpha: 0.1),
+                    color: AppColors.primary.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.add_business,
-                      size: 48, color: Color(0xFF0F432B)),
+                      size: 48, color: AppColors.primary),
                 ),
                 const SizedBox(height: 16),
                 const Text(
@@ -372,7 +374,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   children: [
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF0F432B),
+                        foregroundColor: AppColors.primary,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 12),
                         shape: RoundedRectangleBorder(
@@ -385,7 +387,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     const SizedBox(width: 10),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F432B),
+                        backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 12),
@@ -430,13 +432,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   controller: nameCtrl,
                   decoration:
                       const InputDecoration(labelText: 'Masjid Name *')),
+              const SizedBox(height: 12),
               TextField(
                   controller: nameTaCtrl,
                   decoration: const InputDecoration(
                       labelText: 'Tamil Name (Optional)')),
+              const SizedBox(height: 12),
               TextField(
                   controller: cityCtrl,
                   decoration: const InputDecoration(labelText: 'City *')),
+              const SizedBox(height: 12),
               TextField(
                   controller: addrCtrl,
                   decoration: const InputDecoration(labelText: 'Address *')),
@@ -456,7 +461,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0F432B),
+                backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white),
             onPressed: () async {
               if (nameCtrl.text.isEmpty ||
@@ -607,10 +612,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0F432B).withValues(alpha: 0.08),
+                  color: AppColors.primary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                      color: const Color(0xFF0F432B).withValues(alpha: 0.3)),
+                      color: AppColors.primary.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -618,13 +623,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     Text(
                       'Jamaah: ${jamaah ?? '--:--'}',
                       style: const TextStyle(
-                        color: Color(0xFF0F432B),
+                        color: AppColors.primary,
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
                       ),
                     ),
                     const SizedBox(width: 6),
-                    const Icon(Icons.edit, size: 14, color: Color(0xFF0F432B)),
+                    const Icon(Icons.edit, size: 14, color: AppColors.primary),
                   ],
                 ),
               ),
@@ -639,7 +644,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           final prayerLabel = Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 18, color: const Color(0xFF0F432B)),
+              Icon(icon, size: 18, color: AppColors.primary),
               const SizedBox(width: 8),
               Text(name,
                   style: const TextStyle(
@@ -683,7 +688,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            const Icon(Icons.edit_calendar, color: Color(0xFF0F432B)),
+            const Icon(Icons.edit_calendar, color: AppColors.primary),
             const SizedBox(width: 8),
             Text('Edit $prayerName Time',
                 style:
@@ -759,7 +764,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0F432B),
+              backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10)),
@@ -789,7 +794,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     SnackBar(
                       content:
                           Text('$prayerName timing updated to $jamaahVal!'),
-                      backgroundColor: const Color(0xFF0F432B),
+                      backgroundColor: AppColors.primary,
                     ),
                   );
                 }
@@ -834,7 +839,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       appBar: AppBar(
         title: const Text('Manage Prayer & Events',
             style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF0F432B),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -843,12 +848,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       ),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF0F432B)))
+              child: CircularProgressIndicator(color: AppColors.primary))
           : _masjidId == null
               ? _buildNoMasjidAdminCard()
               : RefreshIndicator(
                   onRefresh: _loadMasjidData,
-                  color: const Color(0xFF0F432B),
+                  color: AppColors.primary,
                   child: ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
@@ -869,12 +874,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                 Container(
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF0F432B)
+                                    color: AppColors.primary
                                         .withValues(alpha: 0.08),
                                     shape: BoxShape.circle,
                                   ),
                                   child: const Icon(Icons.access_time_filled,
-                                      size: 48, color: Color(0xFF0F432B)),
+                                      size: 48, color: AppColors.primary),
                                 ),
                                 const SizedBox(height: 16),
                                 const Text(
@@ -898,7 +903,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                   height: 50,
                                   child: ElevatedButton.icon(
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF0F432B),
+                                      backgroundColor: AppColors.primary,
                                       foregroundColor: Colors.white,
                                       shape: RoundedRectangleBorder(
                                           borderRadius:
@@ -921,9 +926,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                   height: 46,
                                   child: OutlinedButton.icon(
                                     style: OutlinedButton.styleFrom(
-                                      foregroundColor: const Color(0xFF0F432B),
+                                      foregroundColor: AppColors.primary,
                                       side: const BorderSide(
-                                          color: Color(0xFF0F432B), width: 1.2),
+                                          color: AppColors.primary, width: 1.2),
                                       shape: RoundedRectangleBorder(
                                           borderRadius:
                                               BorderRadius.circular(12)),
@@ -953,7 +958,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                     fontSize: 16, fontWeight: FontWeight.bold)),
                             ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF0F432B),
+                                  backgroundColor: AppColors.primary,
                                   foregroundColor: Colors.white,
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 12, vertical: 8)),
@@ -969,9 +974,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           alignment: Alignment.centerLeft,
                           child: OutlinedButton.icon(
                             style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFF0F432B),
+                                foregroundColor: AppColors.primary,
                                 side:
-                                    const BorderSide(color: Color(0xFF0F432B))),
+                                    const BorderSide(color: AppColors.primary)),
                             icon: const Icon(Icons.date_range, size: 16),
                             label: const Text('Edit Date Range Schedule',
                                 style: TextStyle(fontSize: 12)),
@@ -1007,7 +1012,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                     Colors.indigo,
                                   ),
                                   const Icon(Icons.edit_outlined,
-                                      size: 18, color: Color(0xFF0F432B)),
+                                      size: 18, color: AppColors.primary),
                                 ],
                               ),
                             ),
@@ -1096,7 +1101,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                   fontSize: 16, fontWeight: FontWeight.bold)),
                           ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF0F432B),
+                                backgroundColor: AppColors.primary,
                                 foregroundColor: Colors.white),
                             icon: const Icon(Icons.add, size: 16),
                             label: const Text('Add Event',
@@ -1115,7 +1120,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Icon(Icons.event_available,
-                                    color: Color(0xFF0F432B), size: 26),
+                                    color: AppColors.primary, size: 26),
                                 const SizedBox(height: 10),
                                 const Text(
                                   'No special events yet. Add Ramadan, Eid, Taraweeh, Tahajjud, or another masjid event.',
@@ -1153,10 +1158,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                 borderRadius: BorderRadius.circular(10)),
                             child: ListTile(
                               leading: CircleAvatar(
-                                backgroundColor: const Color(0xFF0F432B)
-                                    .withValues(alpha: 0.1),
+                                backgroundColor:
+                                    AppColors.primary.withValues(alpha: 0.1),
                                 child: const Icon(Icons.event,
-                                    color: Color(0xFF0F432B)),
+                                    color: AppColors.primary),
                               ),
                               title: Text(title,
                                   style: const TextStyle(
@@ -1278,7 +1283,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         title: Row(
           children: [
             Icon(isCreating ? Icons.add_alarm : Icons.edit_calendar,
-                color: const Color(0xFF0F432B)),
+                color: AppColors.primary),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -1421,10 +1426,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0F432B).withValues(alpha: 0.06),
+                    color: AppColors.primary.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                        color: const Color(0xFF0F432B).withValues(alpha: 0.2)),
+                        color: AppColors.primary.withValues(alpha: 0.2)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1433,7 +1438,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
-                              color: Color(0xFF0F432B))),
+                              color: AppColors.primary)),
                       const SizedBox(height: 8),
                       Row(
                         children: [
@@ -1458,7 +1463,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0F432B),
+              backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10)),
@@ -1500,7 +1505,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       content: Text(isCreating
                           ? 'Prayer schedule created successfully!'
                           : 'Prayer schedule updated successfully!'),
-                      backgroundColor: const Color(0xFF0F432B),
+                      backgroundColor: AppColors.primary,
                     ),
                   );
                 }
@@ -1545,27 +1550,33 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   controller: startCtrl,
                   decoration: const InputDecoration(
                       labelText: 'Start Date (YYYY-MM-DD)')),
+              const SizedBox(height: 12),
               TextField(
                   controller: endCtrl,
                   decoration: const InputDecoration(
                       labelText: 'End Date (YYYY-MM-DD)')),
+              const SizedBox(height: 12),
               const Divider(),
               TextField(
                   controller: fajrJCtrl,
                   decoration:
                       const InputDecoration(labelText: 'Fajr Jamaah (HH:mm)')),
+              const SizedBox(height: 12),
               TextField(
                   controller: dhuhrJCtrl,
                   decoration:
                       const InputDecoration(labelText: 'Dhuhr Jamaah (HH:mm)')),
+              const SizedBox(height: 12),
               TextField(
                   controller: asrJCtrl,
                   decoration:
                       const InputDecoration(labelText: 'Asr Jamaah (HH:mm)')),
+              const SizedBox(height: 12),
               TextField(
                   controller: maghribJCtrl,
                   decoration: const InputDecoration(
                       labelText: 'Maghrib Jamaah (HH:mm)')),
+              const SizedBox(height: 12),
               TextField(
                   controller: ishaJCtrl,
                   decoration:
@@ -1578,7 +1589,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0F432B),
+                backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white),
             onPressed: () async {
               if (_masjidId == null) return;
@@ -1665,30 +1676,37 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     if (v != null) setDState(() => selectedType = v);
                   },
                 ),
+                const SizedBox(height: 12),
                 TextField(
                     controller: titleCtrl,
                     decoration:
                         const InputDecoration(labelText: 'Event Title *')),
+                const SizedBox(height: 12),
                 TextField(
                     controller: titleTaCtrl,
                     decoration:
                         const InputDecoration(labelText: 'Tamil Title')),
+                const SizedBox(height: 12),
                 TextField(
                     controller: startCtrl,
                     decoration: const InputDecoration(
                         labelText: 'Start Date (YYYY-MM-DD) *')),
+                const SizedBox(height: 12),
                 TextField(
                     controller: endDateCtrl,
                     decoration: const InputDecoration(
                         labelText: 'End Date (optional)')),
+                const SizedBox(height: 12),
                 TextField(
                     controller: timeCtrl,
                     decoration: const InputDecoration(
                         labelText: 'Start Time (HH:mm) *')),
+                const SizedBox(height: 12),
                 TextField(
                     controller: endTimeCtrl,
                     decoration: const InputDecoration(
                         labelText: 'End Time (optional)')),
+                const SizedBox(height: 12),
                 TextField(
                     controller: notesCtrl,
                     decoration: const InputDecoration(
@@ -1702,7 +1720,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 child: const Text('Cancel')),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F432B),
+                  backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white),
               onPressed: () async {
                 if (titleCtrl.text.trim().isEmpty ||
@@ -1774,13 +1792,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       appBar: AppBar(
         title: const Text('Masjid Notice Board',
             style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF0F432B),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
       floatingActionButton: _masjidId == null
           ? null
           : FloatingActionButton.extended(
-              backgroundColor: const Color(0xFF0F432B),
+              backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               icon: const Icon(Icons.add_alert),
               label: const Text('New Notice'),
@@ -1849,78 +1867,30 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   void _showCreateNoticeDialog() {
-    final titleCtrl = TextEditingController();
-    final titleTaCtrl = TextEditingController();
-    final bodyCtrl = TextEditingController();
-    final bodyTaCtrl = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Broadcast Notice to Musallis'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                  controller: titleCtrl,
-                  decoration:
-                      const InputDecoration(labelText: 'Title (English) *')),
-              TextField(
-                  controller: titleTaCtrl,
-                  decoration:
-                      const InputDecoration(labelText: 'Title (Tamil)')),
-              TextField(
-                  controller: bodyCtrl,
-                  maxLines: 2,
-                  decoration:
-                      const InputDecoration(labelText: 'Message Body *')),
-              TextField(
-                  controller: bodyTaCtrl,
-                  maxLines: 2,
-                  decoration:
-                      const InputDecoration(labelText: 'Message (Tamil)')),
-            ],
-          ),
+    final masjidId = _masjidId;
+    if (masjidId == null) return;
+    Navigator.of(context)
+        .push<bool>(
+      MaterialPageRoute(
+        builder: (_) => NoticeEditorScreen(
+          onSave: (title, message) async {
+            await ApiService.instance.createAnnouncement(masjidId, {
+              'category': 'GENERAL',
+              'title': title,
+              'body': message,
+              'notifyPush': true,
+            });
+          },
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0F432B),
-                foregroundColor: Colors.white),
-            onPressed: () async {
-              if (titleCtrl.text.isEmpty ||
-                  bodyCtrl.text.isEmpty ||
-                  _masjidId == null) return;
-              Navigator.pop(ctx);
-              try {
-                await ApiService.instance.createAnnouncement(_masjidId!, {
-                  'category': 'GENERAL',
-                  'title': titleCtrl.text.trim(),
-                  'titleTa': titleTaCtrl.text.trim().isEmpty
-                      ? null
-                      : titleTaCtrl.text.trim(),
-                  'body': bodyCtrl.text.trim(),
-                  'bodyTa': bodyTaCtrl.text.trim().isEmpty
-                      ? null
-                      : bodyTaCtrl.text.trim(),
-                  'notifyPush': true,
-                });
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    content: Text('Notice broadcasted to all followers!')));
-                _loadMasjidData();
-              } catch (e) {
-                ScaffoldMessenger.of(context)
-                    .showSnackBar(SnackBar(content: Text('Failed: $e')));
-              }
-            },
-            child: const Text('Broadcast'),
-          ),
-        ],
       ),
-    );
+    )
+        .then((created) async {
+      if (!mounted || created != true) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Notice sent to connected members.'),
+      ));
+      await _loadMasjidData();
+    });
   }
 
   Future<void> _deleteNotice(String id) async {
@@ -1948,7 +1918,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       appBar: AppBar(
         title: const Text('Manage Members & Roles',
             style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF0F432B),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -1961,7 +1931,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       floatingActionButton: _masjidId == null
           ? null
           : FloatingActionButton.extended(
-              backgroundColor: const Color(0xFF0F432B),
+              backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               icon: const Icon(Icons.person_add),
               label: const Text('Add Member'),
@@ -1987,7 +1957,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             Row(
                               children: [
                                 const Icon(Icons.qr_code_2,
-                                    color: Color(0xFF0F432B), size: 24),
+                                    color: AppColors.primary, size: 24),
                                 const SizedBox(width: 8),
                                 Text(
                                   _masjidName ?? 'Masjid',
@@ -2001,14 +1971,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFEAF7EE),
+                                color: AppColors.primaryContainer,
                                 borderRadius: BorderRadius.circular(6),
                                 border: Border.all(
-                                    color: const Color(0xFF0F432B), width: 0.8),
+                                    color: AppColors.primary, width: 0.8),
                               ),
                               child: const Text('JOIN QR',
                                   style: TextStyle(
-                                      color: Color(0xFF0F432B),
+                                      color: AppColors.primary,
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold)),
                             ),
@@ -2041,10 +2011,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             backgroundColor: Colors.white,
                             eyeStyle: const QrEyeStyle(
                                 eyeShape: QrEyeShape.square,
-                                color: Color(0xFF0F432B)),
+                                color: AppColors.primary),
                             dataModuleStyle: const QrDataModuleStyle(
                                 dataModuleShape: QrDataModuleShape.square,
-                                color: Color(0xFF0F432B)),
+                                color: AppColors.primary),
                           ),
                         ),
                         const SizedBox(height: 10),
@@ -2065,9 +2035,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         const SizedBox(height: 12),
                         OutlinedButton.icon(
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFF0F432B),
+                            foregroundColor: AppColors.primary,
                             side: const BorderSide(
-                                color: Color(0xFF0F432B), width: 1.2),
+                                color: AppColors.primary, width: 1.2),
                             shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10)),
                           ),
@@ -2109,7 +2079,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           borderRadius: BorderRadius.circular(10)),
                       child: ListTile(
                         leading: const CircleAvatar(
-                          backgroundColor: Color(0xFF0F432B),
+                          backgroundColor: AppColors.primary,
                           child:
                               Icon(Icons.shield, color: Colors.white, size: 18),
                         ),
@@ -2125,7 +2095,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                               borderRadius: BorderRadius.circular(6)),
                           child: Text(adm['role'] ?? '',
                               style: const TextStyle(
-                                  color: Color(0xFF0F432B),
+                                  color: AppColors.primary,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 11)),
                         ),
@@ -2180,7 +2150,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           child: Column(
             children: [
               const Icon(Icons.qr_code_scanner,
-                  color: Color(0xFF0F432B), size: 36),
+                  color: AppColors.primary, size: 36),
               const SizedBox(height: 8),
               Text(masjidName,
                   textAlign: TextAlign.center,
@@ -2214,10 +2184,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 size: 200.0,
                 backgroundColor: Colors.white,
                 eyeStyle: const QrEyeStyle(
-                    eyeShape: QrEyeShape.square, color: Color(0xFF0F432B)),
+                    eyeShape: QrEyeShape.square, color: AppColors.primary),
                 dataModuleStyle: const QrDataModuleStyle(
                     dataModuleShape: QrDataModuleShape.square,
-                    color: Color(0xFF0F432B)),
+                    color: AppColors.primary),
               ),
             ),
             const SizedBox(height: 14),
@@ -2246,7 +2216,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         actions: [
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0F432B),
+              backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               minimumSize: const Size.fromHeight(40),
               shape: RoundedRectangleBorder(
@@ -2274,7 +2244,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: Row(
           children: const [
-            Icon(Icons.person_add, color: Color(0xFF0F432B)),
+            Icon(Icons.person_add, color: AppColors.primary),
             SizedBox(width: 8),
             Text('Add Member to Masjid',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
@@ -2290,10 +2260,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0F432B).withValues(alpha: 0.05),
+                    color: AppColors.primary.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                        color: const Color(0xFF0F432B).withValues(alpha: 0.2)),
+                        color: AppColors.primary.withValues(alpha: 0.2)),
                   ),
                   child: Column(
                     children: [
@@ -2301,14 +2271,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: const [
                           Icon(Icons.qr_code_2,
-                              size: 20, color: Color(0xFF0F432B)),
+                              size: 20, color: AppColors.primary),
                           SizedBox(width: 6),
                           Text(
                             'Instant Join via QR Code',
                             style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 13,
-                                color: Color(0xFF0F432B)),
+                                color: AppColors.primary),
                           ),
                         ],
                       ),
@@ -2327,10 +2297,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           backgroundColor: Colors.white,
                           eyeStyle: const QrEyeStyle(
                               eyeShape: QrEyeShape.square,
-                              color: Color(0xFF0F432B)),
+                              color: AppColors.primary),
                           dataModuleStyle: const QrDataModuleStyle(
                               dataModuleShape: QrDataModuleShape.square,
-                              color: Color(0xFF0F432B)),
+                              color: AppColors.primary),
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -2390,7 +2360,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0F432B),
+              backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8)),
@@ -2441,6 +2411,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   controller: phoneCtrl,
                   decoration:
                       const InputDecoration(labelText: 'Mobile Number *')),
+              const SizedBox(height: 12),
               TextField(
                   controller: nameCtrl,
                   decoration: const InputDecoration(labelText: 'Name *')),
@@ -2469,7 +2440,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 child: const Text('Cancel')),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F432B),
+                  backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white),
               onPressed: () async {
                 if (phoneCtrl.text.isEmpty ||
@@ -2521,7 +2492,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       appBar: AppBar(
         title: const Text('Masjid Settings & Profile',
             style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF0F432B),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
       body: ListView(
@@ -2574,7 +2545,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   const SizedBox(height: 16),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0F432B),
+                      backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                       minimumSize: const Size.fromHeight(44),
                     ),
@@ -2616,7 +2587,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             tileColor: Colors.white,
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            leading: const Icon(Icons.home, color: Color(0xFF0F432B)),
+            leading: const Icon(Icons.home, color: AppColors.primary),
             title: const Text('Switch to User App (Home)'),
             onTap: () {
               Navigator.pushReplacement(context,

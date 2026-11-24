@@ -14,6 +14,8 @@ class AppTheme {
         onPrimaryContainer: AppColors.onPrimaryContainer,
         secondary: AppColors.secondary,
         onSecondary: AppColors.onSecondary,
+        secondaryContainer: AppColors.secondaryContainer,
+        onSecondaryContainer: AppColors.onSecondaryContainer,
         surface: AppColors.surface,
         onSurface: AppColors.onSurface,
         outline: AppColors.outline,
@@ -72,7 +74,7 @@ class AppTheme {
         filled: true,
         fillColor: AppColors.surfaceCard,
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 14),
         labelStyle:
             const TextStyle(color: AppColors.textSecondary, fontSize: 14),

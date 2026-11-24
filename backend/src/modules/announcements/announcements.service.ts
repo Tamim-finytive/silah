@@ -84,11 +84,21 @@ export class AnnouncementsService {
 
   async findForUser(
     userId: string,
-    query: { status?: string; from?: string; to?: string },
+    query: {
+      status?: string;
+      from?: string;
+      to?: string;
+      cursor?: string;
+      limit?: number;
+    },
   ) {
     const status = (query.status || 'ALL').toUpperCase();
     if (!['ALL', 'READ', 'UNREAD'].includes(status)) {
       throw new BadRequestException('Status must be ALL, READ, or UNREAD');
+    }
+    const pageSize = query.limit ?? 20;
+    if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50) {
+      throw new BadRequestException('Limit must be an integer between 1 and 50');
     }
     const parseDate = (value: string | undefined, isEnd: boolean) => {
       if (!value) return undefined;
@@ -142,7 +152,13 @@ export class AnnouncementsService {
 
     const announcements = await this.prisma.announcement.findMany({
       where,
-      orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+      orderBy: [
+        { publishedAt: 'desc' },
+        { createdAt: 'desc' },
+        { id: 'desc' },
+      ],
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
+      take: pageSize + 1,
       include: {
         creator: { select: { id: true, name: true } },
         userStates: {
@@ -152,10 +168,17 @@ export class AnnouncementsService {
         },
       },
     });
-    return announcements.map(({ userStates, ...announcement }) => ({
+    const hasMore = announcements.length > pageSize;
+    const page = announcements.slice(0, pageSize);
+    const items = page.map(({ userStates, ...announcement }) => ({
       ...announcement,
       isRead: userStates[0]?.readAt != null,
     }));
+    return {
+      items,
+      nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
+      hasMore,
+    };
   }
 
   private async ensureUserCanView(userId: string, announcementId: string) {

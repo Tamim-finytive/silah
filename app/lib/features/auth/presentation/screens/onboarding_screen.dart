@@ -234,10 +234,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFF0F432B).withValues(alpha: 0.08),
+                color: AppColors.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                    color: const Color(0xFF0F432B).withValues(alpha: 0.3)),
+                    color: AppColors.primary.withValues(alpha: 0.3)),
               ),
               child: const Text(
                 'You can now update prayer timings, generate member QR codes, post community announcements, and manage your congregation.',

@@ -30,7 +30,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     final notifications = FlutterLocalNotificationsPlugin();
     await notifications.initialize(
       const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        android: AndroidInitializationSettings('ic_stat_silah'),
         iOS: DarwinInitializationSettings(),
       ),
     );
@@ -53,7 +53,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
           NotificationService.announcementChannelId,
           'Masjid announcements',
           channelDescription: 'Announcements and important masjid updates',
-          icon: '@mipmap/ic_launcher',
+          icon: 'ic_stat_silah',
           importance: Importance.high,
           priority: Priority.high,
         ),
@@ -131,7 +131,7 @@ class NotificationService {
           announcementChannelId,
           'Masjid announcements',
           channelDescription: 'Announcements and important masjid updates',
-          icon: '@mipmap/ic_launcher',
+          icon: 'ic_stat_silah',
           importance: Importance.high,
           priority: Priority.high,
         ),
@@ -150,7 +150,7 @@ class NotificationService {
 
     try {
       // 1. Initialize local notifications
-      const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const androidInit = AndroidInitializationSettings('ic_stat_silah');
       const iosInit = DarwinInitializationSettings(
         requestAlertPermission: false,
         requestBadgePermission: false,
@@ -248,17 +248,21 @@ class NotificationService {
   Future<void> _requestNotificationPermission() async {
     if (_permissionCheckedThisRun) return;
     _permissionCheckedThisRun = true;
-    await _fcm.requestPermission(
+    final settings = await _fcm.requestPermission(
       alert: true,
       badge: true,
       sound: true,
       provisional: false,
     );
+    debugPrint(
+      'FCM notification authorization: ${settings.authorizationStatus}',
+    );
     if (Platform.isAndroid) {
-      await _localNotifications
+      final granted = await _localNotifications
           .resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>()
           ?.requestNotificationsPermission();
+      debugPrint('Android notifications allowed: $granted');
     }
   }
 

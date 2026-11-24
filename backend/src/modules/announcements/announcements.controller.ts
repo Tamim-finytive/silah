@@ -21,13 +21,23 @@ export class BroadcastAnnouncementsController {
   @ApiQuery({ name: 'status', required: false, enum: ['ALL', 'READ', 'UNREAD'] })
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
+  @ApiQuery({ name: 'cursor', required: false, description: 'Notice ID from the previous page' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Page size (1-50; defaults to 20)' })
   async getMyAnnouncements(
     @CurrentUser('id') userId: string,
     @Query('status') status?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.announcementsService.findForUser(userId, { status, from, to });
+    return this.announcementsService.findForUser(userId, {
+      status,
+      from,
+      to,
+      cursor,
+      limit: limit === undefined ? undefined : Number(limit),
+    });
   }
 
   @Put(':id/read-state')

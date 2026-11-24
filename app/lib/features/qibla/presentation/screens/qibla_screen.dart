@@ -266,12 +266,8 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
   Widget build(BuildContext context) {
     ref.watch(languageProvider);
     final lang = ref.read(languageProvider.notifier);
-
-    // Live phone heading from true North (0 = N, 90 = E, 180 = S, 270 = W)
-    final double phoneHeading = _heading ?? 0.0;
-
-    // Difference between Qibla bearing and phone heading (-180 to +180)
-    double diff = (_qiblaBearing - phoneHeading);
+    final phoneHeading = _heading ?? 0.0;
+    var diff = (_qiblaBearing - phoneHeading);
     while (diff > 180) {
       diff -= 360;
     }
@@ -279,16 +275,24 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
       diff += 360;
     }
 
-    final bool isFacingQibla =
+    final isFacingQibla =
         _hasValidLocation && _heading != null && diff.abs() <= 5.0;
     final qiblaCardinal = _getCardinalDirection(_qiblaBearing);
     final phoneCardinal = _getCardinalDirection(phoneHeading);
+    final int? alignment = _hasValidLocation && _heading != null
+        ? ((180 - diff.abs()) / 180 * 100).round()
+        : null;
 
     return Scaffold(
+      backgroundColor: AppColors.surface,
       appBar: AppBar(
+        backgroundColor: AppColors.surface,
+        foregroundColor: AppColors.textPrimary,
+        surfaceTintColor: Colors.transparent,
+        centerTitle: true,
         leading: (widget.onBack != null || Navigator.canPop(context))
             ? IconButton(
-                icon: const Icon(Icons.arrow_back),
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 19),
                 tooltip: 'Back',
                 onPressed: () {
                   if (widget.onBack != null) {
@@ -299,476 +303,770 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                 },
               )
             : null,
-        title: Text(lang.tr(en: 'Qibla Direction', ta: 'கிப்லா திசை')),
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(lang.tr(en: 'Qibla Direction', ta: 'கிப்லா திசை'),
+                style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary)),
+            const SizedBox(height: 2),
+            const Text('MAKKAH AL-MUKARRAMAH • اتجاه القبلة',
+                style: TextStyle(
+                    fontSize: 9,
+                    letterSpacing: 0.45,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary)),
+          ],
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.my_location),
-            tooltip: 'Recalibrate GPS Location',
-            onPressed: () async {
-              await _initLocationAndQibla();
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(_hasValidLocation
-                      ? 'Qibla direction calibrated to ${_qiblaBearing.toStringAsFixed(1)}° for $_userCity'
-                      : 'Location is unavailable. Enable location or connect a masjid with coordinates.'),
-                  duration: const Duration(seconds: 2),
-                ),
-              );
-            },
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: IconButton.filledTonal(
+              tooltip: 'Refresh location',
+              onPressed: () async {
+                await _initLocationAndQibla();
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(_hasValidLocation
+                        ? 'Qibla updated for $_userCity'
+                        : 'Location unavailable. Allow location access or connect a masjid with coordinates.'),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.my_location_rounded),
+            ),
           ),
         ],
       ),
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 640),
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Column(
-                children: [
-                  // Bearing info banner
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: isFacingQibla
-                          ? const Color(0xFFE8F5E9)
-                          : AppColors.primaryContainer,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: isFacingQibla
-                            ? AppColors.success
-                            : AppColors.primary,
-                        width: isFacingQibla ? 2.5 : 1.2,
+        top: false,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final dialSize = math
+                .min(420.0, math.max(180.0, constraints.maxWidth - 32))
+                .toDouble();
+            return Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 620),
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _QiblaSummaryCard(
+                        bearing: _qiblaBearing,
+                        cardinal: qiblaCardinal,
+                        distanceKm: _distanceKm,
+                        location: _userCity,
+                        hasLocation: _hasValidLocation,
+                        isAligned: isFacingQibla,
                       ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          isFacingQibla ? Icons.check_circle : Icons.explore,
-                          color: isFacingQibla
-                              ? AppColors.success
-                              : AppColors.primary,
-                          size: 34,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                      const SizedBox(height: 14),
+                      _QiblaTurnCard(
+                        hasLocation: _hasValidLocation,
+                        hasHeading: _heading != null,
+                        isAligned: isFacingQibla,
+                        difference: diff,
+                        phoneHeading: phoneHeading,
+                        phoneCardinal: phoneCardinal,
+                        alignment: alignment,
+                        language: lang,
+                      ),
+                      const SizedBox(height: 20),
+                      Center(
+                        child: SizedBox(
+                          width: dialSize,
+                          height: dialSize,
+                          child: Stack(
+                            alignment: Alignment.center,
                             children: [
-                              Text(
-                                !_hasValidLocation
-                                    ? lang.tr(
-                                        en:
-                                            'Location is required to find Qibla',
-                                        ta: 'கிப்லா திசைக்கு இடம் தேவை')
-                                    : isFacingQibla
-                                        ? lang.tr(
-                                            en: 'Facing Qibla! (Makkah)',
-                                            ta: 'கிப்லாவை நோக்கி உள்ளீர்கள்!')
-                                        : 'Qibla: ${_qiblaBearing.toStringAsFixed(0)}° $qiblaCardinal • ${lang.tr(en: 'Kaaba Direction', ta: 'கஅபா திசை')}',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: isFacingQibla
-                                      ? AppColors.success
-                                      : AppColors.onPrimaryContainer,
+                              Transform.rotate(
+                                angle: -phoneHeading * (math.pi / 180),
+                                child: Container(
+                                  width: dialSize * .96,
+                                  height: dialSize * .96,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surfaceCard,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: AppColors.secondary
+                                          .withValues(alpha: .65),
+                                      width: 1.4,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppColors.primary
+                                            .withValues(alpha: .10),
+                                        blurRadius: 26,
+                                        spreadRadius: 3,
+                                      ),
+                                    ],
+                                  ),
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      CustomPaint(
+                                        size: Size.square(dialSize * .96),
+                                        painter: _CompassTicksPainter(
+                                            color: AppColors.primary),
+                                      ),
+                                      const _CompassLabel(
+                                          alignment: Alignment.topCenter,
+                                          padding: EdgeInsets.only(top: 16),
+                                          label: 'N',
+                                          color: AppColors.emergency),
+                                      const _CompassLabel(
+                                          alignment: Alignment.bottomCenter,
+                                          padding: EdgeInsets.only(bottom: 16),
+                                          label: 'S'),
+                                      const _CompassLabel(
+                                          alignment: Alignment.centerLeft,
+                                          padding: EdgeInsets.only(left: 16),
+                                          label: 'W'),
+                                      const _CompassLabel(
+                                          alignment: Alignment.centerRight,
+                                          padding: EdgeInsets.only(right: 16),
+                                          label: 'E'),
+                                      if (_hasValidLocation)
+                                        Transform.rotate(
+                                          angle:
+                                              _qiblaBearing * (math.pi / 180),
+                                          child: Align(
+                                            alignment: Alignment.topCenter,
+                                            child: Container(
+                                              margin: EdgeInsets.only(
+                                                  top: dialSize * .105),
+                                              padding: const EdgeInsets.all(6),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.primary,
+                                                shape: BoxShape.circle,
+                                                border: Border.all(
+                                                    color: AppColors.secondary,
+                                                    width: 2),
+                                              ),
+                                              child: const Icon(Icons.mosque,
+                                                  color: Colors.white,
+                                                  size: 16),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _hasValidLocation
-                                    ? 'Phone Facing: ${phoneHeading.toStringAsFixed(0)}° ($phoneCardinal) • Makkah: ~${_distanceKm.toStringAsFixed(0)} km'
-                                    : 'Enable location or connect a masjid with saved coordinates.',
-                                style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.textSecondary),
+                              if (_hasValidLocation && _heading != null)
+                                Transform.rotate(
+                                  angle: diff * (math.pi / 180),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 48,
+                                        height: 48,
+                                        decoration: BoxDecoration(
+                                          color: isFacingQibla
+                                              ? AppColors.success
+                                              : AppColors.primary,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                              color: AppColors.secondary,
+                                              width: 2),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: AppColors.primary
+                                                  .withValues(alpha: .24),
+                                              blurRadius: 10,
+                                            ),
+                                          ],
+                                        ),
+                                        child: const Icon(Icons.navigation,
+                                            color: Colors.white, size: 25),
+                                      ),
+                                      Container(
+                                        width: 4,
+                                        height: dialSize * .25,
+                                        decoration: BoxDecoration(
+                                          gradient: const LinearGradient(
+                                            begin: Alignment.topCenter,
+                                            end: Alignment.bottomCenter,
+                                            colors: [
+                                              AppColors.primary,
+                                              AppColors.secondary
+                                            ],
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                      ),
+                                      SizedBox(height: dialSize * .25),
+                                    ],
+                                  ),
+                                )
+                              else
+                                Icon(Icons.location_off_rounded,
+                                    color: AppColors.warning,
+                                    size: dialSize * .14),
+                              Container(
+                                width: 82,
+                                height: 82,
+                                decoration: BoxDecoration(
+                                  color: AppColors.surfaceCard,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                      color: AppColors.secondary, width: 2),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppColors.primary
+                                          .withValues(alpha: .08),
+                                      blurRadius: 8,
+                                    ),
+                                  ],
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                        _hasValidLocation
+                                            ? '${_qiblaBearing.round()}°'
+                                            : '—',
+                                        style: const TextStyle(
+                                            fontSize: 20,
+                                            height: 1.05,
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.textPrimary)),
+                                    const SizedBox(height: 3),
+                                    const Text('KAABA',
+                                        style: TextStyle(
+                                            fontSize: 9,
+                                            letterSpacing: 1.3,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.primary)),
+                                  ],
+                                ),
                               ),
                             ],
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 14),
-
-                  // Turn Instruction Badge
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: isFacingQibla
-                          ? AppColors.success.withValues(alpha: 0.15)
-                          : (diff > 0
-                              ? Colors.blue.shade50
-                              : Colors.indigo.shade50),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: isFacingQibla
-                            ? AppColors.success
-                            : Colors.blue.shade300,
                       ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          !_hasValidLocation
-                              ? Icons.location_off
-                              : isFacingQibla
-                                  ? Icons.done_all
-                                  : (diff > 0
-                                      ? Icons.turn_right
-                                      : Icons.turn_left),
-                          size: 18,
-                          color:
-                              isFacingQibla ? AppColors.success : Colors.indigo,
+                      const SizedBox(height: 18),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 15, vertical: 11),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceCard,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: AppColors.outline),
                         ),
-                        const SizedBox(width: 6),
-                        Text(
-                          !_hasValidLocation
-                              ? lang.tr(
-                                  en: 'Allow location to calculate direction',
-                                  ta: 'திசையை கணக்கிட இட அனுமதி அளிக்கவும்')
-                              : isFacingQibla
-                                  ? lang.tr(
-                                      en: 'Directly Facing Makkah',
-                                      ta: 'நேரடியாக மக்காவை நோக்கி நிற்கிறது')
-                                  : diff > 0
-                                      ? lang.tr(
-                                          en: 'Turn Right by ${diff.toStringAsFixed(0)}° to face Qibla',
-                                          ta: 'வலதுபுறம் ${diff.toStringAsFixed(0)}° திரும்பவும்',
-                                        )
-                                      : lang.tr(
-                                          en: 'Turn Left by ${(-diff).toStringAsFixed(0)}° to face Qibla',
-                                          ta: 'இடதுபுறம் ${(-diff).toStringAsFixed(0)}° திரும்பவும்',
-                                        ),
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: isFacingQibla
-                                ? AppColors.success
-                                : Colors.indigo.shade900,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Live compass: the dial and Qibla arrow use the same current heading.
-                  Center(
-                    child: SizedBox(
-                      width: 290,
-                      height: 290,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          // Compass Dial (Rotates in reverse of device heading)
-                          Transform.rotate(
-                            angle: -phoneHeading * (math.pi / 180.0),
-                            child: Container(
-                              width: 280,
-                              height: 280,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white,
-                                border: Border.all(
-                                  color: isFacingQibla
-                                      ? AppColors.success
-                                      : const Color(0xFF0F432B),
-                                  width: 3.5,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: (isFacingQibla
-                                            ? AppColors.success
-                                            : Colors.black)
-                                        .withValues(alpha: 0.12),
-                                    blurRadius: 18,
-                                    spreadRadius: 4,
-                                  ),
-                                ],
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              _hasCompassSensor
+                                  ? Icons.sensors_rounded
+                                  : Icons.sensors_off_rounded,
+                              color: _hasCompassSensor
+                                  ? AppColors.success
+                                  : AppColors.warning,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                !_hasCompassSensor
+                                    ? 'Compass sensor unavailable'
+                                    : _heading == null
+                                        ? 'Waiting for compass reading'
+                                        : 'True north • Compass sensor active',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textSecondary),
                               ),
-                              child: Stack(
-                                alignment: Alignment.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        height: 54,
+                        child: FilledButton.icon(
+                          onPressed:
+                              _isDetecting ? null : _detectAndPointToQibla,
+                          icon: _isDetecting
+                              ? const SizedBox(
+                                  width: 19,
+                                  height: 19,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Icon(Icons.explore_rounded),
+                          label: Text(_isDetecting
+                              ? lang.tr(
+                                  en: 'Updating compass…',
+                                  ta: 'திசைகாட்டி புதுப்பிக்கப்படுகிறது…')
+                              : lang.tr(
+                                  en: 'Update compass reading',
+                                  ta: 'திசைகாட்டியை புதுப்பிக்கவும்')),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.all(15),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryContainer,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                              color: AppColors.primary.withValues(alpha: .12)),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 42,
+                              height: 42,
+                              decoration: BoxDecoration(
+                                color: AppColors.secondaryContainer,
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: const Icon(Icons.location_on_rounded,
+                                  color: AppColors.primary),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Cardinal directions
-                                  const Align(
-                                    alignment: Alignment.topCenter,
-                                    child: Padding(
-                                      padding: EdgeInsets.only(top: 8),
-                                      child: Text('N',
-                                          style: TextStyle(
-                                              color: Colors.red,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 17)),
-                                    ),
+                                  Text(
+                                    _hasValidLocation
+                                        ? _userCity
+                                        : 'Location needed',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.textPrimary),
                                   ),
-                                  const Align(
-                                    alignment: Alignment.bottomCenter,
-                                    child: Padding(
-                                      padding: EdgeInsets.only(bottom: 8),
-                                      child: Text('S',
-                                          style: TextStyle(
-                                              color: Colors.grey,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 15)),
-                                    ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    _hasValidLocation
+                                        ? '${_distanceKm.toStringAsFixed(0)} km direct distance to Makkah'
+                                        : 'Allow location or use your connected masjid location.',
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.textSecondary),
                                   ),
-                                  const Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Padding(
-                                      padding: EdgeInsets.only(left: 8),
-                                      child: Text('W',
-                                          style: TextStyle(
-                                              color: Colors.grey,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 15)),
-                                    ),
-                                  ),
-                                  const Align(
-                                    alignment: Alignment.centerRight,
-                                    child: Padding(
-                                      padding: EdgeInsets.only(right: 8),
-                                      child: Text('E',
-                                          style: TextStyle(
-                                              color: Colors.grey,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 15)),
-                                    ),
-                                  ),
-
-                                  // Kaaba Azimuth Marker directly on the compass dial at _qiblaBearing
-                                  if (_hasValidLocation)
-                                    Transform.rotate(
-                                      angle: _qiblaBearing * (math.pi / 180.0),
-                                      child: Align(
-                                        alignment: Alignment.topCenter,
-                                        child: Container(
-                                          margin:
-                                              const EdgeInsets.only(top: 24),
-                                          padding: const EdgeInsets.all(4),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF0F432B),
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                                color: Colors.amber, width: 2),
-                                          ),
-                                          child: const Icon(Icons.mosque,
-                                              color: Colors.white, size: 14),
-                                        ),
-                                      ),
-                                    ),
                                 ],
                               ),
                             ),
-                          ),
-
-                          // Kaaba Needle: Points towards physical Kaaba location relative to where phone is currently pointing
-                          if (_hasValidLocation && _heading != null)
-                            Transform.rotate(
-                              angle: (_qiblaBearing - phoneHeading) *
-                                  (math.pi / 180.0),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  // Arrow Head with Kaaba Symbol
-                                  Container(
-                                    padding: const EdgeInsets.all(7),
-                                    decoration: BoxDecoration(
-                                      color: isFacingQibla
-                                          ? AppColors.success
-                                          : const Color(0xFF0F432B),
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                          color: Colors.amber, width: 2),
-                                      boxShadow: const [
-                                        BoxShadow(
-                                            color: Colors.black26,
-                                            blurRadius: 6)
-                                      ],
-                                    ),
-                                    child: const Icon(Icons.arrow_upward,
-                                        color: Colors.white, size: 26),
-                                  ),
-                                  // Needle Shaft
-                                  Container(
-                                    width: 5.0,
-                                    height: 80,
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                        colors: isFacingQibla
-                                            ? [
-                                                AppColors.success,
-                                                AppColors.success
-                                                    .withValues(alpha: 0.6)
-                                              ]
-                                            : [
-                                                const Color(0xFF0F432B),
-                                                Colors.amber
-                                              ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(3),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 80),
-                                ],
-                              ),
-                            )
-                          else
-                            const Icon(Icons.location_off,
-                                color: Colors.orange, size: 42),
-
-                          // Center Pivot
-                          CircleAvatar(
-                            radius: 9,
-                            backgroundColor: isFacingQibla
-                                ? AppColors.success
-                                : const Color(0xFF0F432B),
-                            child: const CircleAvatar(
-                                radius: 4, backgroundColor: Colors.white),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 18),
-
-                  // Refresh from the current live location and compass reading.
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isFacingQibla
-                            ? AppColors.success
-                            : const Color(0xFF0F432B),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
-                        elevation: 3,
-                      ),
-                      icon: _isDetecting
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                  color: Colors.white, strokeWidth: 2),
-                            )
-                          : const Icon(Icons.navigation, size: 22),
-                      label: Text(
-                        _isDetecting
-                            ? lang.tr(
-                                en: 'Updating Qibla Direction...',
-                                ta: 'கிப்லா திசையை புதுப்பிக்கிறது...')
-                            : lang.tr(
-                                en: 'Refresh Qibla Direction',
-                                ta: 'கிப்லா திசையை புதுப்பிக்கவும்',
-                              ),
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                      onPressed: _isDetecting ? null : _detectAndPointToQibla,
-                    ),
-                  ),
-
-                  const SizedBox(height: 14),
-
-                  // Direction guidance card
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 14),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.grey.shade200),
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.04),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2)),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color:
-                                const Color(0xFF0F432B).withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.explore,
-                              color: Color(0xFF0F432B), size: 24),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                lang.tr(
-                                  en: 'Arrow always points towards Makkah (Kaaba).',
-                                  ta: 'அம்புகுறி எப்போதும் மக்கா (கஅபா) திசையையே காட்டும்.',
+                            if (_hasValidLocation)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surfaceCard,
+                                  borderRadius: BorderRadius.circular(20),
                                 ),
-                                style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.textPrimary),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                lang.tr(
-                                  en: 'The arrow updates with the live compass and points toward the Kaaba from your current phone direction.',
-                                  ta: 'நேரடி திசைகாட்டி மூலம், உங்கள் கைபேசியின் தற்போதைய திசையிலிருந்து கஅபா இருக்கும் திசையை அம்பு காட்டும்.',
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.gps_fixed_rounded,
+                                        size: 13, color: AppColors.success),
+                                    SizedBox(width: 4),
+                                    Text('GPS',
+                                        style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.success)),
+                                  ],
                                 ),
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey.shade600,
-                                    height: 1.3),
                               ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        _hasCompassSensor ? Icons.sensors : Icons.sensors_off,
-                        size: 14,
-                        color: _hasCompassSensor ? Colors.green : Colors.orange,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        _hasCompassSensor
-                            ? 'Live Compass Sensor Active'
-                            : 'Static Direction Mode (Compass sensor not detected)',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: _hasCompassSensor
-                              ? Colors.green.shade700
-                              : Colors.orange.shade700,
+                          ],
                         ),
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
   }
+}
+
+class _QiblaSummaryCard extends StatelessWidget {
+  final double bearing;
+  final String cardinal;
+  final double distanceKm;
+  final String location;
+  final bool hasLocation;
+  final bool isAligned;
+
+  const _QiblaSummaryCard({
+    required this.bearing,
+    required this.cardinal,
+    required this.distanceKm,
+    required this.location,
+    required this.hasLocation,
+    required this.isAligned,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceCard,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.secondary.withValues(alpha: .35)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: .05),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                      color: AppColors.secondary.withValues(alpha: .8)),
+                ),
+                child: const Icon(Icons.mosque_rounded,
+                    color: AppColors.secondary, size: 29),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 7,
+                      children: [
+                        Text(hasLocation ? '${bearing.round()}°' : '—',
+                            style: const TextStyle(
+                                fontSize: 34,
+                                height: 1,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textPrimary)),
+                        if (hasLocation)
+                          Text(cardinal,
+                              style: const TextStyle(
+                                  fontSize: 13,
+                                  letterSpacing: 1.2,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.success)),
+                      ],
+                    ),
+                    const SizedBox(height: 7),
+                    Text(
+                        hasLocation
+                            ? 'Exact bearing to Kaaba'
+                            : 'Allow location to calculate bearing',
+                        style: TextStyle(
+                            fontSize: 12, color: AppColors.textSecondary)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                      hasLocation ? '${distanceKm.toStringAsFixed(0)} km' : '—',
+                      style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary)),
+                  const SizedBox(height: 3),
+                  const Text('to Makkah',
+                      style:
+                          TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Icon(
+                isAligned ? Icons.check_circle_rounded : Icons.place_rounded,
+                size: 15,
+                color: hasLocation ? AppColors.success : AppColors.warning,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  hasLocation ? location : 'Location is needed for direction',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary),
+                ),
+              ),
+              _QiblaPill(
+                label: hasLocation
+                    ? (isAligned ? 'ALIGNED' : 'LOCATION READY')
+                    : 'NEEDS LOCATION',
+                color: hasLocation
+                    ? (isAligned ? AppColors.success : AppColors.primary)
+                    : AppColors.warning,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QiblaTurnCard extends StatelessWidget {
+  final bool hasLocation;
+  final bool hasHeading;
+  final bool isAligned;
+  final double difference;
+  final double phoneHeading;
+  final String phoneCardinal;
+  final int? alignment;
+  final LanguageNotifier language;
+
+  const _QiblaTurnCard({
+    required this.hasLocation,
+    required this.hasHeading,
+    required this.isAligned,
+    required this.difference,
+    required this.phoneHeading,
+    required this.phoneCardinal,
+    required this.alignment,
+    required this.language,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final turnRight = difference > 0;
+    final turn = difference.abs().round();
+    final String instruction = !hasLocation
+        ? language.tr(
+            en: 'Allow location to find Qibla',
+            ta: 'கிப்லா திசையைக் கண்டறிய இடத்தை அனுமதிக்கவும்')
+        : !hasHeading
+            ? language.tr(
+                en: 'Waiting for compass reading',
+                ta: 'திசைகாட்டி அளவீட்டுக்காக காத்திருக்கிறது')
+            : isAligned
+                ? language.tr(
+                    en: 'You are facing the Kaaba',
+                    ta: 'நீங்கள் கஅபாவை நோக்கி இருக்கிறீர்கள்')
+                : language.tr(
+                    en: 'Turn ${turnRight ? 'right' : 'left'} $turn° to face Kaaba',
+                    ta: '${turnRight ? 'வலது' : 'இடது'} பக்கம் $turn° திரும்பவும்');
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: .18),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: const BoxDecoration(
+                    color: AppColors.secondary, shape: BoxShape.circle),
+                child: Icon(
+                  !hasLocation
+                      ? Icons.location_off_rounded
+                      : !hasHeading
+                          ? Icons.sensors_rounded
+                          : isAligned
+                              ? Icons.check_rounded
+                              : (turnRight
+                                  ? Icons.turn_right_rounded
+                                  : Icons.turn_left_rounded),
+                  color: AppColors.onSecondary,
+                  size: 21,
+                ),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Text(
+                  instruction,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (hasHeading)
+                _QiblaPill(
+                  label: 'PHONE ${phoneHeading.round()}° $phoneCardinal',
+                  color: AppColors.secondary,
+                  darkText: true,
+                ),
+            ],
+          ),
+          const SizedBox(height: 13),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Alignment',
+                  style: TextStyle(color: Colors.white70, fontSize: 11)),
+              Text(alignment == null ? 'Waiting…' : '$alignment% aligned',
+                  style: const TextStyle(
+                      color: AppColors.secondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700)),
+            ],
+          ),
+          const SizedBox(height: 7),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: alignment == null ? 0 : alignment! / 100,
+              minHeight: 5,
+              backgroundColor: Colors.white.withValues(alpha: .18),
+              valueColor:
+                  const AlwaysStoppedAnimation<Color>(AppColors.secondary),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            language.tr(
+              en: 'Keep your phone level. The arrow follows your direction.',
+              ta: 'கைப்பேசியை நேராகப் பிடிக்கவும். அம்பு திசைக்கு ஏற்ப நகரும்.',
+            ),
+            style: const TextStyle(color: Colors.white70, fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QiblaPill extends StatelessWidget {
+  final String label;
+  final Color color;
+  final bool darkText;
+
+  const _QiblaPill({
+    required this.label,
+    required this.color,
+    this.darkText = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: darkText ? .18 : .10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: .55)),
+      ),
+      child: Text(label,
+          style: TextStyle(
+              color: darkText ? AppColors.secondary : color,
+              fontSize: 9,
+              letterSpacing: .35,
+              fontWeight: FontWeight.w800)),
+    );
+  }
+}
+
+class _CompassLabel extends StatelessWidget {
+  final Alignment alignment;
+  final EdgeInsets padding;
+  final String label;
+  final Color color;
+
+  const _CompassLabel({
+    required this.alignment,
+    required this.padding,
+    required this.label,
+    this.color = AppColors.textSecondary,
+  });
+
+  @override
+  Widget build(BuildContext context) => Align(
+        alignment: alignment,
+        child: Padding(
+          padding: padding,
+          child: Text(label,
+              style: TextStyle(
+                  color: color, fontSize: 13, fontWeight: FontWeight.w800)),
+        ),
+      );
+}
+
+class _CompassTicksPainter extends CustomPainter {
+  final Color color;
+  const _CompassTicksPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.shortestSide / 2;
+    final tickPaint = Paint()
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 1.2;
+    for (var index = 0; index < 72; index++) {
+      final angle = index * 5 * math.pi / 180;
+      final isMajor = index % 6 == 0;
+      final isMedium = index % 3 == 0;
+      final outerRadius = radius * .94;
+      final innerRadius = outerRadius -
+          (isMajor
+              ? radius * .085
+              : (isMedium ? radius * .055 : radius * .027));
+      tickPaint
+        ..color = isMajor ? AppColors.secondary : color.withValues(alpha: .72)
+        ..strokeWidth = isMajor ? 2.2 : 1.05;
+      canvas.drawLine(
+        Offset(center.dx + math.sin(angle) * innerRadius,
+            center.dy - math.cos(angle) * innerRadius),
+        Offset(center.dx + math.sin(angle) * outerRadius,
+            center.dy - math.cos(angle) * outerRadius),
+        tickPaint,
+      );
+    }
+    final ringPaint = Paint()
+      ..color = AppColors.secondary.withValues(alpha: .35)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    canvas.drawCircle(center, radius * .72, ringPaint);
+    canvas.drawCircle(center, radius * .46, ringPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _CompassTicksPainter oldDelegate) =>
+      oldDelegate.color != color;
 }

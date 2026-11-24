@@ -1,3 +1,4 @@
+import 'package:masjid_namaz_app/core/constants/app_colors.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -60,7 +61,7 @@ class _InAppNotificationBridgeState extends State<_InAppNotificationBridge> {
           SnackBar(
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 7),
-            backgroundColor: const Color(0xFF0F432B),
+            backgroundColor: AppColors.primary,
             content: Row(
               children: [
                 const Icon(Icons.notifications_active_outlined,
@@ -194,7 +195,7 @@ class _AppStartupGateState extends State<AppStartupGate> {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      backgroundColor: Color(0xFF0F432B),
+      backgroundColor: AppColors.primary,
       body: Center(
         child: CircularProgressIndicator(color: Colors.white),
       ),

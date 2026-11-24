@@ -1,3 +1,4 @@
+import 'package:masjid_namaz_app/core/constants/app_colors.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:masjid_namaz_app/core/network/api_service.dart';
@@ -218,11 +219,11 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     final metrics = _stats?['metrics'] ?? {};
     final recentMasjids = (_stats?['recentMasjids'] as List<dynamic>?) ?? [];
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9F7),
+      backgroundColor: AppColors.surface,
       appBar: AppBar(
         title: const Text('System Dashboard',
             style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF0F432B),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadAllData)
@@ -272,7 +273,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
               Card(
                   child: ListTile(
                 leading:
-                    const Icon(Icons.pending_actions, color: Color(0xFF0F432B)),
+                    const Icon(Icons.pending_actions, color: AppColors.primary),
                 title: const Text('Review masjid requests'),
                 subtitle: Text(
                     '${metrics['pendingRequestsCount'] ?? 0} waiting for a decision'),
@@ -298,7 +299,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                     margin: const EdgeInsets.only(bottom: 8),
                     child: ListTile(
                       leading:
-                          const Icon(Icons.mosque, color: Color(0xFF0F432B)),
+                          const Icon(Icons.mosque, color: AppColors.primary),
                       title: Text(masjid['name']?.toString() ?? 'Masjid'),
                       subtitle: Text(
                           '${masjid['city'] ?? ''} · ${masjid['_count']?['memberships'] ?? 0} members'),
@@ -316,18 +317,18 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   // -------------------------------------------------------------
   Widget _buildMasjidsTab() {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9F7),
+      backgroundColor: AppColors.surface,
       appBar: AppBar(
         title: const Text('Masjid Directory',
             style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF0F432B),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadAllData),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: const Color(0xFF0F432B),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: const Text('Create Masjid'),
@@ -414,10 +415,10 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                 child: ListTile(
                                   onTap: () => _showMasjidDetails(m),
                                   leading: CircleAvatar(
-                                    backgroundColor: const Color(0xFF0F432B)
+                                    backgroundColor: AppColors.primary
                                         .withValues(alpha: 0.1),
                                     child: const Icon(Icons.mosque,
-                                        color: Color(0xFF0F432B)),
+                                        color: AppColors.primary),
                                   ),
                                   title: Text(
                                     m['name'] ?? 'Unnamed Masjid',
@@ -489,7 +490,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                               active
                                                   ? Icons.pause_circle_outline
                                                   : Icons.play_circle_outline,
-                                              color: const Color(0xFF0F432B),
+                                              color: AppColors.primary,
                                               size: 21),
                                           tooltip: active
                                               ? 'Stop Masjid'
@@ -566,13 +567,16 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                   controller: nameCtrl,
                   decoration:
                       const InputDecoration(labelText: 'Masjid Name *')),
+              const SizedBox(height: 12),
               TextField(
                   controller: nameTaCtrl,
                   decoration: const InputDecoration(
                       labelText: 'Tamil Name (Optional)')),
+              const SizedBox(height: 12),
               TextField(
                   controller: cityCtrl,
                   decoration: const InputDecoration(labelText: 'City *')),
+              const SizedBox(height: 12),
               TextField(
                   controller: addrCtrl,
                   decoration: const InputDecoration(labelText: 'Address *')),
@@ -588,7 +592,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0F432B).withValues(alpha: 0.08),
+                  color: AppColors.primary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Column(
@@ -598,7 +602,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                         style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
-                            color: Color(0xFF0F432B))),
+                            color: AppColors.primary)),
                     const SizedBox(height: 4),
                     const Text(
                         'This admin will be registered and can directly login to manage this masjid.',
@@ -607,6 +611,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                         controller: adminNameCtrl,
                         decoration: const InputDecoration(
                             labelText: 'Admin Name (e.g. Ahmed)')),
+                    const SizedBox(height: 12),
                     TextField(
                       controller: adminPhoneCtrl,
                       keyboardType: TextInputType.phone,
@@ -625,7 +630,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
               onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0F432B),
+                backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white),
             onPressed: () async {
               if (nameCtrl.text.isEmpty ||
@@ -682,11 +687,11 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   // -------------------------------------------------------------
   Widget _buildRequestsTab() {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9F7),
+      backgroundColor: AppColors.surface,
       appBar: AppBar(
         title: const Text('Masjid Approval Requests',
             style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF0F432B),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadAllData),
@@ -769,7 +774,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                 const SizedBox(width: 10),
                                 ElevatedButton(
                                   style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF0F432B),
+                                      backgroundColor: AppColors.primary,
                                       foregroundColor: Colors.white),
                                   onPressed: () => _handleApprove(
                                       req['id'], req['name'] ?? ''),
@@ -831,15 +836,15 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   // -------------------------------------------------------------
   Widget _buildAnnouncementsTab() {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9F7),
+      backgroundColor: AppColors.surface,
       appBar: AppBar(
         title: const Text('Broadcast Announcements',
             style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF0F432B),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
       floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: const Color(0xFF0F432B),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.campaign),
         label: const Text('New Broadcast'),
@@ -859,7 +864,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                       borderRadius: BorderRadius.circular(12)),
                   child: ListTile(
                     leading:
-                        const Icon(Icons.campaign, color: Color(0xFF0F432B)),
+                        const Icon(Icons.campaign, color: AppColors.primary),
                     title: Text(b['title'] ?? '',
                         style: const TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: Text(
@@ -943,7 +948,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                 child: const Text('Cancel')),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F432B),
+                  backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white),
               onPressed: () async {
                 if (titleCtrl.text.isEmpty || bodyCtrl.text.isEmpty) return;
@@ -982,18 +987,18 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   // -------------------------------------------------------------
   Widget _buildUsersTab() {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9F7),
+      backgroundColor: AppColors.surface,
       appBar: AppBar(
         title: const Text('User Management',
             style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF0F432B),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadAllData),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: const Color(0xFF0F432B),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.person_add),
         label: const Text('Add User'),
@@ -1058,14 +1063,14 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                                     borderRadius: BorderRadius.circular(10)),
                                 child: ListTile(
                                   leading: CircleAvatar(
-                                    backgroundColor: const Color(0xFF0F432B)
+                                    backgroundColor: AppColors.primary
                                         .withValues(alpha: 0.1),
                                     child: Text(
                                       (userName.isEmpty ? 'U' : userName[0])
                                           .toUpperCase(),
                                       style: const TextStyle(
                                           fontWeight: FontWeight.bold,
-                                          color: Color(0xFF0F432B)),
+                                          color: AppColors.primary),
                                     ),
                                   ),
                                   title: Text(
@@ -1184,10 +1189,12 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                     controller: nameCtrl,
                     decoration:
                         const InputDecoration(labelText: 'Full Name *')),
+                const SizedBox(height: 12),
                 TextField(
                     controller: phoneCtrl,
                     decoration: const InputDecoration(
                         labelText: 'Mobile Number (+91...) *')),
+                const SizedBox(height: 12),
                 TextField(
                     controller: addrCtrl,
                     decoration: const InputDecoration(labelText: 'Address')),
@@ -1205,7 +1212,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                 child: const Text('Cancel')),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F432B),
+                  backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white),
               onPressed: () async {
                 if (nameCtrl.text.isEmpty || phoneCtrl.text.isEmpty) return;
@@ -1241,11 +1248,11 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   Widget _buildProfileTab() {
     final metrics = _stats?['metrics'] ?? {};
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9F7),
+      backgroundColor: AppColors.surface,
       appBar: AppBar(
         title: const Text('Super Admin Profile',
             style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF0F432B),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
       body: ListView(
@@ -1255,7 +1262,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
           Card(
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            color: const Color(0xFF0F432B),
+            color: AppColors.primary,
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -1264,7 +1271,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                     radius: 36,
                     backgroundColor: Colors.white,
                     child: Icon(Icons.security,
-                        size: 40, color: Color(0xFF0F432B)),
+                        size: 40, color: AppColors.primary),
                   ),
                   const SizedBox(height: 12),
                   const Text('Super Administrator',
@@ -1320,7 +1327,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
             tileColor: Colors.white,
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            leading: const Icon(Icons.switch_account, color: Color(0xFF0F432B)),
+            leading: const Icon(Icons.switch_account, color: AppColors.primary),
             title: const Text('Switch to User App (Home)'),
             trailing: const Icon(Icons.arrow_forward_ios, size: 14),
             onTap: () {
@@ -1364,7 +1371,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: const Color(0xFF0F432B)),
+          Icon(icon, size: 20, color: AppColors.primary),
           const SizedBox(height: 8),
           Text(val,
               style:

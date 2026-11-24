@@ -7,7 +7,6 @@ import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/l10n/language_provider.dart';
 import '../../../../core/network/api_service.dart';
 import '../../../../core/services/notification_service.dart';
-import '../../../prayer_times/data/prayer_times_provider.dart';
 
 class AnnouncementsScreen extends ConsumerStatefulWidget {
   final VoidCallback? onBack;
@@ -22,14 +21,28 @@ class AnnouncementsScreen extends ConsumerStatefulWidget {
       _AnnouncementsScreenState();
 }
 
-class _AnnouncementsScreenState extends ConsumerState<AnnouncementsScreen> {
-  List<dynamic> _notices = [];
+class _AnnouncementsScreenState extends ConsumerState<AnnouncementsScreen>
+    with SingleTickerProviderStateMixin {
+  static const int _pageSize = 20;
+
+  late final TabController _tabController;
+  final ScrollController _scrollController = ScrollController();
+  List<Map<String, dynamic>> _notices = [];
+  String _status = 'UNREAD';
+  String? _nextCursor;
+  String? _loadError;
+  String? _loadMoreError;
+  int _requestVersion = 0;
+  bool _hasMore = true;
   bool _isLoading = true;
+  bool _isLoadingMore = false;
   StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _scrollController.addListener(_handleScroll);
     _fetchAnnouncements();
     _notificationSubscription =
         NotificationService.instance.notificationEvents.listen((_) {
@@ -40,6 +53,10 @@ class _AnnouncementsScreenState extends ConsumerState<AnnouncementsScreen> {
   @override
   void dispose() {
     _notificationSubscription?.cancel();
+    _scrollController
+      ..removeListener(_handleScroll)
+      ..dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -51,36 +68,169 @@ class _AnnouncementsScreenState extends ConsumerState<AnnouncementsScreen> {
     }
   }
 
-  Future<void> _fetchAnnouncements() async {
-    setState(() => _isLoading = true);
-    final targetId =
-        widget.masjidId ?? ref.read(prayerTimesProvider).activeMasjid?['id'];
-
-    final results = await Future.wait<List<dynamic>>([
-      if (targetId != null) ApiService.instance.getAnnouncements(targetId),
-      ApiService.instance.getBroadcastAnnouncements(),
-    ]);
-    final notices = results.expand((items) => items).toList();
-    notices.sort((a, b) {
-      final aDate = DateTime.tryParse(
-          a['publishedAt']?.toString() ?? a['createdAt']?.toString() ?? '');
-      final bDate = DateTime.tryParse(
-          b['publishedAt']?.toString() ?? b['createdAt']?.toString() ?? '');
-      if (aDate == null) return 1;
-      if (bDate == null) return -1;
-      return bDate.compareTo(aDate);
-    });
-    final focusedIndex = notices.indexWhere(
-      (notice) => notice['id']?.toString() == widget.focusAnnouncementId,
-    );
-    if (focusedIndex > 0) {
-      notices.insert(0, notices.removeAt(focusedIndex));
+  void _handleScroll() {
+    if (!_scrollController.hasClients ||
+        !_hasMore ||
+        _isLoadingMore ||
+        _isLoading) {
+      return;
     }
-    if (mounted) {
+    if (_scrollController.position.extentAfter < 360) {
+      _loadNextPage();
+    }
+  }
+
+  Future<void> _fetchAnnouncements({bool refreshing = false}) async {
+    if (!mounted) return;
+    final requestVersion = ++_requestVersion;
+    setState(() {
+      _isLoading = !refreshing;
+      _isLoadingMore = false;
+      _loadError = null;
+      _loadMoreError = null;
+      _nextCursor = null;
+      _hasMore = true;
+      if (!refreshing) _notices = [];
+    });
+    try {
+      final page = await ApiService.instance.getMyAnnouncements(
+        status: _status,
+        limit: _pageSize,
+      );
+      final notices = _readItems(page['items']);
+      final focusIndex = notices.indexWhere(
+        (notice) => notice['id']?.toString() == widget.focusAnnouncementId,
+      );
+      if (focusIndex > 0) {
+        notices.insert(0, notices.removeAt(focusIndex));
+      }
+      if (!mounted || requestVersion != _requestVersion) return;
       setState(() {
         _notices = notices;
+        _nextCursor = page['nextCursor']?.toString();
+        _hasMore = page['hasMore'] == true && _nextCursor != null;
+        _loadMoreError = null;
         _isLoading = false;
       });
+    } catch (_) {
+      if (!mounted || requestVersion != _requestVersion) return;
+      final canKeepCurrentPage = refreshing && _notices.isNotEmpty;
+      setState(() {
+        _isLoading = false;
+        _hasMore = false;
+        _loadError = canKeepCurrentPage
+            ? null
+            : 'Unable to load notices. Check your connection and try again.';
+      });
+      if (canKeepCurrentPage) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not refresh notices.')),
+        );
+      }
+    }
+  }
+
+  List<Map<String, dynamic>> _readItems(dynamic value) {
+    if (value is! List) return [];
+    return value
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Future<void> _loadNextPage() async {
+    final cursor = _nextCursor;
+    if (!_hasMore || _isLoadingMore || _isLoading || cursor == null) return;
+    final requestVersion = _requestVersion;
+    final requestedStatus = _status;
+    setState(() {
+      _isLoadingMore = true;
+      _loadMoreError = null;
+    });
+    try {
+      final page = await ApiService.instance.getMyAnnouncements(
+        status: requestedStatus,
+        limit: _pageSize,
+        cursor: cursor,
+      );
+      if (!mounted || requestVersion != _requestVersion) return;
+      final nextItems = _readItems(page['items']);
+      final existingIds =
+          _notices.map((item) => item['id']?.toString()).toSet();
+      setState(() {
+        _notices.addAll(nextItems.where(
+          (item) => !existingIds.contains(item['id']?.toString()),
+        ));
+        _nextCursor = page['nextCursor']?.toString();
+        _hasMore = page['hasMore'] == true && _nextCursor != null;
+        _isLoadingMore = false;
+        _loadMoreError = null;
+      });
+    } catch (_) {
+      if (!mounted || requestVersion != _requestVersion) return;
+      setState(() {
+        _isLoadingMore = false;
+        _loadMoreError = 'Could not load more notices. Tap to retry.';
+      });
+    }
+  }
+
+  void _selectStatus(int index) {
+    final nextStatus = index == 0 ? 'UNREAD' : 'READ';
+    if (nextStatus == _status) return;
+    setState(() => _status = nextStatus);
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
+    _fetchAnnouncements();
+  }
+
+  Future<void> _setReadState(Map<String, dynamic> notice, bool isRead) async {
+    final id = notice['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    try {
+      await ApiService.instance.setAnnouncementReadState(id, isRead);
+      if (!mounted) return;
+      final belongsInCurrentTab = _status == 'READ' ? isRead : !isRead;
+      setState(() {
+        if (belongsInCurrentTab) {
+          notice['isRead'] = isRead;
+        } else {
+          _notices.removeWhere((item) => item['id']?.toString() == id);
+        }
+      });
+      if (!belongsInCurrentTab && _notices.isEmpty && _hasMore) {
+        _loadNextPage();
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content:
+            Text(isRead ? 'Notice marked as read' : 'Notice marked as unread'),
+      ));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Could not update notice status. Try again.')),
+      );
+    }
+  }
+
+  Future<void> _hideNotice(Map<String, dynamic> notice) async {
+    final id = notice['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    try {
+      await ApiService.instance.hideAnnouncementForUser(id);
+      if (!mounted) return;
+      setState(
+          () => _notices.removeWhere((item) => item['id']?.toString() == id));
+      if (_notices.isEmpty && _hasMore) _loadNextPage();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Notice removed from your list')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Could not remove this notice. Try again.')),
+      );
     }
   }
 
@@ -107,157 +257,267 @@ class _AnnouncementsScreenState extends ConsumerState<AnnouncementsScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _fetchAnnouncements,
+            onPressed: () => _fetchAnnouncements(refreshing: true),
             tooltip: 'Refresh',
           ),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          onTap: _selectStatus,
+          indicatorColor: AppColors.secondary,
+          indicatorWeight: 3,
+          labelColor: AppColors.primary,
+          unselectedLabelColor: AppColors.textSecondary,
+          tabs: [
+            Tab(text: lang.tr(en: 'Unread', ta: 'படிக்காதவை')),
+            Tab(text: lang.tr(en: 'Read', ta: 'படித்தவை')),
+          ],
+        ),
       ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 760),
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _notices.isEmpty
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(32),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.campaign_outlined,
-                                size: 64, color: Colors.grey.shade400),
-                            const SizedBox(height: 16),
-                            Text(
-                              lang.tr(
-                                en: 'No notices yet',
-                                ta: 'அறிவிப்புகள் எதுவும் இல்லை',
-                              ),
-                              style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textPrimary),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              lang.tr(
-                                en: 'New updates from your masjid will appear here.',
-                                ta: 'உங்கள் பள்ளிவாசலின் புதிய அறிவிப்புகள் இங்கே வரும்.',
-                              ),
-                              style: TextStyle(
-                                  color: Colors.grey.shade600, fontSize: 13),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 18),
-                            OutlinedButton.icon(
-                              onPressed: _fetchAnnouncements,
-                              icon: const Icon(Icons.refresh),
-                              label: Text(lang.tr(
-                                  en: 'Refresh notices', ta: 'மீண்டும் ஏற்று')),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _fetchAnnouncements,
-                      child: ListView.builder(
-                        padding: AppSpacing.screenPadding,
-                        itemCount: _notices.length,
-                        itemBuilder: (context, index) {
-                          final item = _notices[index] as Map<String, dynamic>;
-                          final isEmergency = item['isEmergency'] == true ||
-                              item['type'] == 'EMERGENCY';
-                          final isEnglish = ref.read(languageProvider);
-                          final title = (isEnglish
-                                      ? item['title']
-                                      : item['titleTa'] ?? item['title'])
-                                  ?.toString() ??
-                              '';
-                          final body = (isEnglish
-                                      ? item['body']
-                                      : item['bodyTa'] ?? item['body'])
-                                  ?.toString() ??
-                              '';
-                          final createdAt = item['publishedAt']?.toString() ??
-                              item['createdAt']?.toString() ??
-                              '';
-                          String displayTime = '';
-                          if (createdAt.isNotEmpty) {
-                            try {
-                              final dt = DateTime.parse(createdAt).toLocal();
-                              displayTime =
-                                  DateFormat('d MMM yyyy • h:mm a').format(dt);
-                            } catch (_) {
-                              displayTime = createdAt;
-                            }
-                          }
+          child: _buildNoticeList(lang),
+        ),
+      ),
+    );
+  }
 
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                              side: BorderSide(
+  Widget _buildNoticeList(LanguageNotifier language) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_loadError != null && _notices.isEmpty) {
+      return _buildMessageState(
+        icon: Icons.wifi_off_rounded,
+        title: 'Could not load notices',
+        message: _loadError!,
+        actionLabel: 'Try again',
+        onAction: () => _fetchAnnouncements(),
+      );
+    }
+    if (_notices.isEmpty) {
+      final isUnread = _status == 'UNREAD';
+      return _buildMessageState(
+        icon: isUnread ? Icons.mark_email_read_outlined : Icons.inbox_outlined,
+        title: isUnread ? 'You’re all caught up' : 'No read notices yet',
+        message: isUnread
+            ? 'New notices from your connected masjids will appear here.'
+            : 'Notices you mark as read will appear in this tab.',
+        actionLabel: 'Refresh',
+        onAction: () => _fetchAnnouncements(refreshing: true),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () => _fetchAnnouncements(refreshing: true),
+      child: ListView.builder(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        padding: AppSpacing.screenPadding,
+        itemCount:
+            _notices.length + (_hasMore || _loadMoreError != null ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index == _notices.length) {
+            if (_isLoadingMore) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            if (_loadMoreError != null) {
+              return Center(
+                child: TextButton.icon(
+                  onPressed: _loadNextPage,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry loading more'),
+                ),
+              );
+            }
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 18),
+              child: Center(
+                child: Text('You’re all caught up',
+                    style: TextStyle(color: AppColors.textSecondary)),
+              ),
+            );
+          }
+          return _buildNoticeCard(_notices[index], language);
+        },
+      ),
+    );
+  }
+
+  Widget _buildMessageState({
+    required IconData icon,
+    required String title,
+    required String message,
+    required String actionLabel,
+    required VoidCallback onAction,
+  }) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 60, color: AppColors.primaryMid),
+            const SizedBox(height: 16),
+            Text(title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary)),
+            const SizedBox(height: 8),
+            Text(message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    color: AppColors.textSecondary, fontSize: 13, height: 1.4)),
+            const SizedBox(height: 18),
+            OutlinedButton.icon(
+              onPressed: onAction,
+              icon: const Icon(Icons.refresh),
+              label: Text(actionLabel),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoticeCard(
+      Map<String, dynamic> item, LanguageNotifier language) {
+    final isRead = item['isRead'] == true;
+    final isEmergency = item['isEmergency'] == true ||
+        item['type'] == 'EMERGENCY' ||
+        item['category'] == 'EMERGENCY';
+    final isEnglish = ref.read(languageProvider);
+    final title = (isEnglish ? item['title'] : item['titleTa'] ?? item['title'])
+            ?.toString() ??
+        '';
+    final body = (isEnglish ? item['body'] : item['bodyTa'] ?? item['body'])
+            ?.toString() ??
+        '';
+    final createdAt =
+        item['publishedAt']?.toString() ?? item['createdAt']?.toString() ?? '';
+    var displayTime = '';
+    if (createdAt.isNotEmpty) {
+      try {
+        displayTime = DateFormat('d MMM yyyy • h:mm a')
+            .format(DateTime.parse(createdAt).toLocal());
+      } catch (_) {
+        displayTime = createdAt;
+      }
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isEmergency ? AppColors.emergency : AppColors.outline,
+          width: isEmergency ? 1.5 : .8,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 13, 10, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Icon(
+                    isEmergency
+                        ? Icons.warning_amber_rounded
+                        : Icons.campaign_outlined,
+                    color:
+                        isEmergency ? AppColors.emergency : AppColors.primary,
+                    size: 21,
+                  ),
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              title,
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight:
+                                    isRead ? FontWeight.w600 : FontWeight.w800,
                                 color: isEmergency
                                     ? AppColors.emergency
-                                    : AppColors.outline,
-                                width: isEmergency ? 1.5 : 0.8,
+                                    : AppColors.textPrimary,
                               ),
                             ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        isEmergency
-                                            ? Icons.warning_amber_rounded
-                                            : Icons.campaign_outlined,
-                                        color: isEmergency
-                                            ? AppColors.emergency
-                                            : AppColors.primary,
-                                        size: 22,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          title,
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            color: isEmergency
-                                                ? AppColors.emergency
-                                                : AppColors.textPrimary,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    body,
-                                    style: const TextStyle(
-                                        fontSize: 15,
-                                        height: 1.4,
-                                        color: AppColors.textPrimary),
-                                  ),
-                                  if (displayTime.isNotEmpty) ...[
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      displayTime,
-                                      style: const TextStyle(
-                                          fontSize: 12,
-                                          color: AppColors.textSecondary),
-                                    ),
-                                  ],
-                                ],
-                              ),
+                          ),
+                          if (!isRead)
+                            Container(
+                              width: 9,
+                              height: 9,
+                              margin: const EdgeInsets.only(left: 8),
+                              decoration: const BoxDecoration(
+                                  color: AppColors.primaryMid,
+                                  shape: BoxShape.circle),
                             ),
-                          );
-                        },
+                        ],
                       ),
+                      if (displayTime.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(displayTime,
+                            style: const TextStyle(
+                                fontSize: 11, color: AppColors.textSecondary)),
+                      ],
+                    ],
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'Notice options',
+                  onSelected: (action) {
+                    if (action == 'read') _setReadState(item, true);
+                    if (action == 'unread') _setReadState(item, false);
+                    if (action == 'hide') _hideNotice(item);
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: isRead ? 'unread' : 'read',
+                      child: Text(isRead ? 'Mark as unread' : 'Mark as read'),
                     ),
+                    const PopupMenuItem(
+                      value: 'hide',
+                      child: Text('Remove from my notices'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 11),
+            Text(body,
+                style: const TextStyle(
+                    fontSize: 14, height: 1.45, color: AppColors.textPrimary)),
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                isRead ? 'READ' : 'UNREAD',
+                style: TextStyle(
+                    color: isRead ? AppColors.textSecondary : AppColors.primary,
+                    fontSize: 9,
+                    letterSpacing: .7,
+                    fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
         ),
       ),
     );

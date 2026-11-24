@@ -1,3 +1,4 @@
+import 'package:masjid_namaz_app/core/constants/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:masjid_namaz_app/core/network/api_service.dart';
@@ -224,7 +225,7 @@ class SuperAdminMasjidDetailsScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
-              Icon(icon, color: const Color(0xFF0F432B)),
+              Icon(icon, color: AppColors.primary),
               const SizedBox(width: 8),
               Text(title,
                   style: const TextStyle(
@@ -247,7 +248,7 @@ class SuperAdminMasjidDetailsScreen extends StatelessWidget {
             color: const Color(0xFFF1F6F2),
             borderRadius: BorderRadius.circular(12)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(icon, color: const Color(0xFF0F432B), size: 19),
+          Icon(icon, color: AppColors.primary, size: 19),
           const SizedBox(height: 8),
           Text(value,
               style:

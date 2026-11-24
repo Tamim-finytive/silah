@@ -424,18 +424,22 @@ class ApiService {
     throw const FormatException('Masjid notices response is invalid');
   }
 
-  Future<List<dynamic>> getMyAnnouncements({
-    String status = 'ALL',
+  Future<Map<String, dynamic>> getMyAnnouncements({
+    String status = 'UNREAD',
+    int limit = 20,
+    String? cursor,
     DateTime? from,
     DateTime? to,
   }) async {
     final res = await _dio.get('/announcements/my', queryParameters: {
       'status': status,
+      'limit': limit,
+      if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
       if (from != null) 'from': _dateFilterValue(from, endOfDay: false),
       if (to != null) 'to': _dateFilterValue(to, endOfDay: true),
     });
-    if (res.data['success'] == true && res.data['data'] is List) {
-      return res.data['data'] as List<dynamic>;
+    if (res.data['success'] == true && res.data['data'] is Map) {
+      return Map<String, dynamic>.from(res.data['data'] as Map);
     }
     throw const FormatException('Notices response is invalid');
   }

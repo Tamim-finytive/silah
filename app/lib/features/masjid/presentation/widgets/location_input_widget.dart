@@ -1,3 +1,4 @@
+import 'package:masjid_namaz_app/core/constants/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -119,7 +120,7 @@ class _LocationInputWidgetState extends State<LocationInputWidget> {
 
   @override
   Widget build(BuildContext context) {
-    const primaryColor = Color(0xFF0F432B);
+    const primaryColor = AppColors.primary;
 
     return Container(
       padding: const EdgeInsets.all(10),
