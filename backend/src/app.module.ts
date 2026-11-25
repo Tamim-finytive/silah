@@ -1,22 +1,23 @@
-import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { PrismaModule } from './common/prisma/prisma.module';
-import { AuthModule } from './modules/auth/auth.module';
-import { UsersModule } from './modules/users/users.module';
-import { MasjidsModule } from './modules/masjids/masjids.module';
-import { PrayerTimesModule } from './modules/prayer-times/prayer-times.module';
-import { AnnouncementsModule } from './modules/announcements/announcements.module';
-import { SandhaModule } from './modules/sandha/sandha.module';
-import { DashboardModule } from './modules/dashboard/dashboard.module';
-import { SpecialSchedulesModule } from './modules/special-schedules/special-schedules.module';
-import { FirebaseModule } from './common/firebase/firebase.module';
-import { UploadsModule } from './modules/uploads/uploads.module';
+import { Module } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
+import { PrismaModule } from "./common/prisma/prisma.module";
+import { AuthModule } from "./modules/auth/auth.module";
+import { UsersModule } from "./modules/users/users.module";
+import { MasjidsModule } from "./modules/masjids/masjids.module";
+import { PrayerTimesModule } from "./modules/prayer-times/prayer-times.module";
+import { AnnouncementsModule } from "./modules/announcements/announcements.module";
+import { SandhaModule } from "./modules/sandha/sandha.module";
+import { DashboardModule } from "./modules/dashboard/dashboard.module";
+import { SpecialSchedulesModule } from "./modules/special-schedules/special-schedules.module";
+import { FirebaseModule } from "./common/firebase/firebase.module";
+import { UploadsModule } from "./modules/uploads/uploads.module";
+import { SupportRequestsModule } from "./modules/support-requests/support-requests.module";
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      envFilePath: ".env",
     }),
     PrismaModule,
     FirebaseModule,
@@ -29,6 +30,7 @@ import { UploadsModule } from './modules/uploads/uploads.module';
     DashboardModule,
     SpecialSchedulesModule,
     UploadsModule,
+    SupportRequestsModule,
   ],
 })
 export class AppModule {}

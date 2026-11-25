@@ -11,7 +11,12 @@ import 'package:masjid_namaz_app/features/auth/presentation/screens/otp_login_sc
 import 'package:masjid_namaz_app/features/masjid/presentation/widgets/location_input_widget.dart';
 
 class SuperAdminDashboardScreen extends StatefulWidget {
-  const SuperAdminDashboardScreen({super.key});
+  final bool openContactRequests;
+
+  const SuperAdminDashboardScreen({
+    super.key,
+    this.openContactRequests = false,
+  });
 
   @override
   State<SuperAdminDashboardScreen> createState() =>
@@ -26,6 +31,14 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   Map<String, dynamic>? _stats;
   List<dynamic> _allMasjids = [];
   List<dynamic> _requestItems = [];
+  List<dynamic> _supportRequestItems = [];
+  String _requestType = 'MASJID';
+  String _supportRequestStatus = 'OPEN';
+  int _supportRequestPage = 1;
+  int _supportRequestTotal = 0;
+  bool _loadingMoreSupportRequests = false;
+  bool _hasMoreSupportRequests = true;
+  String? _supportRequestError;
   String _requestStatus = 'PENDING';
   int _requestPage = 0;
   int _requestTotal = 0;
@@ -61,12 +74,27 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.openContactRequests) {
+      _currentIndex = 2;
+      _requestType = 'CONTACT';
+    }
     _masjidScrollController.addListener(_onMasjidScroll);
     _usersScrollController.addListener(_onUsersScroll);
     _requestScrollController.addListener(_onRequestScroll);
     _loadAllData();
+    if (widget.openContactRequests) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadSupportRequestPage(reset: true);
+      });
+    }
     _notificationSubscription =
         NotificationService.instance.notificationEvents.listen((event) {
+      if (event['opened'] == true &&
+          event['type'] == 'SUPPORT_REQUEST' &&
+          mounted) {
+        _openContactRequests();
+        return;
+      }
       if (event['opened'] == true && event['type'] == 'BROADCAST' && mounted) {
         setState(() => _currentIndex = 3);
         _loadAllData();
@@ -76,6 +104,10 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
       final pending =
           NotificationService.instance.takePendingNotificationEvent();
       if (pending != null &&
+          pending['type'] == 'SUPPORT_REQUEST' &&
+          mounted) {
+        _openContactRequests();
+      } else if (pending != null &&
           pending['opened'] == true &&
           pending['type'] == 'BROADCAST' &&
           mounted) {
@@ -116,12 +148,13 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   }
 
   void _onRequestScroll() {
-    if (_currentIndex != 2 ||
-        !_requestScrollController.hasClients ||
-        _loadingMoreRequests ||
-        !_hasMoreRequests) return;
+    if (_currentIndex != 2 || !_requestScrollController.hasClients) return;
     if (_requestScrollController.position.extentAfter < 320) {
-      _loadRequestPage();
+      if (_requestType == 'CONTACT') {
+        _loadSupportRequestPage();
+      } else {
+        _loadRequestPage();
+      }
     }
   }
 
@@ -148,6 +181,14 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
       final usersRes =
           await ApiService.instance.getUsers(search: _userSearchQuery, page: 1);
       final broadcasts = await ApiService.instance.getBroadcastAnnouncements();
+      Map<String, dynamic>? supportRequests;
+      try {
+        supportRequests =
+            await ApiService.instance.getSuperAdminSupportRequests(
+          status: _supportRequestStatus,
+          page: 1,
+        );
+      } catch (_) {}
 
       if (mounted) {
         setState(() {
@@ -180,6 +221,16 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
               ? 'Users could not be loaded from the backend. Tap refresh to retry.'
               : null;
           _broadcasts = broadcasts;
+          if (supportRequests != null) {
+            _supportRequestItems =
+                supportRequests['items'] as List<dynamic>? ?? [];
+            _supportRequestPage = 1;
+            _supportRequestTotal =
+                (supportRequests['total'] as num?)?.toInt() ?? 0;
+            _hasMoreSupportRequests = _supportRequestItems.length <
+                _supportRequestTotal;
+            _supportRequestError = null;
+          }
           _isLoading = false;
         });
       }
@@ -308,6 +359,86 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
       if (mounted && generation == _requestGeneration) {
         setState(() => _loadingMoreRequests = false);
       }
+    }
+  }
+
+  void _openContactRequests() {
+    if (!mounted) return;
+    setState(() {
+      _currentIndex = 2;
+      _requestType = 'CONTACT';
+      _supportRequestStatus = 'OPEN';
+    });
+    _loadSupportRequestPage(reset: true);
+  }
+
+  Future<void> _loadSupportRequestPage({bool reset = false}) async {
+    if (_loadingMoreSupportRequests ||
+        (!reset && !_hasMoreSupportRequests)) return;
+    final generation = ++_requestGeneration;
+    final page = reset ? 1 : _supportRequestPage + 1;
+    final status = _supportRequestStatus;
+    setState(() {
+      _loadingMoreSupportRequests = true;
+      _supportRequestError = null;
+      if (reset) {
+        _supportRequestItems = [];
+        _supportRequestPage = 0;
+        _supportRequestTotal = 0;
+        _hasMoreSupportRequests = true;
+      }
+    });
+    try {
+      final result = await ApiService.instance.getSuperAdminSupportRequests(
+        status: status,
+        page: page,
+      );
+      if (!mounted || generation != _requestGeneration) return;
+      final items = result['items'] as List<dynamic>? ?? [];
+      setState(() {
+        _supportRequestItems =
+            reset ? items : [..._supportRequestItems, ...items];
+        _supportRequestPage = page;
+        _supportRequestTotal =
+            (result['total'] as num?)?.toInt() ?? _supportRequestItems.length;
+        _hasMoreSupportRequests =
+            _supportRequestItems.length < _supportRequestTotal;
+      });
+    } catch (error) {
+      if (mounted && generation == _requestGeneration) {
+        setState(() => _supportRequestError =
+            'Could not load Contact Us messages: ${ApiService.getErrorMessage(error)}');
+      }
+    } finally {
+      if (mounted && generation == _requestGeneration) {
+        setState(() => _loadingMoreSupportRequests = false);
+      }
+    }
+  }
+
+  void _changeSupportRequestStatus(String? status) {
+    if (status == null || status == _supportRequestStatus) return;
+    setState(() => _supportRequestStatus = status);
+    _loadSupportRequestPage(reset: true);
+  }
+
+  Future<void> _updateSupportRequestStatus(
+      Map<String, dynamic> request, String status) async {
+    final id = request['id']?.toString();
+    if (id == null) return;
+    try {
+      await ApiService.instance.updateSuperAdminSupportRequestStatus(id, status);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+            'Contact message marked ${status.toLowerCase().replaceAll('_', ' ')}.'),
+      ));
+      await _loadSupportRequestPage(reset: true);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(ApiService.getErrorMessage(error)),
+      ));
     }
   }
 
@@ -881,7 +1012,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: const AppLanguageText('Masjid Approval Requests',
+        title: const AppLanguageText('Requests',
             style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
@@ -892,8 +1023,40 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
       body: Column(
         children: [
           Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+            child: SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: 'MASJID',
+                    icon: Icon(Icons.mosque_outlined),
+                    label: Text('Masjid requests'),
+                  ),
+                  ButtonSegment(
+                    value: 'CONTACT',
+                    icon: Icon(Icons.support_agent_outlined),
+                    label: Text('Contact Us'),
+                  ),
+                ],
+                selected: {_requestType},
+                onSelectionChanged: (value) {
+                  final next = value.first;
+                  if (next == _requestType) return;
+                  setState(() => _requestType = next);
+                  if (next == 'CONTACT') {
+                    _loadSupportRequestPage(reset: true);
+                  } else {
+                    _loadRequestPage(reset: true);
+                  }
+                },
+              ),
+            ),
+          ),
+          Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: DropdownButtonFormField<String>(
+            child: _requestType == 'MASJID'
+                ? DropdownButtonFormField<String>(
               value: _requestStatus,
               isExpanded: true,
               decoration: const InputDecoration(
@@ -920,10 +1083,34 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                         Text('All requests', style: TextStyle(fontSize: 13))),
               ],
               onChanged: _changeRequestStatus,
-            ),
+                  )
+                : DropdownButtonFormField<String>(
+                    initialValue: _supportRequestStatus,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Contact message status',
+                      prefixIcon: Icon(Icons.filter_list, size: 20),
+                      isDense: true,
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                          value: 'OPEN', child: Text('Open messages')),
+                      DropdownMenuItem(
+                          value: 'IN_PROGRESS', child: Text('In progress')),
+                      DropdownMenuItem(
+                          value: 'RESOLVED', child: Text('Resolved')),
+                      DropdownMenuItem(
+                          value: 'ALL', child: Text('All messages')),
+                    ],
+                    onChanged: _changeSupportRequestStatus,
+                  ),
           ),
           Expanded(
-            child: _isLoading && _requestItems.isEmpty
+            child: _requestType == 'CONTACT'
+                ? _buildSupportRequestsList()
+                : _isLoading && _requestItems.isEmpty
                 ? const Center(child: CircularProgressIndicator())
                 : _requestLoadError != null && _requestItems.isEmpty
                     ? _buildRetryState(
@@ -1176,6 +1363,171 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     );
   }
 
+  Widget _buildSupportRequestsList() {
+    if (_supportRequestItems.isEmpty && _loadingMoreSupportRequests) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_supportRequestItems.isEmpty && _supportRequestError != null) {
+      return _buildRetryState(
+        _supportRequestError!,
+        () => _loadSupportRequestPage(reset: true),
+        Icons.support_agent_outlined,
+      );
+    }
+    if (_supportRequestItems.isEmpty) {
+      return _buildEmptyState(
+        _supportRequestStatus == 'OPEN'
+            ? 'No new Contact Us messages'
+            : 'No Contact Us messages found',
+        Icons.mark_email_read_outlined,
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: () => _loadSupportRequestPage(reset: true),
+      child: ListView.builder(
+        controller: _requestScrollController,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        itemCount: _supportRequestItems.length +
+            (_loadingMoreSupportRequests || _supportRequestError != null
+                ? 1
+                : 0),
+        itemBuilder: (context, index) {
+          if (index == _supportRequestItems.length) {
+            return _supportRequestError != null
+                ? TextButton(
+                    onPressed: _loadSupportRequestPage,
+                    child: Text(_supportRequestError!),
+                  )
+                : const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+          }
+          final request =
+              _supportRequestItems[index] as Map<String, dynamic>;
+          final status = request['status']?.toString() ?? 'OPEN';
+          final createdAt =
+              DateTime.tryParse(request['createdAt']?.toString() ?? '');
+          final statusColor = status == 'RESOLVED'
+              ? Colors.green
+              : status == 'IN_PROGRESS'
+                  ? Colors.orange
+                  : AppColors.primary;
+          return Card(
+            margin: const EdgeInsets.only(bottom: 10),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: const BorderSide(color: AppColors.outline),
+            ),
+            elevation: 0,
+            color: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const CircleAvatar(
+                        backgroundColor: AppColors.primaryContainer,
+                        child: Icon(Icons.support_agent,
+                            color: AppColors.primary),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          request['subject']?.toString() ?? 'Contact request',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 9, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          status.replaceAll('_', ' '),
+                          style: TextStyle(
+                              color: statusColor,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 14,
+                    runSpacing: 5,
+                    children: [
+                      _contactDetail(Icons.person_outline,
+                          request['name']?.toString() ?? '—'),
+                      _contactDetail(Icons.phone_outlined,
+                          request['phone']?.toString() ?? '—'),
+                      if (createdAt != null)
+                        _contactDetail(Icons.calendar_today_outlined,
+                            _shortDate(createdAt.toLocal())),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  SelectableText(
+                    request['message']?.toString() ?? '',
+                    style: const TextStyle(
+                        color: AppColors.textSecondary, height: 1.4),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      if (status == 'OPEN')
+                        OutlinedButton.icon(
+                          onPressed: () => _updateSupportRequestStatus(
+                              request, 'IN_PROGRESS'),
+                          icon: const Icon(Icons.pending_actions, size: 17),
+                          label: const Text('In progress'),
+                        ),
+                      if (status != 'RESOLVED')
+                        FilledButton.icon(
+                          onPressed: () =>
+                              _updateSupportRequestStatus(request, 'RESOLVED'),
+                          icon: const Icon(Icons.check, size: 17),
+                          label: const Text('Resolve'),
+                        )
+                      else
+                        TextButton.icon(
+                          onPressed: () =>
+                              _updateSupportRequestStatus(request, 'OPEN'),
+                          icon: const Icon(Icons.refresh, size: 17),
+                          label: const Text('Reopen'),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _contactDetail(IconData icon, String value) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: AppColors.textSecondary),
+          const SizedBox(width: 5),
+          Text(value, style: const TextStyle(fontSize: 12)),
+        ],
+      );
+
   Future<void> _handleApprove(String id, String name) async {
     try {
       final res = await ApiService.instance.approveMasjidRequest(id);
@@ -1246,15 +1598,28 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
         label: const Text('New Broadcast'),
         onPressed: _showBroadcastDialog,
       ),
-      body: _broadcasts.isEmpty
-          ? _buildEmptyState(
-              'No Broadcast Messages Sent Yet', Icons.campaign_outlined)
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _broadcasts.length,
-              itemBuilder: (ctx, i) {
-                final b = _broadcasts[i];
-                return Card(
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            margin: const EdgeInsets.only(bottom: 14),
+            child: ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: AppColors.primaryContainer,
+                child: Icon(Icons.support_agent, color: AppColors.primary),
+              ),
+              title: const Text('Contact Us messages',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text('$_supportRequestTotal open messages from users.'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _openContactRequests,
+            ),
+          ),
+          if (_broadcasts.isEmpty)
+            _buildEmptyState(
+                'No Broadcast Messages Sent Yet', Icons.campaign_outlined)
+          else
+            ..._broadcasts.map((b) => Card(
                   margin: const EdgeInsets.only(bottom: 12),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)),
@@ -1284,9 +1649,9 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                       },
                     ),
                   ),
-                );
-              },
-            ),
+                )),
+        ],
+      ),
     );
   }
 

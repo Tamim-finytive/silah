@@ -71,7 +71,7 @@ This file is the durable handoff for anyone working on this repository. Keep it 
 - Removed the hardcoded master Super Admin phone/OTP path from Flutter, API auth, and session restoration. Super Admin status now comes from the database user record. `prisma/seed.ts` no longer creates demo users, masjids, prayer times, Sandha plans, or notices; it seeds roles and only provisions a real Super Admin when `BOOTSTRAP_SUPER_ADMIN_PHONE` is explicitly configured. Existing database rows are not rewritten by this seed cleanup.
 - When the user has no linked masjid, local daily prayer times load from the free AlAdhan coordinate endpoint using current location. The selector keeps “Local Prayer Times” after joined masjids; local results are cached on-device by date, approximate coordinates, and Asr school choice. Jamaah times are not invented; those appear only for saved masjid schedules. Location permission is required, with a user-facing iOS permission description.
 - Qibla no longer assumes a fixed Tamil Nadu coordinate/bearing. It uses current GPS or saved active-masjid coordinates. The arrow continues to rotate relative to device direction; Android’s magnetic heading is corrected to true north with the platform geomagnetic field, while iOS heading is already true-north based. No placeholder direction is shown without a usable location.
-- Still outstanding from the requested roadmap: targeted broadcast audiences (including selected member/masjid and Super Admin groups), an admin-to-Super-Admin request inbox, special event schedule improvements, and admin Sandha household/address/collection management.
+- Still outstanding from the requested roadmap: targeted broadcast audiences (including selected member/masjid and Super Admin groups), special event schedule improvements, and admin Sandha household/address/collection management.
 - Validation on 2026-11-23: Nest backend build passed. Direct Dart analysis found no compile errors; info-level lint notices remain. Tests were not run.
 
 ## User display preferences (2026-11-23)
@@ -380,3 +380,122 @@ This file is the durable handoff for anyone working on this repository. Keep it 
   - Added persistence for active admin masjid: uses `last_selected_admin_masjid_id` and `last_selected_admin_masjid_name` in `FlutterSecureStorage`.
   - When opening the admin portal on app restart, the previously selected admin masjid is checked against the user's admin roles and restored automatically instead of always defaulting to `adminRoles.first`.
   - Added `_showSwitchAdminMasjidSheet()` and interactive AppBar dropdown/swap action allowing multi-masjid admins to switch active masjids seamlessly. Selection is saved immediately.
+
+## Android Play Store Release Keystore & Build Configuration (2026-11-24)
+
+- **Release Keystore**:
+  - Generated PKCS12 release keystore at `app/android/app/upload-keystore.jks` with alias `silah_upload_key` valid for 10,000 days.
+  - Keystore passwords configured as `Finytive@123` (`storePassword` and `keyPassword`).
+  - Added `app/android/key.properties` for local signing and provided `app/android/key.properties.example` template.
+  - Ensured `key.properties`, `**/*.keystore`, and `**/*.jks` are strictly excluded from version control in `.gitignore` and `app/android/.gitignore`.
+- **Gradle Signing Configuration**:
+  - Updated `app/android/app/build.gradle.kts` to dynamically read `key.properties` from `rootProject.file("key.properties")`.
+  - Configured `signingConfigs.create("release")` and attached it to `buildTypes.release` with graceful fallback to `debug` if `key.properties` or keystore file is absent.
+- **Verification & Build**:
+  - Ran `flutter build appbundle --release`.
+  - Successfully produced verified release Android App Bundle at `app/build/app/outputs/bundle/release/app-release.aab` (77.1 MB), signed with the `silah_upload_key` certificate.
+
+## Super Admin Web Portal (2026-11-24)
+
+- Added `web/`, a responsive static Super Admin portal intended for Vercel deployment with the project root set to `web`. It has no dependency install or build step; see `web/README.md` for setup.
+- Portal data and mutations use the existing authenticated NestJS APIs: OTP sign-in and Super Admin profile verification, dashboard metrics, masjid approvals and paginated directory, user management, and global broadcasts. No mock or hardcoded business records are used.
+- Masjid and user directories request 20 records per page and fetch more while scrolling. Masjid filters (activity, approval, created-date range, and sort) are passed to the backend. Date fields use native calendar inputs.
+- JWTs are held in browser `sessionStorage` only for the current tab. Do not add tokens or secrets to source control or browser logs. `web/config.js` contains the public API base URL and may be changed for another deployment environment.
+- Vercel requires root directory `web`, framework preset `Other`, no build command, and output directory `.`. Confirm the chosen backend's CORS policy permits the portal origin if deployment CORS is restricted.
+- Validation for this addition: JavaScript syntax check and `git diff --check` passed. No tests were added or run. A live deployment and authenticated browser session were not available for end-to-end verification.
+
+## Registration and Contact Us requests (2026-11-25)
+
+- New-user onboarding now asks only for the user's name and optional address. After backend registration succeeds, the session is saved and the app routes directly to the member Home screen; there is no role-choice/admin-vs-member prompt. Admin privileges still come only from the existing Super Admin-approved masjid mapping workflow.
+- The phone sign-in screen has a Contact Us action. The form collects name, contact phone, heading/reason, and message, then submits to `POST /v1/support-requests`.
+- Contact Us messages are persisted in the new `support_requests` table, limited to three submissions per normalized phone number per 15 minutes, and status-managed (`OPEN`, `IN_PROGRESS`, `RESOLVED`). Super Admin-only list/status endpoints are `GET /v1/support-requests/admin` and `PATCH /v1/support-requests/admin/:id/status`; list pages default to 20.
+- The inbox appears as a second segment in the Super Admin Requests screen and as a link from the Super Admin Notices screen. A new message sends FCM to active devices belonging to active Super Admin users; opening the notification takes the Super Admin to Contact Us messages. Push preview includes the heading and sender name; full contact details and message are in the protected inbox.
+- Database change is applied to the connected Supabase project (`silah-db`) as migration `support_requests_contact_us_inbox`. The table has RLS enabled, with app access through the Nest backend's database connection. Matching SQL is `backend/prisma/manual-schema-updates/2026-11-25-support-requests.sql`.
+- Firebase push delivery still depends on valid Firebase Admin credentials in the deployed backend and active, registered Super Admin FCM devices. The message is saved even if push delivery fails.
+- Validation: Prisma client generation and Nest build passed. Targeted Dart analysis reported no compile errors (only info-level lints); direct Dart tooling emitted its existing telemetry permission warning outside the workspace. `git diff --check` passed. No tests were added or run.
+
+## Comprehensive Sandha Architecture & Workflow (User, Admin, Super Admin) (2026-11-25)
+
+This section provides the end-to-end technical reference and operational handoff for the Sandha (monthly contributions/chanda) subsystem across all user roles, Flutter client flows, NestJS backend APIs, and the PostgreSQL/Supabase database.
+
+### 1. Architectural Foundations & Data Model
+
+- **Database Tables & Enums (`schema.prisma`)**:
+  - `sandha_plans`: Masjid-scoped subscription plans created by Admin/Finance (`name`, `amount`, `frequency` [`MONTHLY`, `QUARTERLY`, `HALF_YEARLY`, `YEARLY`], `upiId`, `payeeName`, `contactPhone`, `description`, `isActive`, `createdBy`).
+  - `sandha_plan_members`: Selective enrollment mapping. Sandha is not automatically charged to all masjid members; individuals (household heads) are explicitly enrolled by phone (`phone`, `name`, `userId` nullable, `autoLinked` boolean, `linkedAt`). When a matching user phone exists or signs up, it auto-links to their User account. Unique constraint: `[planId, phone]`.
+  - `sandha_payments`: Immutable/audited payment transactions (`planId`, `planMemberId`, `userId`, `amount`, `method` [`CASH`, `UPI`, `BANK_TRANSFER`, `CHEQUE`, `OTHER`], `status` [`PAID`, `PARTIAL`, `PENDING`, `REJECTED`, `WAIVED`], `receiptNumber`, `proofPath`, `periodStart`, `periodEnd`, `recordedBy`, `verifiedBy`, `verifiedAt`, `notes`, `paidAt`).
+- **File Storage**:
+  - Private Supabase bucket `silah-private`.
+  - Receipt screenshots are stored under structured paths: `sandha-proofs/:masjidId/:userId/:uuid.(jpg|png|webp)`.
+  - Never stored in the public `silah-media` bucket. Reads generate short-lived (1-hour) signed URLs via `UploadsService.createSandhaProofSignedUrl()`.
+- **Calendar Month Integrity**:
+  - All periods require exact calendar month bounds (`YYYY-MM-01` to end-of-month). Enforced server-side via `assertValidPeriod()` and `monthWindow()`.
+
+---
+
+### 2. Member / User Flow (`user`)
+
+- **Screen**: `app/lib/features/sandha/presentation/screens/sandha_screen.dart` (opened from Member Home -> Drawer/Actions).
+- **Backend Endpoints Used**:
+  - `GET /v1/masjids/:masjidId/sandha/my-status`: Fetches user's plan enrollments and payment history for the active masjid.
+  - `POST /v1/uploads/sandha-proof`: Multipart upload of receipt screenshot to private storage. Validates authenticated user, masjid membership, mime type, and 8 MB file limit.
+  - `POST /v1/masjids/:masjidId/sandha/payments/proof`: Submits the proof payload (`planMemberId`, `amount`, `periodStart`, `periodEnd`, `proofPath`, optional `receiptNumber`).
+- **Client Workflow**:
+  1. **Status Resolution**: Computes current month (`YYYY-MM`) status from settled (`PAID`/`PARTIAL`) and pending payments:
+     - `PAID`: Full amount settled for the month.
+     - `PARTIAL`: Partial amount settled, displays remaining balance.
+     - `UNDER REVIEW` / `PENDING_APPROVAL`: Receipt proof uploaded and waiting for masjid admin verification.
+     - `UNPAID` / `DUE`: No settlement or pending receipt for the current month.
+  2. **In-App UPI Payment**:
+     - User taps "Pay via UPI".
+     - Generates standard intent URL: `upi://pay?pa={upiId}&pn={payeeName}&am={balance}&cu=INR&tn={Sandha YYYY-MM}`.
+     - Launches external UPI app (GPay, PhonePe, Paytm, etc.).
+  3. **Payment Receipt Upload**:
+     - User selects proof screenshot via image picker.
+     - App uploads the image to `POST /v1/uploads/sandha-proof`.
+     - App submits `POST /v1/masjids/:masjidId/sandha/payments/proof`, creating a `PENDING` payment record.
+  4. **Receipt History & Proof View**:
+     - Displays past payment cards with status chips (`Paid`, `Pending Review`, `Rejected`).
+     - Tapping a payment with an attached receipt opens full-screen image preview using the secure signed URL.
+
+---
+
+### 3. Masjid Admin / Finance Flow (`admin`)
+
+- **Screens**:
+  - Tab 2: `app/lib/features/sandha/presentation/screens/sandha_management_screen.dart` (Top-level Admin bottom navigation item).
+  - Tab 5 Settings: `app/lib/features/sandha/presentation/screens/sandha_settings_screen.dart`.
+- **Backend Endpoints Used** (Guarded with `JwtAuthGuard`, `MasjidRoleGuard`, `@MasjidRoles(ADMIN, FINANCE)`):
+  - `GET /v1/masjids/:masjidId/sandha/plans`: Fetches configured plans.
+  - `POST /v1/masjids/:masjidId/sandha/plans`: Creates plan (Name, Amount, Frequency, UPI ID, Payee Name, Contact Phone, Description).
+  - `PUT /v1/masjids/:masjidId/sandha/plans/:planId`: Updates plan.
+  - `GET /v1/masjids/:masjidId/sandha/members?planId=&month=`: Lists enrolled subscribers with calculated month status (`PAID`, `PARTIAL`, `UNPAID`, `PENDING_APPROVAL`), paid sum, pending sum, balance, and recent payments.
+  - `POST /v1/masjids/:masjidId/sandha/plans/:planId/members`: Enrolls subscriber by phone & name with automatic user linking.
+  - `DELETE /v1/masjids/:masjidId/sandha/members/:memberId`: Unenrolls subscriber.
+  - `POST /v1/masjids/:masjidId/sandha/payments`: Admin records offline or direct payment (`CASH`, `UPI`, `BANK_TRANSFER`, etc.) with receipt number and notes, immediately marked `PAID`.
+  - `GET /v1/masjids/:masjidId/sandha/admin/payments?month=YYYY-MM&status=ALL&page=&limit=`: Paginated payment transactions with signed proof URLs and monthly collection summary (`expected`, `collected`, `pendingBalance`, `pendingProofAmount`, `pendingProofCount`).
+  - `PUT /v1/masjids/:masjidId/sandha/payments/:paymentId/review`: Approves (`status -> PAID`) or Rejects (`status -> REJECTED`) member-uploaded proof.
+- **Admin Workflow**:
+  1. **Configure Plan & UPI**: In Settings -> Sandha Settings, admin sets monthly rate, UPI VPA, and recipient display name.
+  2. **Selective Enrollment**: In Sandha Tab -> Assigned Members, admin enrolls subscribers either by picking from connected members or entering name and mobile.
+  3. **Offline Collection Recording**: Admin records cash or direct transfers in one tap per member.
+  4. **Proof Review**: In Sandha Tab -> Payments & Proof Review, admin audits pending receipts with image preview and approves/rejects them.
+
+---
+
+### 4. Super Admin Flow (`superadmin`)
+
+- **Surfaces**:
+  - Mobile App Dashboard: `SuperAdminDashboardScreen` (`app/lib/features/admin/presentation/screens/super_admin_dashboard_screen.dart`).
+  - Mobile App Masjid Detail: `SuperAdminMasjidDetailsScreen` (`app/lib/features/admin/presentation/screens/super_admin_masjid_details_screen.dart`).
+  - Super Admin Web Portal: `web/app.js` (Vercel static web dashboard).
+- **Backend Endpoints Used** (Guarded with `SuperAdminGuard`):
+  - `GET /v1/dashboard/metrics`: Returns system-wide telemetry:
+    - `monthlySandhaExpected`: Aggregate expected revenue across all active plans in all approved masjids (`amount * enrolled_members`).
+    - `currentMonthSandhaCollected`: Aggregate sum of `PAID` and `PARTIAL` payments for the current month across all masjids.
+    - `totalSandhaCollected`: All-time historical sum of collected Sandha funds.
+    - `totalTransactions`: Total payment transactions recorded system-wide.
+  - `GET /v1/dashboard/masjids/:masjidId`: Returns individual masjid audit details including that masjid's monthly Sandha due and collected metrics.
+- **Super Admin Workflow**:
+  - Global overview of financial platform health and active adoption without interfering in local masjid collections.
+  - Deep-dive into specific masjids during audit, approval, or support requests.

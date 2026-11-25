@@ -329,6 +329,24 @@ class ApiService {
     return res.data;
   }
 
+  Future<Map<String, dynamic>> submitContactRequest({
+    required String name,
+    required String phone,
+    required String subject,
+    required String message,
+  }) async {
+    final res = await _dio.post('/support-requests', data: {
+      'name': name.trim(),
+      'phone': phone.trim(),
+      'subject': subject.trim(),
+      'message': message.trim(),
+    });
+    if (res.data is! Map || res.data['success'] != true) {
+      throw const FormatException('Contact request could not be sent.');
+    }
+    return Map<String, dynamic>.from(res.data['data'] as Map);
+  }
+
   Future<bool> updateDeviceToken(String fcmToken,
       {String platform = 'ANDROID'}) async {
     try {
@@ -510,6 +528,32 @@ class ApiService {
       }
     } catch (_) {}
     return null;
+  }
+
+  Future<Map<String, dynamic>> getSuperAdminSupportRequests({
+    String status = 'OPEN',
+    int page = 1,
+    int limit = 20,
+  }) async {
+    await ensureSuperAdminAuth();
+    final res = await _dio.get('/support-requests/admin', queryParameters: {
+      'status': status,
+      'page': page,
+      'limit': limit,
+    });
+    if (res.data['success'] == true && res.data['data'] is Map) {
+      return Map<String, dynamic>.from(res.data['data'] as Map);
+    }
+    throw const FormatException('Contact requests response is invalid');
+  }
+
+  Future<void> updateSuperAdminSupportRequestStatus(
+    String requestId,
+    String status,
+  ) async {
+    await ensureSuperAdminAuth();
+    await _dio.patch('/support-requests/admin/$requestId/status',
+        data: {'status': status});
   }
 
   String _formatDateQuery(DateTime date) =>
@@ -867,11 +911,11 @@ class ApiService {
   Future<List<dynamic>> getSandhaMembers(String masjidId,
       {String? planId, String? month}) async {
     try {
-      final res = await _dio.get('/masjids/$masjidId/sandha/members',
-          queryParameters: {
-            if (planId != null) 'planId': planId,
-            if (month != null) 'month': month,
-          });
+      final res =
+          await _dio.get('/masjids/$masjidId/sandha/members', queryParameters: {
+        if (planId != null) 'planId': planId,
+        if (month != null) 'month': month,
+      });
       if (res.data['success'] == true && res.data['data'] != null) {
         return res.data['data'] as List<dynamic>;
       }

@@ -101,6 +101,19 @@ class _InAppNotificationBridgeState extends State<_InAppNotificationBridge> {
               label: 'OPEN',
               textColor: const Color(0xFFD4E9D9),
               onPressed: () async {
+                if (event['type'] == 'SUPPORT_REQUEST') {
+                  final profile = await ApiService.instance.getProfile();
+                  if (profile?['isSuperAdmin'] == true) {
+                    appNavigatorKey.currentState?.pushReplacement(
+                      MaterialPageRoute(
+                        builder: (_) => const SuperAdminDashboardScreen(
+                          openContactRequests: true,
+                        ),
+                      ),
+                    );
+                  }
+                  return;
+                }
                 if (event['type'] == 'MASJID_ADMIN_APPROVED') {
                   final profile = await ApiService.instance.getProfile();
                   final roles = profile?['adminRoles'] as List<dynamic>? ??

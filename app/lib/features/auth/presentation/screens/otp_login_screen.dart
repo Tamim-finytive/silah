@@ -9,6 +9,7 @@ import 'package:masjid_namaz_app/features/prayer_times/presentation/screens/home
 import 'package:masjid_namaz_app/features/admin/presentation/screens/super_admin_dashboard_screen.dart';
 import 'package:masjid_namaz_app/features/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:masjid_namaz_app/features/auth/presentation/screens/onboarding_screen.dart';
+import 'package:masjid_namaz_app/features/auth/presentation/screens/contact_us_screen.dart';
 
 class OtpLoginScreen extends ConsumerStatefulWidget {
   const OtpLoginScreen({super.key});
@@ -260,6 +261,22 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
                                 color: Colors.white, strokeWidth: 2))
                         : Text(lang.tr(
                             en: 'Login / Continue', ta: 'உள்நுழைக / தொடர்க')),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: _isLoading
+                        ? null
+                        : () => Navigator.push<void>(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ContactUsScreen(
+                                  initialPhone: _phoneController.text.trim(),
+                                ),
+                              ),
+                            ),
+                    icon: const Icon(Icons.support_agent_outlined),
+                    label: Text(lang.tr(
+                        en: 'Contact Us', ta: 'எங்களை தொடர்பு கொள்ளுங்கள்')),
                   ),
                 ],
               ),

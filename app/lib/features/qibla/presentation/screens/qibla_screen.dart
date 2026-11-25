@@ -561,45 +561,6 @@ class _QiblaScreenState extends ConsumerState<QiblaScreen> {
                         ),
                       ),
                       const SizedBox(height: 18),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 15, vertical: 11),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceCard,
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: AppColors.outline),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              _hasCompassSensor
-                                  ? Icons.sensors_rounded
-                                  : Icons.sensors_off_rounded,
-                              color: _hasCompassSensor
-                                  ? AppColors.success
-                                  : AppColors.warning,
-                              size: 18,
-                            ),
-                            // const SizedBox(width: 8),
-                            // Flexible(
-                            //   child: Text(
-                            //     !_hasCompassSensor
-                            //         ? 'Compass sensor unavailable'
-                            //         : _heading == null
-                            //            ? 'Waiting for compass reading'
-                            //            : 'True north • Compass sensor active',
-                            //     textAlign: TextAlign.center,
-                            //     style: const TextStyle(
-                            //         fontSize: 12,
-                            //         fontWeight: FontWeight.w600,
-                            //         color: AppColors.textSecondary),
-                            //   ),
-                            // ),
-                          ],
-                        ),
-                      ),
-
                     ],
                   ),
                 ),

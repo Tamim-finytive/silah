@@ -37,9 +37,27 @@ model User {
   sandhaPlans            SandhaPlan[]            @relation("SandhaPlanCreator")
   specialSchedules       SpecialSchedule[]       @relation("ScheduleCreator")
   ramadanDaySchedules    RamadanDaySchedule[]    @relation("RamadanScheduleCreator")
+  reviewedSupportRequests SupportRequest[]       @relation("SupportRequestReviewer")
 
   @@index([phone], map: "idx_users_phone")
   @@map("users")
+}
+
+model SupportRequest {
+  id          String               @id @default(uuid()) @db.Uuid
+  name        String               @db.VarChar(100)
+  phone       String               @db.VarChar(20)
+  subject     String               @db.VarChar(160)
+  message     String
+  status      SupportRequestStatus @default(OPEN)
+  reviewedBy  String?              @map("reviewed_by") @db.Uuid
+  createdAt   DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  reviewer    User?                @relation("SupportRequestReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt], map: "idx_support_requests_status_created")
+  @@index([phone, createdAt], map: "idx_support_requests_phone_created")
+  @@map("support_requests")
 }
 
 model Masjid {
@@ -378,6 +396,12 @@ enum MasjidApprovalStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum SupportRequestStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
 }
 
 enum RoleType {

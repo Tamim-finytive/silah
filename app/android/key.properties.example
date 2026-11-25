@@ -1,0 +1,6 @@
+# Key properties template for signing Android release builds
+# Copy this file to key.properties and configure with your actual keystore credentials
+storePassword=Finytive@123
+keyPassword=Finytive@123
+keyAlias=silah_upload_key
+storeFile=upload-keystore.jks
